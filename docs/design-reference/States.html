@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fitts — Edge cases and states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&amp;family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2A3FD6}a:hover{color:#1B2BA8}
+</style>
+</helmet>
+<div style="position: relative; min-height: 1500px; background: #FBFAF7; color: #16161D; font-family: 'Geist', system-ui, sans-serif; font-size: 15px; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; pointer-events: none">
+<div style="position: absolute; right: -40px; top: -40px; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle at 32% 30%, #FFFFFF 0%, #FF9C90 16%, #FF6B5B 52%, #C4463A 100%)"></div>
+<div style="position: absolute; left: -50px; bottom: -50px; width: 180px; height: 180px; border-radius: 50%; border: 32px solid #FFC53D; box-sizing: border-box"></div>
+</div>
+
+<div style="position: relative; max-width: 1360px; margin: 0 auto; padding: 32px 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 38px; letter-spacing: -0.02em">Edge cases &amp; states</h1>
+<p style="margin: 0; color: #5A5A66; max-width: 760px">Each card appears in Fitts's chat panel unless noted. Fitts says the first line out loud.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">STOP RUN · header button or "stop everything"</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">Stop this run?</h2>
+<p style="margin: 0; line-height: 1.5">I'll keep all 12 findings. The 2 fixes I'm working on get thrown away. Nothing has touched your branch.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #D92D20; color: #FFFFFF; font: inherit; font-weight: 700">Stop run</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Keep going</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">STOPPED ONE ACTION · ⌘., the stop button, or "Fitts, stop"</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">Stopped. What should I do instead?</h2>
+<p style="margin: 0; line-height: 1.5">I didn't tap NEXT. Everything else is on hold until you tell me.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Resume</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Skip this step</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Take the wheel</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">YOU'RE DRIVING · after Take the wheel</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">You're driving. I'm watching.</h2>
+<p style="margin: 0; line-height: 1.5">Highlights are hidden so they don't get in your way. I'm noting each click so I can test this path after you hand back.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Hand back to Fitts</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">BEFORE THE AUDIT · uncommitted changes</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">You have 3 files you haven't committed</h2>
+<p style="margin: 0; line-height: 1.5">My fixes start from your last commit, so they wouldn't include these. I can save them to a <span style="font-family: 'Geist Mono', monospace; font-size: 13px">fitts/base</span> branch first. Your files stay exactly as they are.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Save them and continue</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">I'll commit first</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFF4D6; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #6E4A00">LOGIN WALL · blocks only this page</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">/settings needs an account</h2>
+<p style="margin: 0; line-height: 1.5">Log in yourself with a test account, or give me test credentials. I'll keep them in your keychain and never use a real account.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #16161D; color: #FFFFFF; font: inherit; font-weight: 700">Take the wheel to log in</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Add test login</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Skip page</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">ASK MODES · several fixes ready at once</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">8 fixes are ready</h2>
+<p style="margin: 0; line-height: 1.5">3 serious, 5 small polish fixes. Approve them together or one at a time.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Fix all 8</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Only the 3 serious</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Review each</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">SITE DOWN · dev server crashed or port changed</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">Your site stopped responding</h2>
+<p style="margin: 0; line-height: 1.5">localhost:5173 hasn't answered for 15 seconds. I've paused. The last lines from your dev server are below.</p>
+<pre style="margin: 0; padding: 10px; border-radius: 10px; background: #16161D; color: #FBFAF7; font-family: 'Geist Mono', monospace; font-size: 12px; white-space: pre-wrap">Error: Cannot find module './Toast'</pre>
+<div style="display: flex; flex-wrap: wrap; gap: 8px"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Restart server</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">I'll fix it, wait</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">BUDGET · 100% of the cap</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">I've reached your $20 cap</h2>
+<p style="margin: 0; line-height: 1.5">7 fixes are left, about $4 more. Everything so far is saved.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Add $10</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Finish on Economy</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Stop here</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">API TROUBLE · errors, rate limits, offline</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">Meta's API isn't answering</h2>
+<p style="margin: 0; line-height: 1.5">Retrying in 12 seconds, attempt 2 of 5. Nothing is lost if it keeps failing; I'll pause and wait for you.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Retry now</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Pause</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">REOPEN · app closed or computer slept mid-run</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">Pick up where we left off?</h2>
+<p style="margin: 0; line-height: 1.5">Run #7 stopped at step 42 with 12 findings and 3 fixes done. Unfinished fixes were discarded.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Resume run</button><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">See summary</button></div>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">AWAY · system notification when Fitts is blocked</span>
+<div style="display: flex; gap: 12px; padding: 12px; border: 1px solid #16161D; border-radius: 14px; background: #F3F1EC">
+<svg width="36" height="36" viewBox="0 0 64 64" aria-hidden="true"><path d="M10 18 V 8 H 20" fill="none" stroke="#3D5AFE" stroke-width="2" stroke-linecap="round"></path><path d="M54 46 V 56 H 44" fill="none" stroke="#3D5AFE" stroke-width="2" stroke-linecap="round"></path><path d="M38 15 C 30 13, 27 18, 27 25 V 49" fill="none" stroke="#16161D" stroke-width="7" stroke-linecap="round"></path><path d="M19 31 H 35" stroke="#16161D" stroke-width="7" stroke-linecap="round"></path><circle cx="45" cy="31" r="5.5" fill="#FF6B5B"></circle><rect x="6.5" y="4.5" width="7" height="7" fill="#FFFFFF" stroke="#3D5AFE" stroke-width="2"></rect><rect x="50.5" y="52.5" width="7" height="7" fill="#FFFFFF" stroke="#3D5AFE" stroke-width="2"></rect></svg>
+<div style="display: flex; flex-direction: column; gap: 2px"><strong>Fitts needs you</strong><span style="font-size: 14px">Can I submit the contact form with test data?</span></div>
+</div>
+<p style="margin: 0; font-size: 14px; color: #5A5A66; line-height: 1.5">Only for blocking questions. In Ask modes, Fitts keeps testing other pages while it waits.</p>
+</div>
+
+<div style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">NOTHING FOUND · empty result</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 19px">Nothing here worth changing</h2>
+<p style="margin: 0; line-height: 1.5">I tested 8 pages and 24 controls against all the checks. Here's everything I looked at, so you can see it wasn't a quick glance.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto"><button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">See what I checked</button></div>
+</div>
+
+</div>
+
+<section aria-label="Returning user home" style="background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 20px; box-shadow: 3px 3px 0 #16161D; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5A5A66">RETURNING USERS · replaces the setup card on the Welcome screen</span>
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 22px">Welcome back, Allen</h2>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px">
+<li style="flex: 1 1 280px; padding: 14px; border: 1px solid #16161D; border-radius: 14px; display: flex; flex-direction: column; gap: 4px"><strong>demo/chat</strong><span style="font-size: 14px; color: #5A5A66">Last run yesterday · 24 fixes · 9 PRs</span><a href="#open-chat" style="font-size: 14px; font-weight: 600">Open</a></li>
+<li style="flex: 1 1 280px; padding: 14px; border: 1px solid #16161D; border-radius: 14px; display: flex; flex-direction: column; gap: 4px"><strong>hartwell-site</strong><span style="font-size: 14px; color: #5A5A66">Last run Oct 26 · redesign PR open</span><a href="#open-hartwell" style="font-size: 14px; font-weight: 600">Open</a></li>
+<li style="flex: 1 1 280px; padding: 14px; border: 1.5px dashed #16161D; border-radius: 14px; display: flex; align-items: center; justify-content: center"><button type="button" style="min-height: 48px; padding: 0 18px; border: 1.5px solid #16161D; border-radius: 10px; background: #3D5AFE; color: #FFFFFF; font: inherit; font-weight: 700">Open another project</button></li>
+</ul>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

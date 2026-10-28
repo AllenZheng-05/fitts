@@ -1,0 +1,69 @@
+/*
+ * Fitts design tokens (SPEC §5). The only source of colors, radii, borders, shadows and
+ * fonts in the app. Mock sites (src/renderer/mock/sites) use their own styles.
+ */
+:root {
+  /* Color · §5.1 */
+  --paper: #fbfaf7;
+  --card: #ffffff;
+  --ink: #16161d;
+  --ink-2: #2e2e38;
+  --muted: #5a5a66;
+  --surface-2: #f3f1ec;
+  --cobalt: #3d5afe;
+  --cobalt-ink: #2a3fd6;
+  --cobalt-deep: #1b2ba8;
+  --cobalt-tint: #e8ecff;
+  --coral: #ff6b5b;
+  --coral-tint: #ffe2de;
+  --coral-ink: #9e2a1e;
+  --sun: #ffc53d;
+  --sun-tint: #fff4d6;
+  --sun-ink: #6e4a00;
+  --mint: #2bd9a0;
+  --mint-tint: #ddf8ee;
+  --mint-ink: #0b6b4b;
+  --lilac: #b69cff;
+  --lilac-tint: #efe9ff;
+  --lilac-ink: #4a2fb0;
+  --wine: #7a1f3d;
+  --danger: #d92d20;
+  --danger-ink: #b42318;
+  --danger-tint: #fff7f6;
+  --neutral-tint: #f0efea;
+  --neutral-ink: #3a3a44;
+  --scrim: rgba(22, 22, 29, 0.62);
+
+  /* Fixed-purpose colors named in the spec */
+  --diff-del: #ff9c90; /* §6.5 code diff, removed lines */
+  --diff-add: #7ff0c8; /* §6.5 code diff, added lines */
+  --avatar-hi: #8a9bff; /* §5.4 Fitts avatar gradient */
+  --avatar-lo: #2235c4;
+
+  /* Radius · §5.3 */
+  --radius-control: 12px;
+  --radius-panel: 18px;
+  --radius-hero: 22px;
+  --radius-emblem: 28px;
+  --radius-pill: 999px;
+
+  /* Border width · §5.3 */
+  --border-hairline: 1px;
+  --border-panel: 1.5px;
+  --border-modal: 2px;
+
+  /* Elevation · §5.3 (hard offset shadows) */
+  --shadow-button: 2px 2px 0 var(--ink);
+  --shadow-panel: 3px 3px 0 var(--ink);
+  --shadow-hero: 4px 4px 0 var(--ink);
+  --shadow-danger: 6px 6px 0 var(--danger);
+
+  /* Type · §5.2 */
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  /* Motion · §5.3 */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-panel: 180ms;
+}

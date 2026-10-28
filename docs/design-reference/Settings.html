@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fitts — Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&amp;family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2A3FD6}a:hover{color:#1B2BA8}
+:focus-visible{outline:2px solid #3D5AFE;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; height: 100vh; min-height: 800px; background: #FBFAF7; color: #16161D; font-family: 'Geist', system-ui, sans-serif; font-size: 15px; overflow: auto; display: flex; flex-direction: column">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; pointer-events: none; overflow: hidden">
+<div style="position: absolute; right: -40px; bottom: -40px; width: 170px; height: 170px; border-radius: 50%; border: 30px solid #2BD9A0; box-sizing: border-box"></div>
+<div style="position: absolute; left: -30px; top: 110px; width: 80px; height: 80px; border-radius: 20px; transform: rotate(18deg); background: linear-gradient(140deg, #FFE08A 0%, #FFC53D 55%, #D99A0B 100%)"></div>
+</div>
+
+<div style="position: relative; flex: none; display: flex; align-items: center; gap: 12px; padding: 18px 28px">
+<h1 style="margin: 0 auto 0 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 32px; letter-spacing: -0.02em">Settings</h1>
+<button type="button" style="min-height: 40px; padding: 0 16px; border: 1px solid #16161D; border-radius: 12px; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Back to workspace</button>
+</div>
+
+<div style="position: relative; flex: 1; min-height: 0; display: flex; gap: 18px; padding: 0 28px 24px">
+<nav aria-label="Settings sections" style="flex: 0 0 210px; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 18px; box-shadow: 3px 3px 0 #16161D; padding: 8px; display: flex; flex-direction: column; gap: 4px; align-self: flex-start">
+<a href="#run" aria-current="page" style="padding: 11px 14px; border-radius: 12px; background: #16161D; color: #FFFFFF; text-decoration: none; font-weight: 600">Run &amp; permissions</a>
+<a href="#voice" style="padding: 11px 14px; border-radius: 12px; color: #16161D; text-decoration: none; font-weight: 600">Voice &amp; appearance</a>
+<a href="#keys" style="padding: 11px 14px; border-radius: 12px; color: #16161D; text-decoration: none; font-weight: 600">API keys</a>
+<a href="#projects" style="padding: 11px 14px; border-radius: 12px; color: #16161D; text-decoration: none; font-weight: 600">Projects</a>
+</nav>
+
+<section id="run" aria-label="Permissions" style="flex: 1 1 0; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 18px; box-shadow: 3px 3px 0 #16161D; padding: 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 20px">Permissions</h2>
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px">
+<legend style="font-weight: 600; margin-bottom: 6px; font-size: 14px">How much should Fitts ask you?</legend>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border: 1px solid #16161D; border-radius: 12px; font-size: 14px"><input type="radio" name="pm"><span><strong>Plan only</strong> · looks, never clicks or edits</span></label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border: 1px solid #16161D; border-radius: 12px; font-size: 14px"><input type="radio" name="pm"><span><strong>Ask every action</strong></span></label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border: 2px solid #3D5AFE; border-radius: 12px; background: #E8ECFF; font-size: 14px"><input type="radio" name="pm" checked="checked"><span><strong>Ask when unsure</strong> · recommended</span></label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border: 1px solid #16161D; border-radius: 12px; font-size: 14px"><input type="radio" name="pm"><span><strong>Autonomous</strong> · fixes and redesigns without asking, all undoable</span></label>
+</fieldset>
+<p style="margin: 0; padding: 10px 12px; border-radius: 12px; background: #FFF4D6; font-size: 13px; line-height: 1.5">Destructive actions and pushes to GitHub <strong>always</strong> ask, in every mode above.</p>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1.5px dashed #D92D20; border-radius: 14px">
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 16px; color: #B42318">Dangerous: skip all permissions</span>
+<span style="font-size: 13px; line-height: 1.5">Fitts asks about nothing, including deletes and pushes. Localhost and sandbox domains only. Turns off when the run ends.</span>
+<label for="danger" style="font-size: 13px; font-weight: 600">Type "I understand Fitts may delete data" to enable</label>
+<input id="danger" type="text" style="min-height: 44px; padding: 0 12px; border: 1px solid #16161D; border-radius: 12px; font: inherit; box-sizing: border-box">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 12px; border: 1.5px solid #16161D; border-radius: 12px; background: #D92D20; color: #FFFFFF"><strong style="letter-spacing: 0.04em; font-size: 12px">PERMISSIONS SKIPPED</strong><span style="flex: 1 1 160px; font-size: 13px">banner shown while on · localhost only</span></div>
+</div>
+</section>
+
+<section aria-label="Budget and models" style="flex: 1 1 0; min-width: 0; background: #FFFFFF; border: 1.5px solid #16161D; border-radius: 18px; box-shadow: 3px 3px 0 #16161D; padding: 20px; display: flex; flex-direction: column; gap: 12px; align-self: flex-start">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 20px">Budget &amp; models</h2>
+<label for="cap" style="font-weight: 600; font-size: 14px">Spending cap per run</label>
+<input id="cap" type="text" value="$20.00" style="min-height: 44px; padding: 0 12px; border: 1px solid #16161D; border-radius: 12px; font: inherit; box-sizing: border-box">
+<span style="font-size: 13px; color: #5A5A66">Fitts warns at 80% and pauses to ask at 100%.</span>
+<span style="font-weight: 600; font-size: 14px">Model profile</span>
+<div role="group" aria-label="Model profile" style="display: flex; border: 1px solid #16161D; border-radius: 12px; overflow: hidden">
+<button type="button" aria-pressed="true" style="flex: 1; min-height: 44px; border: 0; border-right: 1px solid #16161D; background: #16161D; color: #FFFFFF; font: inherit; font-weight: 700">Quality</button>
+<button type="button" aria-pressed="false" style="flex: 1; min-height: 44px; border: 0; border-right: 1px solid #16161D; background: #FFFFFF; color: #16161D; font: inherit; font-weight: 600">Economy</button>
+<button type="button" aria-pressed="false" disabled="disabled" aria-disabled="true" style="flex: 1; min-height: 44px; border: 0; background: #F3F1EC; color: #6B6B74; font: inherit; font-weight: 600; cursor: not-allowed">Open weights</button>
+</div>
+<span style="font-size: 13px; color: #5A5A66">Open weights needs a Baseten key. <a href="#keys">Add a Baseten key first</a></span>
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; font-size: 14px">Contributor mode · cheaper, Meta may train on your code<input type="checkbox" style="width: 22px; height: 22px; accent-color: #3D5AFE"></label>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

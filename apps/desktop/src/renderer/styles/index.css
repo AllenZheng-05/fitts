@@ -1,0 +1,100 @@
+@import 'tailwindcss';
+@import './fonts.css';
+@import './tokens.css';
+
+/*
+ * Tailwind's default palette, radii, shadows and fonts are removed so only tokens exist:
+ * `bg-red-500` does not compile, `bg-danger` does.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-surface-2: var(--surface-2);
+  --color-cobalt: var(--cobalt);
+  --color-cobalt-ink: var(--cobalt-ink);
+  --color-cobalt-deep: var(--cobalt-deep);
+  --color-cobalt-tint: var(--cobalt-tint);
+  --color-coral: var(--coral);
+  --color-coral-tint: var(--coral-tint);
+  --color-coral-ink: var(--coral-ink);
+  --color-sun: var(--sun);
+  --color-sun-tint: var(--sun-tint);
+  --color-sun-ink: var(--sun-ink);
+  --color-mint: var(--mint);
+  --color-mint-tint: var(--mint-tint);
+  --color-mint-ink: var(--mint-ink);
+  --color-lilac: var(--lilac);
+  --color-lilac-tint: var(--lilac-tint);
+  --color-lilac-ink: var(--lilac-ink);
+  --color-wine: var(--wine);
+  --color-danger: var(--danger);
+  --color-danger-ink: var(--danger-ink);
+  --color-danger-tint: var(--danger-tint);
+  --color-neutral-tint: var(--neutral-tint);
+  --color-neutral-ink: var(--neutral-ink);
+  --color-scrim: var(--scrim);
+  --color-diff-del: var(--diff-del);
+  --color-diff-add: var(--diff-add);
+
+  --radius-*: initial;
+  --radius-control: var(--radius-control);
+  --radius-panel: var(--radius-panel);
+  --radius-hero: var(--radius-hero);
+  --radius-emblem: var(--radius-emblem);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-*: initial;
+  --shadow-button: var(--shadow-button);
+  --shadow-panel: var(--shadow-panel);
+  --shadow-hero: var(--shadow-hero);
+  --shadow-danger: var(--shadow-danger);
+
+  --font-*: initial;
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --ease-out: var(--ease-out);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* §5.3: the focus ring is never removed. */
+  :focus-visible {
+    outline: 2px solid var(--cobalt);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
