@@ -34,6 +34,12 @@
   --neutral-ink: #3a3a44;
   --scrim: rgba(22, 22, 29, 0.62);
 
+  /* App colors from the design references that are not in the §5.1 table */
+  --ink-faint: #8a8a93; /* dashed borders, hollow status dots; never text (3.4:1) */
+  --track: #e2dfd8; /* progress-bar tracks */
+  --code-caption: #b8b8c2; /* file:line caption on the ink diff block */
+  --disabled-ink: #6b6b74; /* disabled segment text on surface-2 */
+
   /* Fixed-purpose colors named in the spec */
   --diff-del: #ff9c90; /* §6.5 code diff, removed lines */
   --diff-add: #7ff0c8; /* §6.5 code diff, added lines */
@@ -41,7 +47,11 @@
   --avatar-lo: #2235c4;
 
   /* Radius · §5.3 */
+  --radius-tag: 6px; /* tiny tags: NOW / WITH FIX, pointing-at chip */
+  --radius-row: 10px; /* list rows, toolbar buttons, URL field, inline cards */
   --radius-control: 12px;
+  --radius-card: 14px; /* chat cards, Welcome CTA */
+  --radius-sheet: 16px; /* finding panel, project menu */
   --radius-panel: 18px;
   --radius-hero: 22px;
   --radius-emblem: 28px;

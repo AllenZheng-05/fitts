@@ -5,6 +5,10 @@
 /*
  * Tailwind's default palette, radii, shadows and fonts are removed so only tokens exist:
  * `bg-red-500` does not compile, `bg-danger` does.
+ *
+ * Some names match their token (`--font-sans: var(--font-sans)`). Tailwind's copy sits in
+ * the `theme` layer and loses to the unlayered :root in tokens.css, so the token value
+ * wins. Utilities read it as `var(--font-sans)` because the theme is `inline`.
  */
 @theme inline {
   --color-*: initial;
@@ -41,9 +45,17 @@
   --color-scrim: var(--scrim);
   --color-diff-del: var(--diff-del);
   --color-diff-add: var(--diff-add);
+  --color-ink-faint: var(--ink-faint);
+  --color-track: var(--track);
+  --color-code-caption: var(--code-caption);
+  --color-disabled-ink: var(--disabled-ink);
 
   --radius-*: initial;
+  --radius-tag: var(--radius-tag);
+  --radius-row: var(--radius-row);
   --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
+  --radius-sheet: var(--radius-sheet);
   --radius-panel: var(--radius-panel);
   --radius-hero: var(--radius-hero);
   --radius-emblem: var(--radius-emblem);
@@ -61,6 +73,37 @@
   --font-mono: var(--font-mono);
 
   --ease-out: var(--ease-out);
+
+  --animate-pulse-speak: pulse-speak 600ms ease-in-out infinite alternate;
+  --animate-toast-in: toast-in 180ms var(--ease-out);
+  --animate-indeterminate: indeterminate 1.2s ease-in-out infinite;
+  --animate-overlay-in: overlay-in var(--duration-panel) var(--ease-out);
+
+  @keyframes pulse-speak {
+    to {
+      transform: scale(1.06);
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes indeterminate {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
 }
 
 @layer base {
@@ -72,6 +115,12 @@
     overflow: hidden;
   }
 
+  /* Contains absolutely positioned descendants (sr-only labels) so they never stretch
+     the document and make the window scrollable. */
+  #root {
+    position: relative;
+  }
+
   body {
     background: var(--paper);
     color: var(--ink);
@@ -81,11 +130,24 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-faint) transparent;
+  }
+
   /* §5.3: the focus ring is never removed. */
   :focus-visible {
     outline: 2px solid var(--cobalt);
     outline-offset: 2px;
   }
+}
+
+/* Tailwind's `transition-colors` also animates outline-color, which fades the focus ring
+   in from the text color. The ring must appear at once, so controls use this instead. */
+@utility transition-tint {
+  transition-property: color, background-color, border-color;
+  transition-timing-function: var(--ease-out);
+  transition-duration: 150ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

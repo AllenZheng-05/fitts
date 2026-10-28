@@ -11,12 +11,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "electron-vite build && playwright test"
+    "test:e2e": "cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test"
   },
   "dependencies": {
     "@fitts/schema": "workspace:*",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "geist": "1.8.2",
+    "lucide-react": "1.63.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "zustand": "5.0.16"
@@ -32,6 +33,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
+    "cross-env": "10.1.0",
     "electron": "45.1.0",
     "electron-vite": "6.0.0",
     "jsdom": "29.1.1",

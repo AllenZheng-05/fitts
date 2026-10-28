@@ -63,5 +63,25 @@ export default tseslint.config(
     files: ['apps/desktop/src/renderer/**/*.tsx'],
     ...jsxA11y.flatConfigs.strict,
   },
+  {
+    // CLAUDE.md: colors come from tokens.css. Mock sites are plain websites with their own.
+    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}'],
+    ignores: ['apps/desktop/src/renderer/mock/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...['Literal[raw', 'TemplateElement[value.raw'].flatMap((attr) => [
+          {
+            selector: `${attr}=/#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?(?![0-9a-zA-Z])/]`,
+            message: 'Use a token from tokens.css instead of a hex color.',
+          },
+          {
+            selector: `${attr}=/rgba?[(]/]`,
+            message: 'Use a token from tokens.css instead of an rgb() color.',
+          },
+        ]),
+      ],
+    },
+  },
   prettier,
 );

@@ -7,3 +7,8 @@ export type Platform = 'darwin' | 'win32' | 'linux';
 export interface FittsBridge {
   platform: Platform;
 }
+
+/** Nielsen severity: 0 not a problem … 4 catastrophic. The full run model arrives in M2. */
+export type Severity = 0 | 1 | 2 | 3 | 4;
+
+export type RunPhase = 'interview' | 'audit' | 'done';

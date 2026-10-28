@@ -65,3 +65,72 @@ packaged. It clears the renderer's localStorage and reloads.
 **Known follow-up (M8): Alt+Space on Windows.** §7.9 makes Alt+Space hold-to-talk, but
 Windows uses it for the window's system menu, and a bare Alt press focuses the menu bar. To
 decide when voice UI is built.
+
+## M1 — Design system + gallery
+
+**A sixth button variant, `danger` (solid red).** §5.4 lists five variants, but States.html
+uses a red-filled "Stop run" button in the stop-run confirm card. It exists for that and
+other confirmed destructive actions only.
+
+**Extra primitives beyond §5.4.** `Tabs`, `Checkbox`, `RadioCard`, `Switch`, `StatusDot`,
+`ProgressBar` and `ScrollBody` come straight from the references (Finding tabs, Gate and
+AddProject checkboxes, Settings permission rows, site-map dots and progress, scrolling
+panels) and are built once here.
+
+**Switch design.** Settings needs on/off toggles ("Fitts speaks out loud", "Floating
+shapes", Dangerous mode), but the references only show the Run & permissions tab, which has
+none. The switch is a 44×26 pill with a 1.5px ink border, an ink knob when off, and a cobalt
+track with a white knob when on, using `role="switch"`.
+
+**Field errors are coral, not red.** CLAUDE.md reserves red for destructive actions and stop
+controls. A field error is a problem, so it shows as a coral-tint message with coral-ink text
+under an ink-bordered input (`aria-invalid` plus `aria-describedby`).
+
+**Severity 0.** The schema allows 0, which §5.1 does not list. It renders neutral as
+"Severity 0 · Not a problem", Nielsen's own wording.
+
+**New tokens.** App colors used in the references but missing from §5.1: `--ink-faint`
+`#8A8A93` (dashed borders, hollow dots, never text), `--track` `#E2DFD8` (progress tracks),
+`--code-caption` `#B8B8C2` (diff caption on ink), `--disabled-ink` `#6B6B74` (disabled
+segment). Also radii `--radius-tag` 6, `--radius-row` 10, `--radius-card` 14 and
+`--radius-sheet` 16, which the references use for tags, rows, chat cards and sheets.
+Mock-site colors (`#D4D1C9`, `#8A8780`, `#2557D6`, `#4A4843`) stay inside `mock/sites`.
+
+**Hard-coded colors fail lint.** An ESLint rule rejects 6/8-digit hex and `rgb()` strings in
+`src/renderer/**` except `mock/**`. "PR #12"-style strings pass.
+
+**Focus ring appears instantly.** Tailwind's `transition-colors` also animates
+`outline-color`, which faded the ring in from the text color (white on dark buttons).
+Controls use a `transition-tint` utility (color, background, border only).
+
+**Absolutely positioned content can't stretch the window.** `#root` is `position: relative`
+and panel bodies are positioned, so `sr-only` labels inside a scrolling panel no longer add
+to the document's scroll height.
+
+**Scrolling panels are keyboard-reachable.** A panel body that overflows becomes a focusable
+`region` named after the panel (axe `scrollable-region-focusable`). It isn't a tab stop when
+nothing overflows.
+
+**Overlays.** One Zustand overlay stack and a `useOverlay` hook handle all of them: Esc
+closes only the topmost overlay and does nothing when none is open, Tab is trapped, and
+focus returns to the trigger. Modals make `#root` inert. Popovers flip above their trigger
+when they don't fit below. No Radix or focus-trap dependency.
+
+**BeforeAfterSlider is a split, not a wipe.** Finding.html shows two side-by-side panes,
+each with its own content, so dragging resizes the panes rather than clipping one over the
+other. The handle is `role="slider"` with `aria-valuenow` and `aria-valuetext`.
+
+**Dev-tools flag.** `__FITTS_DEV_TOOLS__` is true in `pnpm dev` and in `test:e2e` builds
+(`FITTS_DEV_TOOLS=1`), false in `pnpm build`, so the gallery (and the Scenario panel in M2)
+is left out of production while e2e can test it. Main shows "Developer → Open component
+gallery" when unpackaged.
+
+**Gallery copy stays in the gallery.** Its demo labels are dev-only and never reach users,
+so they live in `features/gallery/Gallery.tsx` rather than `copy.ts`. Every string a real
+component renders is in `copy.ts`.
+
+**Focus-ring test tolerance.** At 125% scaling Chromium reports a 2px outline as 1.6px (it
+snaps to whole device pixels), so the e2e check accepts 1.5–2px solid cobalt.
+
+**Pixel values stay literal.** The editor suggests rewriting `gap-[3px]` as `gap-0.75`. The
+literal pixel values are kept because they read 1:1 against the references.

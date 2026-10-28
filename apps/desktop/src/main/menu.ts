@@ -13,11 +13,19 @@ export function buildAppMenu(): void {
   if (!app.isPackaged) {
     template.push({
       label: 'Developer',
-      submenu: [{ label: 'Reset to first launch', click: () => void resetToFirstLaunch() }],
+      submenu: [
+        { label: 'Open component gallery', click: () => openRoute('#/gallery') },
+        { label: 'Reset to first launch', click: () => void resetToFirstLaunch() },
+      ],
     });
   }
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function openRoute(hash: string): void {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  void win?.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`);
 }
 
 /** Clears persisted mock state (projects, settings, last-open project) and reloads. */
