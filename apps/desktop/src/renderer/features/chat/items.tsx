@@ -15,9 +15,11 @@ import { cx } from '../../lib/cx';
 import { format, formatUsd } from '../../lib/format';
 import { sendFromComposer } from '../../state/actions';
 import { getEngine } from '../../state/engine';
+import { useSpeech } from '../../state/speech';
 import { API_RETRY_MS } from '../../state/mock-engine';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
+import { startReview } from '../finding-panel/review';
 import { MESSAGE_BOX_ID } from '../site-view/SiteView';
 
 type Item<T extends ChatItem['type']> = Extract<ChatItem, { type: T }>;
@@ -92,7 +94,31 @@ export function ChatItemView({ item, run }: { item: ChatItem; run: RunState }) {
       break;
   }
   if (body === null) return null;
-  return <li className={ITEM}>{body}</li>;
+  return (
+    <li className={ITEM}>
+      <SpokenMark itemId={item.id}>{body}</SpokenMark>
+    </li>
+  );
+}
+
+/**
+ * While Fitts says this item out loud, a cobalt bar runs down its left edge, so you can
+ * tell which line the voice belongs to.
+ */
+function SpokenMark({ itemId, children }: { itemId: string; children: ReactNode }) {
+  const speaking = useSpeech((s) => s.itemId === itemId);
+  return (
+    <div
+      data-speaking={speaking || undefined}
+      className={cx(
+        'relative transition-tint',
+        speaking &&
+          'before:absolute before:inset-y-0 before:-left-2.5 before:w-[3px] before:rounded-pill before:bg-cobalt',
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 function UserMessage({ item }: { item: Item<'user.message'> }) {
@@ -207,6 +233,10 @@ function ApprovalBatch({ item, run }: { item: Item<'approval.batch'>; run: RunSt
     .filter((f) => item.findingIds.includes(f.id) && f.severity >= 3)
     .map((f) => f.id);
   const engine = getEngine();
+  // Calls made so far in "Review each", if you started it.
+  const decided = useUi((s) =>
+    s.review?.itemId === item.id ? Object.keys(s.review.decisions).length : 0,
+  );
   return (
     <div className={CARD}>
       <span className="font-display text-[16px] font-bold">
@@ -238,11 +268,10 @@ function ApprovalBatch({ item, run }: { item: Item<'approval.batch'>; run: RunSt
               {format(copy.items.onlySerious, { n: serious.length })}
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={() => useUi.getState().set({ openFindingId: item.findingIds[0] ?? null })}
-          >
-            {copy.items.reviewEach}
+          <Button size="sm" onClick={() => startReview(item)}>
+            {decided > 0
+              ? format(copy.items.continueReview, { n: decided, total: n })
+              : copy.items.reviewEach}
           </Button>
         </div>
       )}

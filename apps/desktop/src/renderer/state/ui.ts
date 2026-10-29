@@ -17,6 +17,11 @@ interface UiState {
   briefOpen: boolean;
   /** The finding open in the Finding panel (M6). */
   openFindingId: string | null;
+  /**
+   * "Review each" on a batch of fixes: your call on each fix so far. The batch is answered
+   * once every fix in it has one.
+   */
+  review: BatchReview | null;
   /** "Pause hartwell-site's run to start this one?" (SPEC §6.9). */
   pauseConfirm: { runningProjectId: string; projectId: string } | null;
   /** "Point at something" is waiting for a click in the site view (§7.4). */
@@ -42,6 +47,12 @@ interface UiState {
   openProject: (projectId: string) => void;
   goWelcome: () => void;
   set: (patch: Partial<UiFields>) => void;
+}
+
+export interface BatchReview {
+  /** The `approval.batch` chat item being reviewed. */
+  itemId: string;
+  decisions: Record<string, 'fix' | 'skip'>;
 }
 
 type UiFields = Omit<
@@ -70,6 +81,7 @@ export const useUi = create<UiState>((set, get) => ({
   addProjectOpen: false,
   briefOpen: false,
   openFindingId: null,
+  review: null,
   pauseConfirm: null,
   pointing: false,
   draft: '',
@@ -112,6 +124,7 @@ export const useUi = create<UiState>((set, get) => ({
       projectMenuOpen: false,
       addProjectOpen: false,
       openFindingId: null,
+      review: null,
     });
   },
   goWelcome: () => set({ screen: 'welcome', projectMenuOpen: false, addProjectOpen: false }),

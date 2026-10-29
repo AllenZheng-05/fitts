@@ -391,6 +391,14 @@ function ProjectsTab() {
           ))}
         </ul>
       )}
+      <Button
+        variant="dashed"
+        size="md"
+        className="self-start"
+        onClick={() => useUi.getState().set({ addProjectOpen: true })}
+      >
+        {copy.projects.add}
+      </Button>
       <Modal
         open={target !== undefined}
         onClose={() => setRemoving(null)}

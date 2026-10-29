@@ -8,6 +8,8 @@ export const DEFAULT_SIZE = { width: 1440, height: 900 } as const;
 export const MIN_SIZE = { width: 1200, height: 720 } as const;
 
 const PAPER = '#FBFAF7';
+/** The Fitts app icon (Logos3 option D on its tile), in place of Electron's default. */
+export const ICON_PATH = join(__dirname, '../../resources/icon.png');
 const isMac = process.platform === 'darwin';
 
 export function createMainWindow(): BrowserWindow {
@@ -21,6 +23,7 @@ export function createMainWindow(): BrowserWindow {
     resizable: true,
     show: false,
     title: 'Fitts',
+    icon: ICON_PATH,
     backgroundColor: PAPER,
     ...(isMac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 24 } } : {}),
     webPreferences: {

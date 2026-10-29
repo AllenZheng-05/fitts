@@ -1,5 +1,5 @@
 import type { Finding, RunState } from '@fitts/schema';
-import { X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { BeforeAfterSlider } from '../../components/BeforeAfterSlider';
 import { Button } from '../../components/Button';
@@ -16,6 +16,7 @@ import { getEngine } from '../../state/engine';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { MESSAGE_BOX_ID } from '../site-view/SiteView';
+import { decide, pendingBatchFor, type Batch } from './review';
 
 /** Width of the panel over the site view; the site shifts left by the same amount (§6.5). */
 export const FINDING_PANEL_INSET = 'max(calc(56% + 12px), 452px)';
@@ -49,6 +50,8 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
   const titleId = `finding-title-${finding.id}`;
   // Show the page where the finding's element lives (e.g. step 2 for the NEXT button).
   const previewRoute = (finding.elementRef && ROUTE_FOR_REF[finding.elementRef]) || finding.route;
+  // Part of a batch Fitts is waiting on: step through it and decide each fix (§6.6).
+  const batch = finding.status === 'open' ? pendingBatchFor(run, finding.id) : undefined;
 
   return (
     <div
@@ -86,6 +89,8 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
           icon={<X size={15} strokeWidth={2.5} aria-hidden="true" />}
         />
       </div>
+
+      {batch && <ReviewBar batch={batch} finding={finding} />}
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
         <p className="text-[14px] leading-normal">
@@ -157,7 +162,7 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
         )}
       </div>
 
-      <Footer run={run} finding={finding} />
+      <Footer run={run} finding={finding} batch={batch} />
     </div>
   );
 }
@@ -212,8 +217,53 @@ function Reviewers({ run, finding }: { run: RunState; finding: Finding }) {
   );
 }
 
+const NONE: Record<string, 'fix' | 'skip'> = {};
+
+/**
+ * "Fix 2 of 3" while reviewing a batch: where you are, how many are left, your call on this
+ * one, and arrows to move between the fixes.
+ */
+function ReviewBar({ batch, finding }: { batch: Batch; finding: Finding }) {
+  const decisions = useUi((s) => (s.review?.itemId === batch.id ? s.review.decisions : NONE));
+  const ids = batch.findingIds;
+  const index = ids.indexOf(finding.id);
+  const left = ids.filter((id) => decisions[id] === undefined).length;
+  const decision = decisions[finding.id];
+  const go = (id: string | undefined) => {
+    if (id) useUi.getState().set({ review: { itemId: batch.id, decisions }, openFindingId: id });
+  };
+  return (
+    <div className="flex flex-none items-center gap-2 border-b border-ink bg-cobalt-tint px-4 py-2">
+      <span className="text-[13px] font-bold text-cobalt-deep">
+        {format(copy.finding.reviewPosition, { i: index + 1, n: ids.length })}
+      </span>
+      <span className="text-[13px] text-ink-2">
+        · {format(copy.finding.reviewLeft, { n: left })}
+      </span>
+      {decision && (
+        <Chip tone={decision === 'fix' ? 'mint' : 'neutral'} className="px-2 py-0.5">
+          {decision === 'fix' ? copy.finding.decidedFix : copy.finding.decidedSkip}
+        </Chip>
+      )}
+      <span className="flex-1" />
+      <IconButton
+        aria-label={copy.finding.previousFix}
+        disabled={index <= 0}
+        onClick={() => go(ids[index - 1])}
+        icon={<ChevronLeft size={15} strokeWidth={2.5} aria-hidden="true" />}
+      />
+      <IconButton
+        aria-label={copy.finding.nextFix}
+        disabled={index >= ids.length - 1}
+        onClick={() => go(ids[index + 1])}
+        icon={<ChevronRight size={15} strokeWidth={2.5} aria-hidden="true" />}
+      />
+    </div>
+  );
+}
+
 /** Footer by state (SPEC §6.5): ask actions, fixing, fixed, and the after-states. */
-function Footer({ run, finding }: { run: RunState; finding: Finding }) {
+function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batch?: Batch }) {
   const engine = getEngine();
   const toast = useToasts((s) => s.show);
   const change = run.changes.find((c) => c.findingIds.includes(finding.id));
@@ -286,14 +336,34 @@ function Footer({ run, finding }: { run: RunState; finding: Finding }) {
   }
   return (
     <div className={bar}>
-      <Button
-        variant="primary"
-        size="md"
-        className="min-h-[46px] flex-[2_1_140px]"
-        onClick={() => engine.approveFixes(run.projectId, [finding.id])}
-      >
-        {copy.finding.fixIt}
-      </Button>
+      {batch ? (
+        <>
+          <Button
+            variant="primary"
+            size="md"
+            className="min-h-[46px] flex-[2_1_140px]"
+            onClick={() => decide(run, batch, finding.id, 'fix')}
+          >
+            {copy.finding.approveFix}
+          </Button>
+          <Button
+            size="md"
+            className="min-h-[46px] flex-[1_1_90px]"
+            onClick={() => decide(run, batch, finding.id, 'skip')}
+          >
+            {copy.finding.skipFix}
+          </Button>
+        </>
+      ) : (
+        <Button
+          variant="primary"
+          size="md"
+          className="min-h-[46px] flex-[2_1_140px]"
+          onClick={() => engine.approveFixes(run.projectId, [finding.id])}
+        >
+          {copy.finding.fixIt}
+        </Button>
+      )}
       <Button
         size="md"
         className="min-h-[46px] flex-[1_1_110px]"
@@ -314,7 +384,9 @@ function Footer({ run, finding }: { run: RunState; finding: Finding }) {
         className="min-h-[46px] flex-[1_1_110px]"
         onClick={() => {
           engine.dismissFinding(run.projectId, finding.id);
-          useUi.getState().set({ openFindingId: null });
+          // In a batch review, "not a problem" also counts as skipping its fix.
+          if (batch) decide(run, batch, finding.id, 'skip');
+          else useUi.getState().set({ openFindingId: null });
         }}
       >
         {copy.finding.notProblem}

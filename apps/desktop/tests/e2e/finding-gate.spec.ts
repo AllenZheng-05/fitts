@@ -118,6 +118,41 @@ test('Scenario A completes to Done after the gate', async () => {
   );
 });
 
+test('batch approval: review each steps through every fix, then answers the batch', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Batch approval');
+  const card = chat(page).getByRole('listitem').filter({ hasText: '3 fixes are ready' });
+  await card.getByRole('button', { name: 'Review each' }).click();
+
+  const panel = page.getByRole('dialog');
+  await expect(panel).toContainText('Fix 1 of 3');
+  await expect(panel).toContainText('3 left to decide');
+  await expect(panel.getByRole('button', { name: 'Previous fix' })).toBeDisabled();
+
+  // Approve the first: the panel moves on to the second.
+  await panel.getByRole('button', { name: 'Approve fix' }).click();
+  await expect(panel).toContainText('Fix 2 of 3');
+  await expect(panel).toContainText('2 left to decide');
+
+  // Close mid-review: the card remembers where you got to.
+  await page.keyboard.press('Escape');
+  await card.getByRole('button', { name: 'Continue review · 1 of 3 decided' }).click();
+  await expect(panel).toContainText('Fix 2 of 3');
+
+  // Back to the first shows your call on it.
+  await panel.getByRole('button', { name: 'Previous fix' }).click();
+  await expect(panel).toContainText('Fix 1 of 3');
+  await expect(panel).toContainText('Approved');
+  await panel.getByRole('button', { name: 'Next fix' }).click();
+
+  // Skip the second, approve the third: the batch is answered with two of three.
+  await panel.getByRole('button', { name: 'Skip' }).click();
+  await expect(panel).toContainText('Fix 3 of 3');
+  await panel.getByRole('button', { name: 'Approve fix' }).click();
+  await expect(panel).toBeHidden();
+  await expect(card).toContainText('Approved 2 of 3');
+});
+
 test('batch approval: review each opens the first finding', async () => {
   const { page } = launched;
   await loadScenario(page, 'Batch approval');

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, session } from 'electron';
 import { registerBridge } from './bridge';
 import { buildAppMenu } from './menu';
-import { createMainWindow } from './window';
+import { createMainWindow, ICON_PATH } from './window';
 
 // E2E runs point user data at a throwaway folder so they never touch real settings.
 const userDataOverride = process.env['FITTS_USER_DATA'];
@@ -15,6 +15,8 @@ void app.whenReady().then(() => {
     callback(false),
   );
 
+  // The window icon covers Windows and Linux; the macOS dock takes its own.
+  app.dock?.setIcon(ICON_PATH);
   registerBridge();
   buildAppMenu();
   createMainWindow();

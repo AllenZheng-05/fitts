@@ -5,32 +5,57 @@ import { recordForTests } from './chime';
 /** Text as spoken: markdown bold markers removed. */
 export const spokenText = (text: string) => text.replace(/\*\*/g, '');
 
-let active = 0;
+/** A line to say, and the chat item it belongs to (highlighted while it's spoken). */
+export interface SpokenLine {
+  text: string;
+  itemId?: string;
+}
+
+/** Bumped on every interruption, so a cut-off line's late end/error events are ignored. */
+let generation = 0;
 
 /**
- * Speaks `text` with the system voice. While anything is being spoken the speech store's
- * `speaking` flag is on, so the avatar (and the shapes) pulse (§5.4, §6.12).
+ * Says `lines` in order, cutting off whatever Fitts was still saying: once the run has moved
+ * on, the old line is no longer about what's on screen. While a line is spoken, the speech
+ * store holds its chat item id (the chat highlights it) and `speaking` is on, so the avatar
+ * and the shapes pulse (§5.4, §6.12).
  */
-export function speak(text: string): void {
-  const line = spokenText(text);
-  recordForTests(`say:${line}`);
+export function say(lines: SpokenLine[]): void {
+  if (lines.length === 0) return;
   const synth = globalThis.speechSynthesis as SpeechSynthesis | undefined;
-  if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return;
-  const utterance = new SpeechSynthesisUtterance(line);
-  utterance.rate = 1.02;
-  const done = () => {
-    active = Math.max(0, active - 1);
-    if (active === 0) useSpeech.setState({ speaking: false });
-  };
-  utterance.onstart = () => useSpeech.setState({ speaking: true });
-  utterance.onend = done;
-  utterance.onerror = done;
-  active += 1;
-  synth.speak(utterance);
+  const supported = synth && typeof SpeechSynthesisUtterance !== 'undefined';
+  generation += 1;
+  const mine = generation;
+  if (supported) synth.cancel();
+  useSpeech.setState({ speaking: false, itemId: null });
+
+  lines.forEach((line, i) => {
+    const text = spokenText(line.text);
+    recordForTests(`say:${text}`);
+    if (!supported) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.02;
+    utterance.onstart = () => {
+      if (mine === generation) useSpeech.setState({ speaking: true, itemId: line.itemId ?? null });
+    };
+    const done = () => {
+      if (mine === generation && i === lines.length - 1) {
+        useSpeech.setState({ speaking: false, itemId: null });
+      }
+    };
+    utterance.onend = done;
+    utterance.onerror = done;
+    synth.speak(utterance);
+  });
+}
+
+/** Says one line, cutting off anything in progress. */
+export function speak(text: string, itemId?: string): void {
+  say([{ text, itemId }]);
 }
 
 export function stopSpeaking(): void {
-  active = 0;
-  useSpeech.setState({ speaking: false });
+  generation += 1;
+  useSpeech.setState({ speaking: false, itemId: null });
   (globalThis.speechSynthesis as SpeechSynthesis | undefined)?.cancel();
 }

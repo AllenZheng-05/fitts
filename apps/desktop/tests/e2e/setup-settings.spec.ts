@@ -200,6 +200,17 @@ test('Settings: rename and remove a project', async () => {
   await expect(page.getByText('my-portfolio')).toBeHidden();
 });
 
+test('Settings: add a project from the Projects tab', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Settings');
+  await page.getByRole('button', { name: 'Projects', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add a project' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add a project' });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+});
+
 test('Welcome back lists projects', async () => {
   const { page } = launched;
   await loadScenario(page, 'Welcome back');

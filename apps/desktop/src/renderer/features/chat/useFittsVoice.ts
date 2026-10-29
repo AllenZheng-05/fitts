@@ -2,7 +2,7 @@ import type { ChatItem, RunState } from '@fitts/schema';
 import { useEffect } from 'react';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
-import { speak, stopSpeaking } from '../../lib/speech';
+import { say, stopSpeaking, type SpokenLine } from '../../lib/speech';
 import { useRunStore } from '../../state/run-store';
 import { useSettings } from '../../state/settings';
 
@@ -38,7 +38,8 @@ export function spokenLine(item: ChatItem, run: RunState): string | null {
 
 /**
  * Speaks new Fitts lines in the active project when "Fitts speaks out loud" is on (§7.5),
- * and the destructive gate when it opens (§7.8). Turning speech off stops it at once.
+ * and the destructive gate when it opens (§7.8). New lines cut off old ones. Turning speech
+ * off, or switching projects, stops it at once.
  */
 export function useFittsVoice() {
   useEffect(() => {
@@ -57,23 +58,26 @@ export function useFittsVoice() {
       if (!run) return;
       // Switching projects shouldn't read out the other project's history.
       if (state.activeProjectId !== previous.activeProjectId) {
+        stopSpeaking();
         remember();
         return;
       }
-      const loud = useSettings.getState().speaksAloud;
+      // Everything new in this update is said in order, and cuts off what Fitts was still
+      // saying about an earlier moment (it no longer matches the screen).
+      const lines: SpokenLine[] = [];
       for (const item of run.chat) {
         if (seen.has(item.id)) continue;
         seen.add(item.id);
-        const line = spokenLine(item, run);
-        if (loud && line) speak(line);
+        const text = spokenLine(item, run);
+        if (text) lines.push({ text, itemId: item.id });
       }
       if (run.gate && !gates.has(run.gate.id)) {
         gates.add(run.gate.id);
-        if (loud)
-          speak(
-            `${copy.gate.title}. ${format(copy.gate.body, { action: run.gate.action, route: run.gate.route })}`,
-          );
+        lines.push({
+          text: `${copy.gate.title}. ${format(copy.gate.body, { action: run.gate.action, route: run.gate.route })}`,
+        });
       }
+      if (useSettings.getState().speaksAloud) say(lines);
     });
     const unsubscribeSettings = useSettings.subscribe((s, prev) => {
       if (prev.speaksAloud && !s.speaksAloud) stopSpeaking();

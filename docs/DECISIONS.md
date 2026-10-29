@@ -663,3 +663,36 @@ the divider in the middle, the left half shows the left half of "before" and the
 shows the right half of "after". Nothing resizes or reflows while you drag. This applies
 everywhere the slider is used: the Finding panel, the audit's Before / after view and the
 redesign comparison.
+
+**"Review each" steps through every fix in the batch.**
+- Before this change, "Review each" opened only the first finding. "Fix it" there answered
+  the whole batch with that one fix, so the other two were silently dropped.
+- Now a finding that's part of a batch Fitts is waiting on opens in review mode. A cobalt bar
+  reads "Fix 1 of 3 · 2 left to decide", shows your call so far, and has Previous/Next fix
+  arrows.
+- The footer offers Approve fix / Skip / Change the fix / Not a problem. "Not a problem"
+  also counts as Skip.
+- Each call moves on to the next undecided fix. Once all have a call, the batch is answered
+  with the approved ones ("Approved 2 of 3") and the panel closes.
+- Closing the panel keeps your calls, and the card's button reads "Continue review · 1 of 3
+  decided".
+- Fix all / Only the serious still answer the batch at once.
+
+**Fitts's voice: the newest line wins, and the line being spoken is highlighted.**
+- New Fitts lines cut off whatever is still being said, because the old line no longer
+  matches the screen.
+- Lines posted at the same moment are still said in order.
+- Switching projects stops speech.
+- The chat item being spoken gets a cobalt bar down its left edge (cobalt = what Fitts is on
+  right now).
+- Highlighting is per item, not per word: word-boundary events vary by OS voice, and the item
+  bar answers "is this still about what's on screen?"
+
+**Settings → Projects has "+ Add a project".** It opens the same Add a project dialog as
+the project menu and Welcome back.
+
+**App icon.**
+- `resources/icon.png` (512 px) is the Logos3 option D mark on its app-icon tile: white,
+  ink border, rounded corners. It's rendered from `resources/icon.svg`.
+- It's set as the window icon (Windows/Linux) and the macOS dock icon. Packaging icons
+  (.ico/.icns) can come from the same SVG when there's an installer.
