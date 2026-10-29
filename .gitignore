@@ -8,3 +8,4 @@ playwright-report/
 .vite/
 .DS_Store
 .env*
+!.env.example
