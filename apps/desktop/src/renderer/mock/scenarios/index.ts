@@ -228,6 +228,7 @@ export const SCENARIOS: ScenarioEntry[] = [
     setup: (engine) => demoAt(engine, 'approval'),
   },
   edge('site-down', 'Site down', 'site-down', 'finding-search'),
+  edge('budget-warning', 'Budget warning', 'budget-warning', 'finding-target'),
   edge('budget', 'Budget reached', 'budget', 'finding-target'),
   edge('api-trouble', 'API trouble', 'api-trouble'),
   edge('reopen', 'Reopen after crash', 'reopen', 'finding-confirm'),

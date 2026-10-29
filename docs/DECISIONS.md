@@ -696,3 +696,31 @@ the project menu and Welcome back.
   ink border, rounded corners. It's rendered from `resources/icon.svg`.
 - It's set as the window icon (Windows/Linux) and the macOS dock icon. Packaging icons
   (.ico/.icns) can come from the same SVG when there's an installer.
+
+**Taskbar icon on Windows.**
+- The window icon was already Fitts, but Windows groups taskbar buttons by app ID. With no
+  app ID of its own, Fitts shared electron.exe's identity, and the taskbar could show
+  Electron's icon.
+- Main now sets `app.setAppUserModelId('app.fitts.desktop')` on Windows.
+- Main-process changes need a restart of `pnpm dev` to take effect.
+
+**Budget: Economy is offered at 80%, and 100% requires a higher cap (your call; replaces
+SPEC §7.7's "Finish on Economy").**
+- The cap is your own spending limit: Fitts runs on your API keys. Economy is cheaper, not
+  free, so finishing on Economy at 100% would still break the cap.
+- New edge state `budget-warning` at 80%: "I've used 80% of your $20 cap", with Switch to
+  Economy / Keep Quality. It doesn't pause the run.
+- At 100% ("I've reached your $20 cap") Fitts says it can't continue without a higher cap
+  and offers Add $10 / Stop here.
+- The Settings cap hint now says the same.
+- The Scenario panel has a "Budget warning" entry.
+
+**Site verification direction for Phase 2 (agreed).**
+- Code on this computer and localhost need no verification.
+- Live-site-only projects verify through a hosting connection first: Vercel, Netlify,
+  Cloudflare or GitHub Pages, where the domain listed under your account proves you own it.
+- Fallbacks, in order: a DNS TXT record, then a token file or `<meta>` tag.
+- Verification is re-checked at the start of each run.
+- Fitts never runs on an unverified site, not even read-only.
+- Phase 1's Add a project dialog still shows the token-file mock until the hosting-connection
+  UI is designed.

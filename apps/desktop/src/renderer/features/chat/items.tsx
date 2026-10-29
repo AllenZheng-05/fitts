@@ -548,7 +548,7 @@ function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
   // The cap that was reached, even after "Add $10" raised it.
   const reachedCap = run.cost.capUsd - (item.answer === 'add-10' ? 10 : 0);
   const title =
-    kind === 'budget'
+    kind === 'budget' || kind === 'budget-warning'
       ? format(text.title, { cap: formatUsd(reachedCap, { dropWholeCents: true }) })
       : text.title;
   const firstVariant =

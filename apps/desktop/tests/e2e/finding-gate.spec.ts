@@ -173,6 +173,7 @@ const EDGE_STATES: [string, string][] = [
   ['Login wall', '/settings needs an account'],
   ['Batch approval', '3 fixes are ready'],
   ['Site down', 'Your site stopped responding'],
+  ['Budget warning', "I've used 80% of your $20 cap"],
   ['Budget reached', "I've reached your $20 cap"],
   ['API trouble', "Meta's API isn't answering"],
   ['Reopen after crash', 'Pick up where we left off?'],
@@ -196,6 +197,15 @@ test('edge-state cards answer through the engine', async () => {
   await card.getByRole('button', { name: 'Add $10' }).click();
   await expect(card).toContainText('You chose: Add $10');
   await expect(chat(page)).toContainText('Thanks. The cap is now $30. Carrying on.');
+  await expect(card.getByRole('button', { name: /Economy/ })).toHaveCount(0);
+
+  // At 80% Economy is offered, while switching still stretches the budget.
+  await loadScenario(page, 'Budget warning');
+  const warning = chat(page)
+    .getByRole('listitem')
+    .filter({ hasText: "I've used 80% of your $20 cap" });
+  await warning.getByRole('button', { name: 'Switch to Economy' }).click();
+  await expect(chat(page)).toContainText('Switching to Economy for the rest of the run.');
 
   await loadScenario(page, 'Nothing found');
   await chat(page).getByRole('button', { name: 'See what I checked' }).click();

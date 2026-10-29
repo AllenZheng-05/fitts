@@ -717,17 +717,22 @@ export class MockRunEngine implements RunEngine {
           c.pause();
         });
         return;
+      case 'budget-warning':
+        // 80%: a heads-up while there's still room to stretch the budget. The run keeps going.
+        s.cost.spentUsd = Math.max(s.cost.spentUsd, Math.round(s.cost.capUsd * 80) / 100);
+        ctx.onAnswer(id, (answer, s2, c) => {
+          if (answer === 'economy') return void c.say(copy.fitts.budgetEconomy);
+          c.say(format(copy.fitts.budgetKeepQuality, { cap: `$${s2.cost.capUsd}` }));
+        });
+        return;
       case 'budget':
+        // 100%: nothing more is spent until the cap goes up.
         s.cost.spentUsd = Math.max(s.cost.spentUsd, s.cost.capUsd);
         holdOn();
         ctx.onAnswer(id, (answer, s2, c) => {
           if (answer === 'stop') return c.finish();
-          if (answer === 'add-10') {
-            s2.cost.capUsd += 10;
-            c.say(format(copy.fitts.budgetRaised, { cap: `$${s2.cost.capUsd}` }));
-            return;
-          }
-          c.say(copy.fitts.budgetEconomy);
+          s2.cost.capUsd += 10;
+          c.say(format(copy.fitts.budgetRaised, { cap: `$${s2.cost.capUsd}` }));
         });
         return;
       case 'api-trouble':

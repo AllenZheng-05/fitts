@@ -143,6 +143,7 @@ export type EdgeStateKind =
   | 'uncommitted'
   | 'login-wall'
   | 'site-down'
+  | 'budget-warning'
   | 'budget'
   | 'api-trouble'
   | 'reopen'
@@ -240,7 +241,8 @@ export const EDGE_STATE_ANSWERS = {
   uncommitted: ['save', 'commit-first'],
   'login-wall': ['wheel', 'add-login', 'skip'],
   'site-down': ['restart', 'wait'],
-  budget: ['add-10', 'economy', 'stop'],
+  'budget-warning': ['economy', 'keep'],
+  budget: ['add-10', 'stop'],
   'api-trouble': ['retry-now', 'pause'],
   reopen: ['resume', 'summary'],
   'nothing-found': ['see-checks'],

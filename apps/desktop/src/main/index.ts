@@ -8,6 +8,9 @@ const userDataOverride = process.env['FITTS_USER_DATA'];
 if (userDataOverride) app.setPath('userData', userDataOverride);
 
 app.setName('Fitts');
+// Windows groups taskbar buttons by app ID. Without one of its own, Fitts shares
+// electron.exe's identity and the taskbar shows Electron's icon instead of the window's.
+if (process.platform === 'win32') app.setAppUserModelId('app.fitts.desktop');
 
 void app.whenReady().then(() => {
   // Phase 1 simulates mic and notification permission states; nothing real is granted.

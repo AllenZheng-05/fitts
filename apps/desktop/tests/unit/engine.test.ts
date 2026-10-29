@@ -576,6 +576,7 @@ describe('Scenario panel controls', () => {
       'uncommitted',
       'login-wall',
       'site-down',
+      'budget-warning',
       'budget',
       'api-trouble',
       'reopen',

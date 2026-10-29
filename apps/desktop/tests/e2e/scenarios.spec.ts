@@ -28,6 +28,7 @@ const SCENARIOS = [
   'Login wall',
   'Batch approval',
   'Site down',
+  'Budget warning',
   'Budget reached',
   'API trouble',
   'Reopen after crash',
