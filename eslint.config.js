@@ -16,6 +16,8 @@ export default tseslint.config(
       '**/test-results/**',
       '**/playwright-report/**',
       'docs/**',
+      '.fitts-dev/**',
+      '**/.fitts-worktrees/**',
     ],
   },
   js.configs.recommended,

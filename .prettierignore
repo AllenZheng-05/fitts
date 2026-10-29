@@ -8,3 +8,5 @@ pnpm-lock.yaml
 # Hand-written docs are left as authored.
 docs
 /*.md
+.fitts-dev/
+.fitts-worktrees/
