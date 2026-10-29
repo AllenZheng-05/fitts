@@ -10,3 +10,9 @@ export function formatUsd(amount: number, { dropWholeCents = false } = {}): stri
   if (dropWholeCents && Number.isInteger(amount)) return `$${amount}`;
   return `$${amount.toFixed(2)}`;
 }
+
+/** Run time as m:ss, e.g. "6:12" (SPEC §6.4 footer and timeline). */
+export function formatClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}

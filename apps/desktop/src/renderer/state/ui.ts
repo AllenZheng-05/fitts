@@ -27,6 +27,11 @@ interface UiState {
   draftPointingAt: string | null;
   /** Hold-to-talk is held: "Listening…" (§7.5). */
   micListening: boolean;
+  /** Site-view toggles during the audit (§6.4). */
+  highlightsOn: boolean;
+  beforeAfter: boolean;
+  /** Findings tray filter (§6.4). */
+  findingsFilter: 'all' | 'usability' | 'accessibility' | 'performance' | 'look-and-feel';
 
   openSettings: (tab?: SettingsTab) => void;
   closeSettings: () => void;
@@ -67,6 +72,9 @@ export const useUi = create<UiState>((set, get) => ({
   draft: '',
   draftPointingAt: null,
   micListening: false,
+  highlightsOn: true,
+  beforeAfter: false,
+  findingsFilter: 'all',
 
   openSettings: (tab) =>
     set((s) => ({

@@ -128,7 +128,6 @@ export const hartwellAudit: Scenario = {
           depth: path.split('/').length - 2,
           status: 'queued' as const,
           issues: 0,
-          ...(path === '/services/packages' ? { label: '/packages' } : {}),
         }));
         s.nowText = 'Reading every page';
         ctx.say('Looking at the whole site first, page by page.');

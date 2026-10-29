@@ -346,3 +346,39 @@ semantics and orphans its items (an axe failure).
 **All chat item types are rendered now** (§6.6), including the M5–M7 ones, so later
 milestones only wire behavior. Edge-state card text and buttons follow States.html; the
 API-trouble card gained a "Pause" answer key.
+
+## M5 — Audit & fix
+
+**The site follows Fitts.** During the audit the site view shows the page Fitts is acting on:
+each attention ref maps to a route (`ROUTE_FOR_REF` in `mock/sites`). After "Take the wheel"
+the user's own clicks drive it, and rewinding shows the rewound finding's page.
+
+**Overlays re-measure on a short tick** (every 120ms) instead of observers, because the mock
+site re-renders under them as routes and state change. Elements that aren't on the current
+page simply aren't outlined. The ghost cursor and attention box glide with a 300ms
+transition (§6.4), and don't move at all under reduced motion.
+
+**Highlights on / Before / after are toolbar toggles** (`aria-pressed`, dark when on, as in
+Auditing.html). "Before / after" replaces the overlays with a split BeforeAfterSlider of
+the current page: the `now` site on the left, the `fixed` site on the right.
+
+**Rewind.** A timeline dot (a button "Rewind to <title>") calls `rewindTo(stepIndex)`. The
+address bar gets "· rewound to step N", the site shows that finding's page with only its
+problem pin, and "Back to live" replaces the toggles. The rewound snapshot is the page plus
+pin; the mock doesn't replay intermediate site state.
+
+**The timeline is scaled by steps** (`step / stepEstimate`), so the playhead and the finding
+dots (`stepIndex / stepEstimate`) share one axis. The labels show run time (m:ss).
+
+**Findings tray filters.** Ergonomics and content findings are grouped under Usability, since
+§6.4 only lists four lens filters plus All. Card status lines also cover Not a problem,
+Rolled back and Undone.
+
+**Site-map rows** show child routes by their last segment, indented 14px. `label` holds only
+"next" / "later" (§6.4); each dot's status is also spoken ("testing now").
+
+**Pause and Take the wheel act at once in the mock.** §7.2/§7.3 say Fitts finishes the click
+in progress first. The mock has no click in progress, so the hold is immediate.
+
+**Driving clicks are logged by label** through the mock site's `data-label`, so hand-back says
+"You went through Create Message → …".

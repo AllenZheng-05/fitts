@@ -7,6 +7,7 @@ import { copy } from '../../copy';
 import { useProject } from '../../state/projects';
 import { useActiveRun, useRunStore } from '../../state/run-store';
 import { useUi } from '../../state/ui';
+import { AuditLayout } from '../audit/AuditLayout';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ReadyBar } from '../chat/ReadyBar';
 import { SiteView } from '../site-view/SiteView';
@@ -33,7 +34,8 @@ export function Workspace() {
       <Header run={run} projectId={projectId} name={name} />
       <div className="flex min-h-0 flex-1 gap-3.5 px-5 pt-1 pb-5">
         {run?.phase === 'interview' && <InterviewLayout run={run} />}
-        {run && run.phase !== 'interview' && <Placeholder run={run} />}
+        {run?.phase === 'audit' && <AuditLayout run={run} />}
+        {run?.phase === 'done' && <Placeholder run={run} />}
       </div>
     </div>
   );

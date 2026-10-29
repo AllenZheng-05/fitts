@@ -388,12 +388,12 @@ export function demoChatDoneState(): Pick<RunState, 'findings' | 'changes' | 'co
 export const DEMO_ROUTES: RunState['routes'] = [
   { path: '/', depth: 0, status: 'queued', issues: 0 },
   { path: '/contacts', depth: 0, status: 'queued', issues: 0 },
-  { path: '/contacts/grandma', depth: 1, status: 'queued', issues: 0, label: '/grandma' },
+  { path: '/contacts/grandma', depth: 1, status: 'queued', issues: 0 },
   { path: '/search', depth: 0, status: 'queued', issues: 0 },
   { path: '/compose', depth: 0, status: 'queued', issues: 0 },
-  { path: '/compose/recipient', depth: 1, status: 'queued', issues: 0, label: '/recipient' },
-  { path: '/compose/confirm', depth: 1, status: 'queued', issues: 0, label: '/confirm' },
-  { path: '/settings', depth: 0, status: 'queued', issues: 0 },
+  { path: '/compose/recipient', depth: 1, status: 'queued', issues: 0 },
+  { path: '/compose/confirm', depth: 1, status: 'queued', issues: 0, label: 'next' },
+  { path: '/settings', depth: 0, status: 'queued', issues: 0, label: 'later' },
 ];
 
 /** Past runs for the Done screen's run picker (§6.8). */
