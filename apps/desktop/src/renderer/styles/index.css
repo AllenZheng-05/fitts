@@ -81,6 +81,7 @@
   --animate-indeterminate: indeterminate 1.2s ease-in-out infinite;
   --animate-overlay-in: overlay-in var(--duration-panel) var(--ease-out);
   --animate-chat-in: chat-in 200ms var(--ease-out);
+  --animate-panel-in: panel-in var(--duration-panel) var(--ease-out);
   --animate-typing: typing 900ms ease-in-out infinite;
 
   @keyframes pulse-speak {
@@ -100,6 +101,12 @@
     }
     to {
       transform: translateX(250%);
+    }
+  }
+  @keyframes panel-in {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
     }
   }
   @keyframes chat-in {

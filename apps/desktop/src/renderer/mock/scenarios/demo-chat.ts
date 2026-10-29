@@ -196,8 +196,8 @@ export const demoChatAudit: Scenario = {
           id: 'gate-delete-conversation',
           action: 'Delete conversation',
           route: '/contacts/grandma',
-          heldRequest: 'DELETE /api/conversations/grandma',
-          testing: 'Whether deleting asks first or can be undone',
+          heldRequest: 'DELETE /api/conversations/12',
+          testing: 'H3 user control and H5 error prevention',
         });
       },
     },

@@ -2,6 +2,7 @@
 // that puts the mock engine into that state.
 import type { EdgeStateKind, Mode } from '@fitts/schema';
 import type { MockRunEngine } from '../../state/mock-engine';
+import { useSettings } from '../../state/settings';
 import { LIVE_FINDINGS } from '../fixtures/demo-chat';
 import { DEMO_CHAT, HARTWELL, PORTFOLIO } from '../fixtures/projects';
 import { demoChatAudit } from './demo-chat';
@@ -238,6 +239,7 @@ export const SCENARIOS: ScenarioEntry[] = [
     screen: 'workspace',
     arrives: 'M6',
     setup: (engine) => {
+      useSettings.getState().set({ notificationsAllowed: true });
       demoAt(engine, 'first-findings');
       engine.loadAudit(HARTWELL, 'ask-unsure');
       engine.askOn(

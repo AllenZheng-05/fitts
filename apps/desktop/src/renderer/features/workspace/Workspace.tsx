@@ -8,6 +8,7 @@ import { useProject } from '../../state/projects';
 import { useActiveRun, useRunStore } from '../../state/run-store';
 import { useUi } from '../../state/ui';
 import { AuditLayout } from '../audit/AuditLayout';
+import { GateModal } from '../gate/GateModal';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ReadyBar } from '../chat/ReadyBar';
 import { SiteView } from '../site-view/SiteView';
@@ -37,6 +38,7 @@ export function Workspace() {
         {run?.phase === 'audit' && <AuditLayout run={run} />}
         {run?.phase === 'done' && <Placeholder run={run} />}
       </div>
+      {run && <GateModal run={run} />}
     </div>
   );
 }

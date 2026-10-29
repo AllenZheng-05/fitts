@@ -516,9 +516,11 @@ function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
   );
   const answers = EDGE_STATE_ANSWERS[kind] as readonly string[];
   const labels = text.answers as Record<string, string>;
+  // The cap that was reached, even after "Add $10" raised it.
+  const reachedCap = run.cost.capUsd - (item.answer === 'add-10' ? 10 : 0);
   const title =
     kind === 'budget'
-      ? format(text.title, { cap: formatUsd(run.cost.capUsd, { dropWholeCents: true }) })
+      ? format(text.title, { cap: formatUsd(reachedCap, { dropWholeCents: true }) })
       : text.title;
   const firstVariant =
     kind === 'stop-run-confirm' ? 'danger' : kind === 'login-wall' ? 'dark' : 'primary';

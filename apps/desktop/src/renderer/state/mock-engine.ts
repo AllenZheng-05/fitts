@@ -744,7 +744,11 @@ export class MockRunEngine implements RunEngine {
         });
         return;
       case 'nothing-found':
-        ctx.finish();
+        // The run has nothing left to do, but stays on the audit screen with the card
+        // showing; Stop run takes it to Done.
+        s.nowText = undefined;
+        s.overlays.attention = undefined;
+        ctx.pause();
         ctx.onAnswer(id, (_answer, _s2, c) => {
           c.post({
             type: 'steps',

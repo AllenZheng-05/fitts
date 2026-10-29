@@ -26,6 +26,10 @@ interface SiteViewProps {
   overlay?: (surface: SiteSurface) => ReactNode;
   onElementClick?: (ref: string, label: string) => void;
   footer?: ReactNode;
+  /** A panel over the site view, below the toolbar (the Finding panel, §6.5). */
+  panel?: ReactNode;
+  /** Pushes the site left so content stays visible beside `panel` (CSS length). */
+  contentInsetRight?: string;
   label?: string;
   className?: string;
   header?: ReactNode;
@@ -41,6 +45,8 @@ export function SiteView({
   overlay,
   onElementClick,
   footer,
+  panel,
+  contentInsetRight,
   label = copy.site.region,
   className,
   header,
@@ -58,7 +64,7 @@ export function SiteView({
     <section
       aria-label={label}
       className={cx(
-        'flex min-h-0 min-w-0 flex-col overflow-hidden rounded-panel border-[1.5px] border-ink bg-card shadow-panel',
+        'relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-panel border-[1.5px] border-ink bg-card shadow-panel',
         className,
       )}
     >
@@ -104,7 +110,11 @@ export function SiteView({
         )}
       >
         <div
-          className={cx('h-full', !interactive && !pointing && 'pointer-events-none')}
+          className={cx(
+            'h-full transition-[padding] duration-200 ease-out motion-reduce:transition-none',
+            !interactive && !pointing && 'pointer-events-none',
+          )}
+          style={contentInsetRight ? { paddingRight: contentInsetRight } : undefined}
           inert={!interactive && !pointing ? true : undefined}
         >
           <Fragment key={reloads}>
@@ -120,6 +130,7 @@ export function SiteView({
         {pointing && <PointLayer surface={surface} />}
       </div>
       {footer}
+      {panel}
     </section>
   );
 }

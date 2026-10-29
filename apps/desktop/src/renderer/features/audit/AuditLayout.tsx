@@ -10,6 +10,7 @@ import { getEngine, getMockEngine } from '../../state/engine';
 import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
 import { ChatPanel } from '../chat/ChatPanel';
+import { FINDING_PANEL_INSET, FindingPanel } from '../finding-panel/FindingPanel';
 import { Overlays } from '../site-view/Overlays';
 import { SiteView } from '../site-view/SiteView';
 import { FindingsTray } from './FindingsTray';
@@ -54,6 +55,7 @@ function AuditSiteView({ run }: { run: RunState }) {
   const showOverlays = highlightsOn && !driving && !beforeAfter;
 
   const ui = useUi.getState();
+  const findingOpen = useUi((s) => s.openFindingId !== null);
   return (
     <SiteView
       projectId={run.projectId}
@@ -120,6 +122,8 @@ function AuditSiteView({ run }: { run: RunState }) {
           />
         ) : null
       }
+      panel={<FindingPanel run={run} />}
+      contentInsetRight={findingOpen ? FINDING_PANEL_INSET : undefined}
       footer={
         <div className="flex flex-none justify-between gap-3 border-t border-ink px-3.5 py-2 font-mono text-[12px] text-muted">
           <span>{format(copy.site.step, { step: run.step, total: run.stepEstimate })}</span>

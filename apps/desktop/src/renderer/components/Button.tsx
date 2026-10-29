@@ -2,7 +2,14 @@ import type { ComponentProps, ReactNode } from 'react';
 import { cx } from '../lib/cx';
 
 export type ButtonVariant =
-  'primary' | 'secondary' | 'dark' | 'danger' | 'danger-outline' | 'ghost-dashed' | 'dashed';
+  | 'primary'
+  | 'secondary'
+  | 'dark'
+  | 'danger'
+  | 'danger-outline'
+  | 'ghost-dashed'
+  | 'dashed'
+  | 'sun';
 
 /** `sm` 40px header/toolbar · `inline` 36px chat · `md` 44–46px · `lg` 54px hero call to action. */
 export type ButtonSize = 'inline' | 'sm' | 'md' | 'lg';
@@ -22,6 +29,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   'ghost-dashed':
     'border border-dashed border-ink-faint bg-card text-neutral-ink font-normal ' +
     'enabled:hover:border-ink enabled:hover:text-ink',
+  // "Try again" on rolled-back changes (§6.8).
+  sun: 'border border-ink bg-sun text-ink font-bold enabled:hover:bg-sun-tint',
   // "+ Add a project" (Projects.html): dashed ink border, ink text.
   dashed: 'border border-dashed border-ink bg-card text-ink font-semibold enabled:hover:bg-paper',
 };

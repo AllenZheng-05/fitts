@@ -31,6 +31,8 @@ interface OverlayOptions {
    * when ⌘P opened the menu.
    */
   fallbackFocusRef?: RefObject<HTMLElement | null>;
+  /** Keep Tab inside. Off for non-modal panels like the Finding panel. */
+  trapFocus?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export function useOverlay({
   closeOnOutsidePointer = false,
   ignoreRefs = [],
   fallbackFocusRef,
+  trapFocus = true,
 }: OverlayOptions): string {
   const id = useId();
   const onCloseRef = useRef(onClose);
@@ -74,7 +77,7 @@ export function useOverlay({
         onCloseRef.current();
         return;
       }
-      if (event.key === 'Tab' && container) trapTab(event, container);
+      if (event.key === 'Tab' && container && trapFocus) trapTab(event, container);
     };
     const onPointerDown = (event: PointerEvent) => {
       if (!closeOnOutsidePointer || !isTopOverlay(id) || !container) return;

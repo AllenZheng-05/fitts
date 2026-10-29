@@ -382,3 +382,57 @@ in progress first. The mock has no click in progress, so the hold is immediate.
 
 **Driving clicks are logged by label** through the mock site's `data-label`, so hand-back says
 "You went through Create Message → …".
+
+## M6 — Finding panel, gate, edge states
+
+**The Finding panel is a non-modal dialog.** It opens over the site view (never the chat),
+joins the overlay stack so Esc closes it and focus returns, but does not trap Tab: "Change
+the fix" needs the chat's message box. `useOverlay` gained a `trapFocus` option for this.
+
+**The site shifts left** by the panel's width (`max(56% + 12px, 452px)`) with a 200ms padding
+transition, so the outlined element stays visible beside the panel (§6.5).
+
+**The footer follows the finding's status, not just the mode.** §6.5 says Autonomous shows
+the mint "Fixed and verified" bar, but findings reported after the Autonomous batch haven't
+been fixed yet, and saying they were would be false. So: open → Fix it / Change the fix /
+Not a problem (in any mode); fixing → the cobalt bar with an indeterminate progress bar;
+fixed → the mint bar with View PR and Undo. It also covers states §6.5 doesn't list:
+rolled back (Try again, sun), undone (Redo, or "Revert PR #21 opened" for a merged PR) and
+dismissed.
+
+**"<check> passes"** names the check by heuristic or lens: H4 → label check, H1 → feedback
+check, H2 → content check, accessibility, performance and visual checks, otherwise
+usability check.
+
+**Live preview** renders the `now` and `fixed` mock sites at half scale on the page where the
+finding's element lives (e.g. step 2 for the NEXT button). **Mockup** is a lilac placeholder
+labelled "Mockup · not code". **Evidence** lists who flagged it, how many didn't, and "Replay
+it" (rewinds the site view).
+
+**"Change the fix"** prefills "For the button names, instead…" for that finding (the spec's
+string) and "For this fix, instead…" elsewhere.
+
+**View PR** shows a toast ("PR #12 opens on GitHub in Phase 2."), since Phase 1 makes no
+GitHub calls.
+
+**Gate data follows Gate.html:** holding `DELETE /api/conversations/12`, testing "H3 user
+control and H5 error prevention", and the mode line "<mode> · this still asks, every time".
+Esc and the scrim mean "Don't do it", "Don't do it" has focus, and "Allow once" unlocks after
+the checkbox (§7.8).
+
+**Background notifications.** When a project that isn't on screen is held on a blocking
+question or the gate, the renderer asks main for a real Electron `Notification` ("Fitts
+needs you", with the question as the body), once per question. Clicking it focuses the
+window and opens that project, where the question is in the chat. They are sent only when
+"Allow notifications" is on (the mock permission from Welcome); the Scenario panel entry
+turns it on. Main records the notifications it sends so e2e can check them and simulate a
+click.
+
+**Nothing found keeps the audit screen.** The Done screen has no chat (§6.8), so a card posted
+after finishing would vanish. The nothing-found card pauses the run on the audit screen;
+"See what I checked" lists the checks, and Stop run goes to Done.
+
+**The budget card shows the cap that was reached** even after "Add $10" raises it.
+
+**New `sun` button variant** for "Try again" (§6.8), and a `panel-in` animation (slide 16px +
+fade, §6.5), off under reduced motion.

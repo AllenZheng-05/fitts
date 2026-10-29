@@ -6,6 +6,11 @@ import { IPC } from '@fitts/schema';
 const e2eFolder = process.env['FITTS_E2E_PICK_FOLDER'];
 const e2eSavePath = process.env['FITTS_E2E_SAVE_PATH'];
 
+/** Every notification requested this session (e2e tests read it through the main process). */
+const sentNotifications: { id: string; title: string; body: string }[] = [];
+(globalThis as { fittsNotifications?: typeof sentNotifications }).fittsNotifications =
+  sentNotifications;
+
 /** The small set of native features the renderer may use (SPEC §2, §3). */
 export function registerBridge(): void {
   ipcMain.handle(IPC.pickFolder, async (event) => {
@@ -37,6 +42,8 @@ export function registerBridge(): void {
   });
 
   ipcMain.on(IPC.notify, (event, n: { id: string; title: string; body: string }) => {
+    // Kept for e2e checks, which can't see OS notifications.
+    sentNotifications.push(n);
     if (!Notification.isSupported()) return;
     const notification = new Notification({ title: n.title, body: n.body, silent: false });
     notification.on('click', () => {

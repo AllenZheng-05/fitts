@@ -6,6 +6,7 @@ import { Settings } from '../features/settings/Settings';
 import { Welcome } from '../features/welcome/Welcome';
 import { Workspace } from '../features/workspace/Workspace';
 import { useUi } from '../state/ui';
+import { useBackgroundNotifications } from './useBackgroundNotifications';
 import { useShortcuts } from './useShortcuts';
 
 // Dev tools are removed from production builds: __FITTS_DEV_TOOLS__ is false there.
@@ -32,6 +33,7 @@ const useHash = () => useSyncExternalStore(subscribeHash, () => window.location.
 /** Routes between Welcome, Workspace and Settings (SPEC §4). Dev builds add #/gallery and #/debug. */
 export function App() {
   useShortcuts();
+  useBackgroundNotifications();
   const hash = useHash();
   const screen = useUi((s) => s.screen);
 
