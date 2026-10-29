@@ -134,3 +134,81 @@ snaps to whole device pixels), so the e2e check accepts 1.5–2px solid cobalt.
 
 **Pixel values stay literal.** The editor suggests rewriting `gap-[3px]` as `gap-0.75`. The
 literal pixel values are kept because they read 1:1 against the references.
+
+## M2 — Schema, engine, scenarios, Scenario panel
+
+**RunEngine lives in `@fitts/schema`.** §9.2 places the interface in `state/engine.ts`. It is
+defined in the schema package (and re-exported from `state/engine.ts`) so Phase 2's main
+process and preload can implement the same contract without importing renderer code.
+
+**Additions to `RunState` (§9.1).** The flows need state the type doesn't carry:
+- `brief`: the brief as the interview fills it in. The brief card, ready bar and Brief
+  popover read it; the project store saves it back to the `Project` (M3).
+- `fittsTyping`: the three-dot indicator shown for 900ms before each reply (§6.3).
+- `waitingFor`: the gating beat the script is held on (`question:<id>`, `gate`,
+  `approval`), so the UI and tests can see why a run isn't moving.
+- `driverClicks`: "You clicked …" lines while the user has the wheel (§7.3).
+
+**Additions to `ChatItem`.** `state` and `approval.batch` items get an optional `answer`, so
+a card shows which button was pressed and can't be answered twice.
+
+**Confirm-style cards answer through `answerQuestion`.** `stopRun()` *asks*: it posts the
+"Stop this run?" card and pauses. The card's buttons call `answerQuestion` with a stable key
+(`stop` / `keep`), and every §7.7 card works the same way. The keys are shared in
+`EDGE_STATE_ANSWERS` in the schema; the UI maps each to its label. This keeps the Phase 2
+contract to the 21 methods in §9.2.
+
+**Opening a PR on a `fitts/` branch counts as part of the fix.** §7.1 says Push/PR "asks" in
+every mode except Dangerous, but §6.5's Autonomous footer shows a PR opened without asking,
+and Scenario A opens PRs right after the batch approval. Approving a fix (or Autonomous)
+covers opening its PR; merging and pushing to the user's branch are what always ask. A fix
+started in Autonomous whose mode has since changed asks before opening its PR (§7.1).
+
+**Run time vs real time.** The run clock (`elapsedMs`) advances only while Fitts is acting or
+redesigning; it stops while paused, waiting on the user or while the user drives. Fix
+completions run on run time. Chat replies (900ms), "Try again" (3s) and the API retry (12s)
+run on real time, scaled by the Scenario panel speed.
+
+**Interview activity is `idle`.** During the interview the user drives the site, but
+`user-driving` means "took the wheel mid-run" (it shows the driving card), so the interview
+uses `idle` and the UI shows the "You're driving" chip for the interview phase.
+
+**Interview mapping.** demo/chat follows Interview.html: the first answer fills For and Who,
+the second Pain, the third Feel, with Fitts's summaries as values ("Family messaging",
+"Older adults, some with low vision"). Other projects fill one field per answer, in the
+order For, Who, Pain, Feel, using the user's text.
+
+**Scenario narration lives with the scenario.** The §8 canonical strings and every generic
+line the engine says are in `copy.ts`. Lines specific to one scenario (finding text, "I
+mocked up three calmer directions…") are mock data in `mock/scenarios`, standing in for what
+the real agent writes in Phase 2.
+
+**Scenario A's Done numbers come from a fixture.** The live run reports six findings; the
+final beat loads the full run (31 found = 24 fixed + 2 rolled back + 3 not a problem + 2
+suggestions; 26 changes over 9 PRs; $13.92 by phase) from `mock/fixtures/demo-chat.ts`. One
+change is marked merged to show the "Revert PR opened" undo (§7.6).
+
+**`fixingCount` follows §9.5.** Approving the three fixes starts two at once; the recipient
+fix starts when the first one finishes.
+
+**No immer.** Each change applies to a `structuredClone` of the run, then subscribers get the
+new object. Runs are small, and this keeps the dependency list to the spec's.
+
+**Scenario panel.**
+- Entries that only set up a run are enabled now (the debug view shows them). Screen-only
+  entries (Welcome, Welcome back, Settings, Project menu, Add project) are disabled with the
+  milestone that builds them.
+- Esc doesn't close it: it's a dev tool outside the overlay stack, so Esc behaves exactly as
+  users get it. ⌘⇧D / Ctrl+Shift+D or its close button toggles it.
+- It uses dev controls on `MockRunEngine` (`loadAudit`, `jumpToBeat`, `setSpeed`,
+  `showEdgeState`, `askOn`, `recordUserClick`) that are not part of RunEngine.
+- "Jump to beat" replays the scenario from the start, answering earlier holds with their
+  defaults (approve all, deny the gate, first option), and stops on the chosen beat with its
+  own hold open.
+
+**`recordUserClick` is mock-only.** While the user has the wheel the mock site reports clicks
+to the mock engine. The real engine will observe clicks itself through CDP, so this is not a
+RunEngine method.
+
+**Dev builds open the run debug view.** Until the M3 router exists, `pnpm dev` and e2e builds
+show `RunState` as JSON with buttons that drive the engine. Production shows the scaffold page.

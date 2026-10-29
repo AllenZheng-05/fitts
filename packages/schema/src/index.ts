@@ -1,5 +1,5 @@
 // Shared types for main, preload and renderer. No React or Electron imports here.
-// The run model from SPEC §9.1 lands in M2.
+// The run model is SPEC §9.1; additions are marked and explained in docs/DECISIONS.md.
 
 export type Platform = 'darwin' | 'win32' | 'linux';
 
@@ -8,7 +8,225 @@ export interface FittsBridge {
   platform: Platform;
 }
 
-/** Nielsen severity: 0 not a problem … 4 catastrophic. The full run model arrives in M2. */
+export type Mode = 'plan' | 'ask-every' | 'ask-unsure' | 'autonomous' | 'dangerous';
+/** Nielsen severity: 0 not a problem … 4 catastrophic. */
 export type Severity = 0 | 1 | 2 | 3 | 4;
-
+export type Heuristic = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10';
+export type Lens =
+  'usability' | 'accessibility' | 'performance' | 'look-and-feel' | 'ergonomics' | 'content';
 export type RunPhase = 'interview' | 'audit' | 'done';
+export type RunActivity =
+  'idle' | 'acting' | 'paused' | 'user-driving' | 'waiting-on-user' | 'redesigning';
+
+export interface Project {
+  id: string;
+  name: string;
+  kind: 'local' | 'live';
+  folder?: string;
+  url: string;
+  framework?: string;
+  devCommand?: string;
+  repo?: string;
+  brief: Brief;
+  lastRunId?: string;
+  createdAt: string;
+}
+
+export interface Brief {
+  for?: string;
+  who?: string;
+  feel?: string;
+  pain?: string;
+  flows?: string;
+  outOfScope?: string;
+}
+
+export interface Finding {
+  id: string;
+  runId: string;
+  severity: Severity;
+  heuristic?: Heuristic;
+  lens: Lens;
+  title: string;
+  finding: string;
+  fix: string;
+  route: string;
+  agreement: { agreeing: number; total: number; who: string[] };
+  evidence: string[];
+  elementRef?: string;
+  stepIndex: number;
+  atMs: number;
+  diff?: { files: string[]; lines: { kind: 'add' | 'del'; text: string }[] };
+  status: 'open' | 'dismissed' | 'fixing' | 'verified' | 'pr-opened' | 'rolled-back' | 'undone';
+  prNumber?: number;
+  costUsd?: number;
+}
+
+export interface Change {
+  id: string;
+  findingIds: string[];
+  kind: 'fix' | 'batch' | 'redesign' | 'wording';
+  title: string;
+  severity?: Severity;
+  prNumber?: number;
+  costUsd: number;
+  status: 'verified' | 'rolled-back' | 'undone' | 'retrying';
+  merged?: boolean;
+  reason?: string;
+}
+
+export interface GateRequest {
+  id: string;
+  action: string;
+  route: string;
+  heldRequest: string;
+  testing: string;
+}
+
+export type ChatItem =
+  | { id: string; type: 'fitts.message'; text: string }
+  | { id: string; type: 'user.message'; text: string; spoken?: boolean; pointingAt?: string }
+  | { id: string; type: 'fitts.thinking'; text: string }
+  | { id: string; type: 'steps'; steps: { label: string; costUsd: number }[] }
+  | { id: string; type: 'finding'; findingId: string }
+  | {
+      id: string;
+      type: 'question';
+      blocking: boolean;
+      text: string;
+      options: string[];
+      answer?: string;
+    }
+  | { id: string; type: 'approval.batch'; findingIds: string[]; serious: number; answer?: string }
+  | { id: string; type: 'fix.result'; changeId: string }
+  | { id: string; type: 'brief' }
+  | { id: string; type: 'quick-replies'; options: string[]; used?: boolean }
+  | { id: string; type: 'lookfeel'; text: string }
+  | {
+      id: string;
+      type: 'directions';
+      options: { id: string; name: string; swatches: string[] }[];
+      selectedId?: string;
+    }
+  | {
+      id: string;
+      type: 'progress';
+      title: string;
+      items: { text: string; state: 'done' | 'doing' | 'todo' }[];
+    }
+  | { id: string; type: 'wording'; from: string; to: string; decision?: 'keep' | 'undo' }
+  // `answer` (addition): which button the user pressed on an edge-state card.
+  | { id: string; type: 'state'; stateKind: EdgeStateKind; answer?: string }
+  | { id: string; type: 'driving' };
+
+export type ChatItemType = ChatItem['type'];
+
+export type EdgeStateKind =
+  | 'stop-run-confirm'
+  | 'stopped'
+  | 'uncommitted'
+  | 'login-wall'
+  | 'site-down'
+  | 'budget'
+  | 'api-trouble'
+  | 'reopen'
+  | 'nothing-found';
+
+export type CostPhase = 'fixes' | 'reviewers' | 'crawling' | 'summing' | 'media';
+
+export interface RunState {
+  runId: string;
+  projectId: string;
+  phase: RunPhase;
+  activity: RunActivity;
+  mode: Mode;
+  step: number;
+  stepEstimate: number;
+  elapsedMs: number;
+  nowText?: string;
+  routes: {
+    path: string;
+    depth: number;
+    status: 'done' | 'testing' | 'queued';
+    issues: number;
+    label?: string;
+  }[];
+  controlsTried: { done: number; total: number };
+  findings: Finding[];
+  changes: Change[];
+  chat: ChatItem[];
+  queued: string[];
+  overlays: {
+    problems: { ref: string; pin: number }[];
+    attention?: { ref: string; label: string };
+  };
+  gate?: GateRequest;
+  rewindStep?: number;
+  fixingCount: number;
+  cost: { spentUsd: number; capUsd: number; byPhase: Record<CostPhase, number> };
+
+  // Additions to SPEC §9.1 (see docs/DECISIONS.md, M2).
+  /** The brief as the interview fills it in; saved back to the Project. */
+  brief: Brief;
+  /** Fitts is about to reply: the three-dot typing indicator (§6.3). */
+  fittsTyping: boolean;
+  /** The gating beat the script is held on: `question:<itemId>`, `gate` or `approval`. */
+  waitingFor?: string;
+  /** "You clicked …" lines logged while the user has the wheel (§7.3). */
+  driverClicks: string[];
+}
+
+/** SPEC §9.2: the UI talks only to this interface. Phase 2 implements it over IPC. */
+export interface RunEngine {
+  getState(projectId: string): RunState | undefined;
+  subscribe(projectId: string, fn: (s: RunState) => void): () => void;
+
+  startInterview(projectId: string): void;
+  answerInterview(projectId: string, text: string): void;
+  /** Also "Skip, just look around". */
+  startAudit(projectId: string): void;
+  pause(projectId: string): void;
+  resume(projectId: string): void;
+  /** ⌘. */
+  stopAction(projectId: string): void;
+  /** Asks first: posts the stop-run confirm card, answered through `answerQuestion`. */
+  stopRun(projectId: string): void;
+  takeWheel(projectId: string): void;
+  handBack(projectId: string): void;
+  sendMessage(
+    projectId: string,
+    text: string,
+    opts?: { pointingAt?: string; spoken?: boolean },
+  ): void;
+  interruptNow(projectId: string): void;
+  /** Answers a question card or an edge-state card. */
+  answerQuestion(projectId: string, itemId: string, answer: string): void;
+  approveFixes(projectId: string, findingIds: string[]): void;
+  dismissFinding(projectId: string, findingId: string): void;
+  respondGate(projectId: string, gateId: string, decision: 'deny' | 'other' | 'allow'): void;
+  setMode(projectId: string, mode: Mode): void;
+  pickDirection(projectId: string, directionId: string): void;
+  decideWording(projectId: string, itemId: string, decision: 'keep' | 'undo'): void;
+  undoChange(projectId: string, changeId: string): void;
+  retryChange(projectId: string, changeId: string): void;
+  rewindTo(projectId: string, stepIndex: number | null): void;
+}
+
+/**
+ * Answer keys for each edge-state card (SPEC §7.7). Cards pass one of these to
+ * `RunEngine.answerQuestion`; the UI maps each key to its button label in copy.ts.
+ */
+export const EDGE_STATE_ANSWERS = {
+  'stop-run-confirm': ['stop', 'keep'],
+  stopped: ['resume', 'skip', 'wheel'],
+  uncommitted: ['save', 'commit-first'],
+  'login-wall': ['wheel', 'add-login', 'skip'],
+  'site-down': ['restart', 'wait'],
+  budget: ['add-10', 'economy', 'stop'],
+  'api-trouble': ['retry-now'],
+  reopen: ['resume', 'summary'],
+  'nothing-found': ['see-checks'],
+} as const satisfies Record<EdgeStateKind, readonly string[]>;
+
+export type EdgeStateAnswer<K extends EdgeStateKind = EdgeStateKind> =
+  (typeof EDGE_STATE_ANSWERS)[K][number];

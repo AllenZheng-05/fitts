@@ -9,20 +9,34 @@ function allStrings(value: unknown): string[] {
   return [];
 }
 
-describe('App scaffold', () => {
-  it('renders the Fitts heading', () => {
+describe('App', () => {
+  it('opens the run view in dev builds', async () => {
     render(<App />);
-    expect(screen.getByRole('heading', { level: 1, name: copy.app.name })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Run state' })).toBeInTheDocument();
   });
 });
 
 describe('copy', () => {
-  it('follows the voice rules: no emoji, no exclamation marks (SPEC §8)', () => {
+  it('follows the voice rules: no emoji, no exclamation marks except a greeting (SPEC §8)', () => {
     const strings = allStrings(copy);
     expect(strings.length).toBeGreaterThan(10);
     for (const text of strings) {
       expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
-      expect(text).not.toContain('!');
+      expect(text.replace(/^Hi \{name\}!/, '')).not.toContain('!');
     }
+  });
+
+  it('keeps the canonical strings exactly (SPEC §8)', () => {
+    expect(copy.fitts.interviewOpener).toBe(
+      "Hi {name}! Before I touch anything, I'd love to hear about this site. What's it for?",
+    );
+    expect(copy.fitts.readyBar).toBe('I know enough to start');
+    expect(copy.fitts.nonBlockingLabel).toBe(
+      "When you get a sec · I'm testing other pages meanwhile",
+    );
+    expect(copy.fitts.stopped).toBe('Stopped. What should I do instead?');
+    expect(copy.fitts.handBack).toBe(
+      'Thanks. You went through {path}. Want me to test that path properly?',
+    );
   });
 });
