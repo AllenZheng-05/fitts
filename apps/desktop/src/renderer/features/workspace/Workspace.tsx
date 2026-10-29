@@ -12,6 +12,7 @@ import { isRedesigning } from '../redesign/redesign';
 import { RedesignLayout } from '../redesign/RedesignLayout';
 import { DoneLayout } from '../summary/DoneLayout';
 import { ChatPanel } from '../chat/ChatPanel';
+import { useFittsVoice } from '../chat/useFittsVoice';
 import { ReadyBar } from '../chat/ReadyBar';
 import { SiteView } from '../site-view/SiteView';
 import { DangerBanner } from './DangerBanner';
@@ -24,6 +25,7 @@ export function Workspace() {
   const project = useProject(projectId);
   const run = useActiveRun();
   useWorkspaceShortcuts(run);
+  useFittsVoice();
 
   // A project opened at launch has no run yet: start its interview (SPEC §4).
   useEffect(() => {
@@ -32,10 +34,10 @@ export function Workspace() {
 
   const name = project?.name ?? projectId;
   return (
-    <div className="flex h-full flex-col">
+    <div data-backdrop className="flex h-full flex-col">
       <DangerBanner />
       <Header run={run} projectId={projectId} name={name} />
-      <div className="flex min-h-0 flex-1 gap-3.5 px-5 pt-1 pb-5">
+      <div data-backdrop className="flex min-h-0 flex-1 gap-3.5 px-5 pt-1 pb-5">
         {run?.phase === 'interview' && <InterviewLayout run={run} />}
         {run?.phase === 'audit' &&
           (isRedesigning(run) ? <RedesignLayout run={run} /> : <AuditLayout run={run} />)}

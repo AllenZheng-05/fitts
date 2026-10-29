@@ -486,3 +486,64 @@ confirms it.
 
 **The closing message** at the top of Done is Fitts's last chat message, so a stopped run
 shows "Stopped the run…" rather than the canned "All done" line.
+
+## M8 — Motion, background shapes, voice UI
+
+**The field is drawn by hand at 30fps.** The canvas uses `frameloop="never"` and a 33ms
+interval calls `advance()`. Rapier invalidates the canvas on every physics step, so on-demand
+rendering ran at 60fps; driving frames manually caps rendering and physics together, and
+stopping the interval pauses both. A paused or still field draws one frame after changes.
+
+**Units are pixels.** An orthographic camera with zoom 1 makes one world unit one CSS pixel
+(origin at the center), so walls, the 40px cursor collider and drag positions map directly
+from pointer coordinates. Translations are locked to x/y, and shapes still spin freely.
+
+**Pausing.** The field stops when the window is hidden or blurred (`blur` pauses outright;
+`focus` resumes), and while any BeforeAfterSlider divider is being dragged (a tiny
+`state/background.ts` flag).
+
+**What counts as "the canvas" for drag and throw.** The canvas sits under the UI and never
+gets events. A pointerdown counts when its target is the page itself or a layout container
+marked `data-backdrop` (Welcome's main, the workspace and Settings wrappers): the empty
+paper around panels. Then a raycast picks the shape.
+
+**Mode mapping with Settings.** Welcome is lively and the other screens calm (§6.12). Settings
+"Shape movement" Still forces still, Lively forces lively everywhere, and Gentle keeps the
+per-screen default. Reduced motion forces still. "Floating shapes" off removes the field.
+
+**Calm layout** places six shapes in alternating edge bands so they show in the gutters
+around opaque panels. Layouts use a seeded random source, so screenshots are stable.
+
+**Reactions.** Speaking eases every shape to 1.04× and back. A new finding drops a sphere in
+its severity color (wine, coral, sun, neutral-ink) from the top edge, keeping the last four.
+The run finishing gives every shape an outward impulse from the center.
+
+**Colors come from tokens at runtime** (`getComputedStyle` on `--coral` etc.), so no hex
+values live in the component.
+
+**CSP allows `'wasm-unsafe-eval'`.** Rapier compiles WebAssembly. Nothing else changed: no
+network, no inline script, no `eval`.
+
+**three.js and Rapier load lazily** after the UI, so first paint doesn't wait for them.
+
+**The emblem animation** uses an SVG mask to draw the dotted path in behind the cursor
+(stroke-dashoffset on a solid path in the mask), moves the cursor with `getPointAtLength`
+and easeInOut over 1.1s, then pulses the coral target (1 → 1.35 → 1, 250ms). It runs once on
+mount. Reduced motion shows the end state.
+
+**Fitts's voice.** With "Fitts speaks out loud" on, each new Fitts item in the active project is
+spoken with `speechSynthesis`: messages and questions in full, and the first line of each
+card (finding title, "N fixes are ready", "Fixed and verified ✓ · …", edge-state titles,
+"You're driving. I'm watching.", the wording tag). The gate is read aloud when it opens
+(§7.8). Lines already in the chat when you open a project are not replayed, and turning
+speech off stops it at once. The avatar and the shapes pulse while speech plays.
+
+**The chime** is a WebAudio sine blip (rising on start, falling on stop) when hold-to-talk
+starts and ends, and when "Always listening" is turned on or off.
+
+**Test hooks (dev/e2e builds only):** `window.__fittsShapes` (frames, mode, running, body
+positions and velocities) and `window.__fittsAudio` (what was said or chimed), since tests
+can't watch WebGL or listen.
+
+**E2E expect timeout is 10s.** Under a full run, Electron plus a live WebGL scene
+occasionally needed more than Playwright's 5s default for one visibility check.

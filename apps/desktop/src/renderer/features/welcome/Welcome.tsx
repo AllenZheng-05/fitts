@@ -21,9 +21,12 @@ const MODES: UserMode[] = ['plan', 'ask-every', 'ask-unsure', 'autonomous'];
 export function Welcome() {
   const hasProjects = useProjects((s) => s.projects.length > 0);
   return (
-    <main className="relative mx-auto flex h-full max-w-[1360px] items-center gap-14 px-16 py-10">
+    <main
+      data-backdrop
+      className="relative mx-auto flex h-full max-w-[1360px] items-center gap-14 px-16 py-10"
+    >
       <div className="flex min-w-0 flex-[1_1_440px] flex-col gap-[18px]">
-        <FittsEmblem />
+        <FittsEmblem animate />
         <h1 className="font-display text-[68px] leading-[0.98] font-extrabold tracking-[-0.035em]">
           {copy.welcome.title}
         </h1>

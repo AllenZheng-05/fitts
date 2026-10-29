@@ -1,5 +1,6 @@
 import { lazy, Suspense, useSyncExternalStore } from 'react';
 import { ToastHost } from '../components/overlay/ToastHost';
+import { Background } from '../features/background/Background';
 import { AddProjectDialog } from '../features/projects/AddProjectDialog';
 import { PauseConfirm } from '../features/projects/PauseConfirm';
 import { Settings } from '../features/settings/Settings';
@@ -7,6 +8,7 @@ import { Welcome } from '../features/welcome/Welcome';
 import { Workspace } from '../features/workspace/Workspace';
 import { useUi } from '../state/ui';
 import { useBackgroundNotifications } from './useBackgroundNotifications';
+import { useListeningChime } from './useListeningChime';
 import { useShortcuts } from './useShortcuts';
 
 // Dev tools are removed from production builds: __FITTS_DEV_TOOLS__ is false there.
@@ -34,6 +36,7 @@ const useHash = () => useSyncExternalStore(subscribeHash, () => window.location.
 export function App() {
   useShortcuts();
   useBackgroundNotifications();
+  useListeningChime();
   const hash = useHash();
   const screen = useUi((s) => s.screen);
 
@@ -46,8 +49,12 @@ export function App() {
 
   return (
     <>
-      {/* Separate boundaries: the page never waits for the dev panel's code to load. */}
-      <Suspense fallback={null}>{page}</Suspense>
+      <Background />
+      {/* The page sits above the fixed shape field (z-0). Separate Suspense boundaries:
+          the page never waits for the dev panel's code to load. */}
+      <div className="relative z-[1] h-full">
+        <Suspense fallback={null}>{page}</Suspense>
+      </div>
       {ScenarioPanel && (
         <Suspense fallback={null}>
           <ScenarioPanel />

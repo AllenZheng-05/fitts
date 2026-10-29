@@ -35,7 +35,7 @@ export function Settings() {
   const backToWorkspace = returnTo === 'workspace' && hasProject;
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div data-backdrop className="relative flex h-full flex-col">
       <div className="flex flex-none items-center gap-3 px-7 py-[18px]">
         <h1 className="mr-auto font-display text-[32px] font-extrabold tracking-[-0.02em]">
           {copy.settings.title}
@@ -44,7 +44,7 @@ export function Settings() {
           {backToWorkspace ? copy.settings.back : copy.settings.backToWelcome}
         </Button>
       </div>
-      <div className="flex min-h-0 flex-1 gap-[18px] px-7 pb-6">
+      <div data-backdrop className="flex min-h-0 flex-1 gap-[18px] px-7 pb-6">
         <nav
           aria-label={copy.settings.nav}
           className="flex w-[210px] flex-none flex-col gap-1 self-start rounded-panel border-[1.5px] border-ink bg-card p-2 shadow-panel"

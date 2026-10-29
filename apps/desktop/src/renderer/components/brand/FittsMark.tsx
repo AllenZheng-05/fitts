@@ -3,13 +3,15 @@ interface FittsMarkProps {
   /** Accessible name. Without one the mark is decorative. */
   title?: string;
   className?: string;
+  /** Classes for the coral target dot (the Welcome emblem pulses it). */
+  targetClassName?: string;
 }
 
 /**
  * The Fitts mark, Logos3 option D (SPEC §5.4): ink f, coral target dot, cobalt corner
  * marks and two white handles. Paths are copied exactly from the design reference.
  */
-export function FittsMark({ size = 30, title, className }: FittsMarkProps) {
+export function FittsMark({ size = 30, title, className, targetClassName }: FittsMarkProps) {
   return (
     <svg
       width={size}
@@ -42,7 +44,12 @@ export function FittsMark({ size = 30, title, className }: FittsMarkProps) {
         strokeLinecap="round"
       />
       <path d="M19 31 H 35" className="stroke-ink" strokeWidth="7" strokeLinecap="round" />
-      <circle cx="45" cy="31" r="5.5" className="fill-coral" />
+      <circle
+        cx="45"
+        cy="31"
+        r="5.5"
+        className={targetClassName ? `fill-coral ${targetClassName}` : 'fill-coral'}
+      />
       <rect
         x="6.5"
         y="4.5"

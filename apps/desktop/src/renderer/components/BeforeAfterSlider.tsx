@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode
 import { copy } from '../copy';
 import { cx } from '../lib/cx';
 import { format } from '../lib/format';
+import { useBackground } from '../state/background';
 
 export const SLIDER_STEP = 5;
 
@@ -82,6 +83,7 @@ export function BeforeAfterSlider({
       onPointerDown={(event) => {
         dragging.current = true;
         event.currentTarget.setPointerCapture(event.pointerId);
+        useBackground.setState({ sliderDragging: true });
         onDragChange?.(true);
         fromPointer(event);
       }}
@@ -92,6 +94,7 @@ export function BeforeAfterSlider({
         if (!dragging.current) return;
         dragging.current = false;
         event.currentTarget.releasePointerCapture(event.pointerId);
+        useBackground.setState({ sliderDragging: false });
         onDragChange?.(false);
       }}
     >
