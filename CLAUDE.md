@@ -5,17 +5,20 @@ usability problems (Nielsen's 10 heuristics plus accessibility, performance and
 look-and-feel lenses), fixes the code, verifies each fix and opens pull requests.
 Users talk to Fitts by chat or voice while it works.
 
-## Current phase: Phase 1 — clickable front-end prototype
+## Current phase: Phase 2 — the real agent
 
-Build the **entire UI** as a real Electron app, driven by **mock data and a scripted
-run simulator**. No real AI calls, browser automation, git, GitHub or network calls.
-The goal is to click through every user flow and judge the design.
-
-- Full spec: `docs/SPEC-phase1.md` (read it before starting any milestone)
-- Visual references: `docs/design-reference/*.html` — static mockups of every screen.
-  They use a design-tool runtime and will not run on their own; read them for exact
-  layout, spacing, colors, borders, radii and copy. Where the spec and a reference
-  disagree, the spec wins.
+The Phase 1 UI is done (tag phase1-prototype). Build the real engine behind the same
+RunEngine (22 methods, @fitts/schema) and SiteSurface interfaces. Spec: docs/SPEC-phase2.md.
+Phase 1's spec and docs/DECISIONS.md still govern the UI; don't change UI behavior unless
+SPEC-phase2 says to.
+Do one milestone (P0–P12) at a time, in order, each ending green and committed.
+Real network calls are allowed only in apps/desktop/src/agent/llm/, apps/desktop/src/main/voice/,
+apps/desktop/src/agent/verify-site/ and the gh/git spawner. The renderer never makes network
+calls. Never log or commit API keys. Never run git or gh outside the project's
+.fitts-worktrees/ except the read-only checks in §4 and the PR steps in §9.3.
+Keep MockRunEngine working for the Scenario panel, and ReplayRunEngine for judges.
+Commit messages and PR bodies: no Co-Authored-By, session links or "Generated with" lines.
+Log judgment calls in docs/DECISIONS.md under "Phase 2".
 
 ## Commands
 
