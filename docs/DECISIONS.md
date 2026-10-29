@@ -116,7 +116,8 @@ closes only the topmost overlay and does nothing when none is open, Tab is trapp
 focus returns to the trigger. Modals make `#root` inert. Popovers flip above their trigger
 when they don't fit below. No Radix or focus-trap dependency.
 
-**BeforeAfterSlider is a split, not a wipe.** Finding.html shows two side-by-side panes,
+**BeforeAfterSlider is a split, not a wipe.** *(Superseded after review: it is now a wipe,
+see "Before/after is a wipe" below.)* Finding.html shows two side-by-side panes,
 each with its own content, so dragging resizes the panes rather than clipping one over the
 other. The handle is `role="slider"` with `aria-valuenow` and `aria-valuetext`.
 
@@ -655,3 +656,10 @@ stays.
   inside one (cards, panels, fields) don't, so they keep their clicks and hide the shapes
   behind them. The check lives in `features/background/seeThrough.ts`. Pressing on text with
   no shape under it still selects text as usual; a press that grabs a shape doesn't.
+
+**Before/after is a wipe (your call).** Both panes now span the whole comparison, laid over
+each other, and the "before" pane is clipped at the divider (`clip-path: inset(...)`). With
+the divider in the middle, the left half shows the left half of "before" and the right half
+shows the right half of "after". Nothing resizes or reflows while you drag. This applies
+everywhere the slider is used: the Finding panel, the audit's Before / after view and the
+redesign comparison.

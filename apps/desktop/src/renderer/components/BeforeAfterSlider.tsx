@@ -25,8 +25,8 @@ interface BeforeAfterSliderProps {
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
 
 /**
- * Two panes with a draggable divider and a sun "↔" knob (SPEC §5.4). Arrows move the
- * divider 5%, Home/End jump to the ends.
+ * Before and after laid over each other, revealed by a draggable divider with a sun "↔" knob
+ * (SPEC §5.4). Arrows move the divider 5%, Home/End jump to the ends.
  */
 export function BeforeAfterSlider({
   before,
@@ -98,15 +98,14 @@ export function BeforeAfterSlider({
         onDragChange?.(false);
       }}
     >
-      {/* Side-by-side panes, as in the Finding reference: each shows its own content. */}
-      <div className="absolute inset-0 flex">
-        <div
-          className="relative min-w-0 overflow-hidden bg-surface-2"
-          style={{ width: `${position}%` }}
-        >
-          {before}
-        </div>
-        <div className="relative min-w-0 flex-1 overflow-hidden bg-cobalt-tint">{after}</div>
+      {/* A wipe: both panes span the whole frame, and "before" is clipped at the divider, so
+          left of it is the left of "before" and right of it is the right of "after". */}
+      <div className="absolute inset-0 overflow-hidden bg-cobalt-tint">{after}</div>
+      <div
+        className="absolute inset-0 overflow-hidden bg-surface-2"
+        style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}
+      >
+        {before}
       </div>
       <PaneTag className="left-3">{beforeLabel}</PaneTag>
       <PaneTag className="right-3">{afterLabel}</PaneTag>

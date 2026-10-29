@@ -41,6 +41,18 @@ describe('BeforeAfterSlider keyboard (SPEC §5.4)', () => {
     expect(slider).toHaveAttribute('aria-valuenow', '45');
   });
 
+  it('wipes: both panes fill the frame and "before" is clipped at the divider', () => {
+    const { slider } = setup(30);
+    const before = screen.getByText('now').parentElement;
+    const after = screen.getByText('fix').parentElement;
+    expect(before).toHaveClass('absolute', 'inset-0');
+    expect(after).toHaveClass('absolute', 'inset-0');
+    expect(before?.style.width).toBe('');
+    expect(before?.style.clipPath).toBe('inset(0 70% 0 0)');
+    fireEvent.keyDown(slider, { key: 'End' });
+    expect(before?.style.clipPath).toBe('inset(0 0% 0 0)');
+  });
+
   it('jumps to the ends with Home and End', () => {
     const { slider, onChange } = setup();
     fireEvent.keyDown(slider, { key: 'End' });
