@@ -8,5 +8,6 @@ playwright-report/
 .vite/
 .DS_Store
 .env*
-!.env.example.fitts-dev/
+!.env.example
+.fitts-dev/
 .fitts-worktrees/
