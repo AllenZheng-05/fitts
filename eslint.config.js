@@ -24,7 +24,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['eslint.config.js'],
+          allowDefaultProject: ['eslint.config.js', 'scripts/verify/*.cjs'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -35,8 +35,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['eslint.config.js'],
+    files: ['eslint.config.js', '**/*.cjs'],
     ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: globals.node },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     files: [
@@ -44,6 +49,7 @@ export default tseslint.config(
       'apps/desktop/src/preload/**',
       '**/*.config.{ts,mts}',
       'apps/desktop/tests/e2e/**',
+      'scripts/**',
     ],
     languageOptions: { globals: globals.node },
   },

@@ -8,6 +8,20 @@ disagree, the order is: this spec, then DECISIONS.md, then SPEC-phase1.md.
 v1.1 updates v1.0 to match Phase 1 as built (tag `phase1-prototype`, commit `587c890`). Changes
 are listed in §0.2.
 
+**Verified-fact corrections (Oct 29, V1–V9; details in DECISIONS.md "Phase 2 — verification"):**
+- §14, Transcribe:
+  - The URL is `wss://api.meta.ai/v1/asr/realtime`, and the key goes in the first JSON frame.
+  - Audio is sent as raw binary PCM, and `{"type":"endStream"}` finishes a session.
+  - Use `PUSH_TO_TALK` mode for the mic button and `ENDPOINTING` for always-listening.
+  - Every session sends `keywords: ["Fitts"]`.
+- §2, Baseten: the base URL is `https://inference.baseten.co/v1`, used through chat
+  completions.
+- §9.2, Muse Code: on Windows, `muse` runs in WSL2, called as
+  `wsl -e bash -lc "cd <path> && muse exec …"`. Its JSONL output is an envelope keyed by
+  `payload_type`.
+- §2 and §6, output budget: reasoning uses 300–650 output tokens even at `minimal`, so calls
+  need `max_output_tokens` ≥ 2000. There is no `none` effort.
+
 ---
 
 ## 0. Goal, definition of done, and how to start

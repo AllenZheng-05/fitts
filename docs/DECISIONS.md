@@ -814,3 +814,131 @@ SPEC §7.7's "Finish on Economy").**
     calling Rapier's `init()`.
   - Neither is in our code, both packages are on their latest versions, and both warnings
     are harmless. They'll go away when those libraries update.
+
+---
+
+# Phase 2
+
+## Phase 2 — verification (V1–V9, Oct 29)
+
+Scripts are in `scripts/verify/` (run with `npx tsx`). They load keys from `.env.local` through
+dotenv, never print them, and track spend in `.fitts-dev/spend.json`. Raw results are in
+`.fitts-dev/verify/*.json` (gitignored). Total spend for V1–V9: about $0.06.
+
+**V1 — Responses API (`muse-spark-1.3`, `muse-wonder-1.0`): works.**
+- `GET /v1/models` lists `muse-wonder-1.0`, `muse-spark-1.3`, `muse-spark-1.3-contributor`,
+  `sam-3.1`, `muse-image-1.0` and `muse-voice-transcribe-1.0`, plus older Spark versions.
+- Function tools (strict) work on both models. The output comes as `reasoning`, `message` and
+  `function_call` items.
+- `reasoning.summary: "auto"` returns `summary_text` parts, though short calls often get an
+  empty summary.
+- `include: ["reasoning.encrypted_content"]` returns encrypted reasoning on every call
+  (`store: false`).
+- JSON-schema structured output (`text.format`) works on Spark 1.3, contributor and Wonder.
+- **Difference from the spec:** reasoning uses 300–650 output tokens even at the lowest effort.
+  A 400-token cap returned only reasoning and no text. The LLM client defaults
+  `max_output_tokens` to 4000, with 2000 as the minimum.
+- **Difference:** `reasoning.effort` accepts `minimal | low | medium | high | xhigh | max`;
+  `none` returns a 400. Fitts uses `minimal` for narration and `low` by default.
+- Latency for a short call:
+  - Spark: about 2.2s
+  - Wonder: about 3–8s
+  - contributor: up to about 16s, so it's slower
+- Wonder can ignore what a schema field is for (it put a whole paragraph in `title`). Prompts
+  need per-field instructions and length limits.
+
+**V2 — tokens and cost.**
+- One 1440×900 screenshot plus about 12k characters of probe JSON is 5,513 input tokens. The
+  image accounts for about 1.7k of those.
+- That costs about $0.0069 on Spark 1.3 and about $0.00055 on contributor.
+- The count endpoint is `POST /v1/responses/input_tokens` (body `{ model, input }`). Its count
+  matched real usage within 5%.
+
+**V3 — SAM 3.1: works, about 1.2s per image.**
+- Send `model: "sam-3.1"` with `stream: true`, and an input message containing `input_image`
+  plus `input_text` from `buildObjectPrompt` (a box prompt).
+- Parse the stream with `parseImageStream(stream).finalResult` from `@meta-sam/parser` 0.1.0.
+- A box around the demo's NEXT button returned one mask, with no diagnostics.
+  `decodeMaskToSVGPath` gives the outline.
+
+**V4 — Muse Image edits: works, about 12s.**
+- `client.images.edit({ model: "muse-image-1.0", image: toFile(png), prompt })` returns
+  `data[0].b64_json` (no URL), a 1920×1200 PNG.
+- The result was a faithful navy and serif restyle of a Hartwell screenshot.
+- It also reports token usage (12.3k in, 1.1k out). The ledger keeps the spec's $0.01 per
+  image price and logs the tokens.
+
+**V5 — Transcribe realtime: works.** The spec didn't give the protocol details; these are the
+verified ones:
+- **URL:** `wss://api.meta.ai/v1/asr/realtime`. `/v1/realtime` rejects the model.
+- **Auth goes in the first JSON frame,** not a header: `{ mode, authorization: { accessToken },
+  audioEncoding: "PCM_24KHZ" | "PCM_16KHZ", model: "muse-voice-transcribe-1.0", partialMode:
+  "CUMULATIVE", emitAudioProgress: true, keywords?: string[] }`. The server replies with a
+  `sessionId`.
+- **Audio** is raw binary PCM, s16le mono, sent in 100ms chunks. Both 24 kHz and 16 kHz work;
+  Fitts uses 24 kHz.
+- **Server events:** `speechStart`, `transcript` (a cumulative partial), `speechEnd`,
+  `speechComplete` (the final text per turn), `audioProgress` and `error`.
+- **Ending:** send `{"type":"endStream"}`. The server sends the last transcript and closes with
+  code 1000, "No more transcript segments".
+- **Modes:**
+  - `PUSH_TO_TALK` fits the tap-to-talk button: the final text arrives right after
+    `endStream`.
+  - `ENDPOINTING` splits turns by itself and fits "Always listening".
+- **"Fitts" was transcribed as "Fitz"** without biasing. With `keywords: ["Fitts"]` it came out
+  as "Fitts". Every session sends that keyword, and the wake-word matcher also accepts Fitz,
+  Fits and Fritz as a backstop.
+- Source: the LiveKit plugin's source. No official Meta reference was found.
+
+**V6 — `muse exec` (Muse Code 1.4.14) runs in WSL2, not natively on Windows.**
+- Call it as `wsl -e bash -lc "cd <wsl path> && muse exec …"`, with paths converted by
+  `wsl wslpath -a`. From Git Bash, set `MSYS_NO_PATHCONV=1`, otherwise `/mnt/c/…` gets
+  mangled.
+- All the flags in the spec exist: `--json`, `--prompt-file`, `--model`,
+  `--approval-mode never` and `--max-model-steps`.
+- `--sandbox-network` takes `restricted | enabled | proxy-only`, so the spec's `restricted` is
+  valid.
+- Useful extras: `--reasoning-effort`, `--contributor-mode`, `--workspace`,
+  `--worktree existing`, `--output-schema`, `--no-session-log` and `--api-key-stdin`.
+- **JSONL shape:** one envelope per line, `{ schema_version, sequence, record_type:
+  event|status|reconciliation, payload_type, payload }`. The event types Fitts uses:
+  - `run.output.delta` (`payload.text`)
+  - `task.lifecycle.*` (with `failed.reason`)
+  - `run.usage` (calls and tokens)
+  - `run.terminal.completed` and the other `run.terminal.*` events
+
+  The parser keys on `payload_type` and treats anything unknown as a log line.
+- **Exit codes:** 0 when completed, 2 for bad arguments, 1 when credentials are missing.
+- **Credentials:** muse in WSL was **not** logged in (there is no `~/.config/muse/`), and this
+  session must not pass keys to it.
+  - The real-model V6 run is **deferred** (NEEDS-ALLEN: run `muse login` in WSL).
+  - An echo-provider run verified the flags, the events and the exit codes.
+- **Fix pipeline:** the spawner supports `museCommand: native | wsl`, defaulting to `wsl` on
+  Windows. Until muse is logged in, fixes use the in-process Wonder fixer fallback (SPEC-phase2
+  §9.2 step 7).
+
+**V7 — Baseten: works.**
+- **Base URL:** `https://inference.baseten.co/v1`. `GET /models` lists
+  `meta-models/muse-spark-open` and `meta-models/muse-spark-open-1026`.
+- **Client:** chat completions and tool calls work with the `openai` SDK, in about 1–4s. Fitts
+  uses chat completions for Baseten; the Responses API there is unverified.
+- **Token budget:** reasoning tokens count as output (891 of 920 on a short answer), so
+  Baseten calls get the same output budget as Spark.
+
+**V8 — `gh pr create --attach`: present in gh 2.102.0** (≥ 2.99).
+- Format: `--attach '<file>#<alt text>'`, up to 50 files per command.
+- A body reference like `![alt](./x.png)` is rewritten to point at the uploaded asset.
+- If some uploads fail, the PR is still created; the command exits non-zero and still prints
+  the URL on stdout.
+- The live upload is **deferred** because it publishes to GitHub (see NEEDS-ALLEN).
+
+**V9 — Electron 45 offscreen rendering: fast enough.** Fitts ships the offscreen window; no
+screencast fallback is needed.
+- A hidden offscreen window at 1280×800 painted at a steady **30.1 fps** while showing an
+  animation.
+- `toJPEG(80)` took **3.3 ms** per frame, and main used about 14% of one core.
+- All of these work on the offscreen window: `webContents.debugger.attach('1.3')`,
+  `DOM.getBoxModel`, `Page.captureScreenshot`, CDP `Input.dispatchMouseEvent` clicks and
+  `sendInputEvent` (mouse plus `char`).
+- Paint images come out 2px wider and taller than the content size requested with
+  `useContentSize`. This doesn't matter, because the canvas scales by each frame's real size.
