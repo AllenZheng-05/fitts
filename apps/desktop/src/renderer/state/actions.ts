@@ -86,3 +86,38 @@ export function removeProject(id: string): void {
     useUi.getState().openSettings('projects');
   }
 }
+
+/**
+ * Sends the message box (SPEC §6.3, §7.2, §7.5). During the interview answers fill the
+ * brief. Spoken messages starting with "Fitts" are commands: "Fitts, stop" stops the
+ * current action and any other "Fitts, …" interrupts. "stop" or "wait" alone does nothing.
+ */
+export function sendFromComposer(projectId: string, text: string, { spoken = false } = {}): void {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const engine = getEngine();
+  const ui = useUi.getState();
+  const pointingAt = ui.draftPointingAt ?? undefined;
+  ui.set({ draft: '', draftPointingAt: null });
+  const run = useRunStore.getState().runs[projectId];
+
+  if (run?.phase === 'interview' && !pointingAt) {
+    if (spoken) engine.sendMessage(projectId, trimmed, { spoken });
+    else engine.answerInterview(projectId, trimmed);
+    return;
+  }
+  const command = spoken && isFittsCommand(trimmed);
+  if (command && /^fitts\b[,\s]*stop\b/i.test(trimmed)) {
+    engine.sendMessage(projectId, trimmed, { spoken });
+    engine.stopAction(projectId);
+    return;
+  }
+  engine.sendMessage(projectId, trimmed, {
+    ...(pointingAt ? { pointingAt } : {}),
+    ...(spoken ? { spoken } : {}),
+  });
+  if (command) engine.interruptNow(projectId);
+}
+
+/** A voice command needs "Fitts" first: "Fitts, stop" counts, "stop" alone does not (§7.5). */
+export const isFittsCommand = (text: string) => /^fitts\b/i.test(text.trim());

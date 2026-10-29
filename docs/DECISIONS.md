@@ -279,3 +279,70 @@ panel unclickable while a dialog was open.
 
 **The page and the Scenario panel have separate Suspense boundaries**, so the page never
 waits for the dev panel's lazy chunk to load.
+
+## M4 — Workspace shell + Interview
+
+**`RunEngine.updateBrief` (a 22nd method).** The Brief popover's Save (§6.10) must reach the
+engine so Fitts can acknowledge it and Phase 2 can use the new brief. None of the §9.2
+methods fit, so `updateBrief(projectId, brief)` was added to the contract.
+
+**The mock site is excluded from axe.** demo/chat ships deliberate flaws (a grey NEXT button
+with low contrast, a 28 × 20 px "Send Text" target) because Fitts is supposed to find them.
+It stands in for the user's website, not Fitts's UI, so e2e axe scans exclude
+`[data-mock-site]`. Everything else in the app stays axe-clean.
+
+**demo/chat pages.** Inbox (Search, Contacts, Settings links, Compose), Compose step 1 (pick a
+contact), step 2 (`/compose/recipient`: "To: (null)", Create Message, NEXT), step 3
+(`/compose/confirm`: a tiny "Send Text" that drops you on the inbox with no confirmation),
+Search (spinner on every keystroke), Contacts, the Grandma thread (Delete conversation, no
+confirm) and Settings (cramped toggles). The `fixed` variant has consistent Next/Send,
+Back buttons, "To: Grandma", larger type and targets, and "Sent to Grandma ✓". Every
+interactive element has a stable `data-ref`. The interview starts on `/compose`.
+
+**Site history is view state.** Back / Forward / Reload work on a per-project history in
+`state/site.ts`, not in the run store, since it isn't run data.
+
+**`SiteSurface` (§13)** is a small interface (`getElementRect(ref)`, `refAt(x, y)`) over the
+DOM container that holds the mock site. Phase 2 implements it over a WebContentsView.
+
+**The site is only clickable when the user drives** (the interview, or after "Take the
+wheel"). Otherwise it is `inert`, so keyboard focus can't wander into it while Fitts acts.
+
+**Point at something** joins the overlay stack while active, so Esc cancels it like any other
+overlay (§7.2, §7.4). It works by pointer; keyboard users can describe the element in the
+message instead.
+
+**The brief card stays last during the interview,** as in Interview.html, so it reads as a
+running summary. After the interview it renders where it was posted.
+
+**Spoken interview answers keep their SPOKEN tag.** `answerInterview` takes no options, so a
+hold-to-talk answer goes through `sendMessage(..., { spoken: true })`, which routes it to
+the interview inside the mock.
+
+**Voice commands need "Fitts" first** (§7.5). A spoken message starting with "Fitts, stop"
+stops the current action; any other "Fitts, …" interrupts. "stop" or "wait" alone are just
+messages. Typed text is never a command.
+
+**Hold-to-talk in the mock:** holding the mic button (pointer, Space/Enter on the button, or
+⌥Space / Alt+Space) shows "Listening…" in the message box and the "Mic on" chip; releasing
+sends a canned transcript that fits the moment (`mock/voice.ts`). M8 adds the chime.
+
+**The mute button mirrors "Fitts speaks out loud".** `aria-pressed` means muted. Speaking
+defaults to off so tests and first launch stay quiet.
+
+**The header is the drag region on macOS only.** On Windows and Linux the window keeps its
+frame and a drag region would swallow clicks, so `-webkit-app-region` is scoped to
+`html.platform-darwin`, with 88px left padding for the traffic lights.
+
+**Cost chip:** spent only during the interview and on Done (no cap), `spent / cap` during the
+audit, as in the references.
+
+**The chat log wraps a plain `<ol>`.** `role="log"` on the list itself removes list
+semantics and orphans its items (an axe failure).
+
+**New tokens:** `--radius-bubble` (16 16 4 16, the user bubble), plus `chat-in` (fade and rise
+6px) and `typing` animations, both off under reduced motion.
+
+**All chat item types are rendered now** (§6.6), including the M5–M7 ones, so later
+milestones only wire behavior. Edge-state card text and buttons follow States.html; the
+API-trouble card gained a "Pause" answer key.

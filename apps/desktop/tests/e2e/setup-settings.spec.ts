@@ -41,7 +41,10 @@ test('first launch: setup creates a project and opens its workspace', async () =
   await expect(
     page.getByRole('button', { name: 'Switch project, current: demo/chat' }),
   ).toBeVisible();
-  await expect(page.getByText(/run-7 · interview/)).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Interview' }).first()).toHaveAttribute(
+    'aria-current',
+    'step',
+  );
 });
 
 test('relaunch opens the last project instead of Welcome', async () => {

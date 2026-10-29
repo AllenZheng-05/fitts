@@ -57,6 +57,7 @@
   --radius-hero: 22px;
   --radius-emblem: 28px;
   --radius-pill: 999px;
+  --radius-bubble: 16px 16px 4px 16px; /* user chat bubble (§6.6) */
 
   /* Border width · §5.3 */
   --border-hairline: 1px;

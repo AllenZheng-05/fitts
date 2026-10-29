@@ -226,6 +226,8 @@ export interface RunEngine {
   undoChange(projectId: string, changeId: string): void;
   retryChange(projectId: string, changeId: string): void;
   rewindTo(projectId: string, stepIndex: number | null): void;
+  /** Addition to §9.2: the Brief popover's Save (§6.10). Fitts acknowledges in chat. */
+  updateBrief(projectId: string, brief: Brief): void;
 }
 
 /**
@@ -239,7 +241,7 @@ export const EDGE_STATE_ANSWERS = {
   'login-wall': ['wheel', 'add-login', 'skip'],
   'site-down': ['restart', 'wait'],
   budget: ['add-10', 'economy', 'stop'],
-  'api-trouble': ['retry-now'],
+  'api-trouble': ['retry-now', 'pause'],
   reopen: ['resume', 'summary'],
   'nothing-found': ['see-checks'],
 } as const satisfies Record<EdgeStateKind, readonly string[]>;

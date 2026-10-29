@@ -60,6 +60,7 @@ export function useOverlay({
     const active = document.activeElement;
     const returnTo = active instanceof HTMLElement && active !== document.body ? active : null;
     push(id);
+    const fallback = fallbackFocusRef?.current ?? null;
 
     const container = containerRef.current;
     const first = initialFocusRef?.current ?? (container && focusableIn(container)[0]) ?? container;
@@ -90,7 +91,7 @@ export function useOverlay({
       window.removeEventListener('pointerdown', onPointerDown, true);
       remove(id);
       if (returnTo?.isConnected) returnTo.focus();
-      else fallbackFocusRef?.current?.focus();
+      else fallback?.focus();
     };
     // Re-run only when the overlay opens or closes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

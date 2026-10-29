@@ -1,24 +1,25 @@
-import { ChevronDown, ChevronUp, Settings as SettingsIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { IconButton } from '../../components/IconButton';
+import type { RunState } from '@fitts/schema';
+import { useEffect } from 'react';
+import { Chip } from '../../components/Chip';
 import { Panel } from '../../components/Panel';
-import { Wordmark } from '../../components/brand/Wordmark';
+import { Button } from '../../components/Button';
 import { copy } from '../../copy';
-import { cx } from '../../lib/cx';
-import { format } from '../../lib/format';
 import { useProject } from '../../state/projects';
 import { useActiveRun, useRunStore } from '../../state/run-store';
 import { useUi } from '../../state/ui';
-import { ProjectMenu } from '../projects/ProjectMenu';
+import { ChatPanel } from '../chat/ChatPanel';
+import { ReadyBar } from '../chat/ReadyBar';
+import { SiteView } from '../site-view/SiteView';
 import { DangerBanner } from './DangerBanner';
+import { Header } from './Header';
+import { useWorkspaceShortcuts } from './useWorkspaceShortcuts';
 
-/** M3 shell: header with the project button and Settings. M4 builds the full workspace. */
+/** The workspace: common header plus the layout for the run's phase (SPEC §6.2–§6.8). */
 export function Workspace() {
   const projectId = useRunStore((s) => s.activeProjectId);
   const project = useProject(projectId);
   const run = useActiveRun();
-  const menuOpen = useUi((s) => s.projectMenuOpen);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  useWorkspaceShortcuts(run);
 
   // A project opened at launch has no run yet: start its interview (SPEC §4).
   useEffect(() => {
@@ -29,44 +30,51 @@ export function Workspace() {
   return (
     <div className="flex h-full flex-col">
       <DangerBanner />
-      <header className="flex flex-none flex-wrap items-center gap-2 px-5 py-3">
-        <Wordmark />
-        <button
-          ref={buttonRef}
-          type="button"
-          aria-haspopup="dialog"
-          aria-expanded={menuOpen}
-          aria-label={format(copy.workspace.projectButton, { name })}
-          onClick={() => useUi.getState().set({ projectMenuOpen: !menuOpen })}
-          className={cx(
-            'inline-flex min-h-10 items-center gap-1.5 rounded-pill px-3 font-mono text-[12px] transition-tint',
-            menuOpen
-              ? 'border-[1.5px] border-cobalt bg-cobalt-tint'
-              : 'border border-ink bg-card hover:bg-paper',
-          )}
-        >
-          {name}
-          {menuOpen ? (
-            <ChevronUp size={12} strokeWidth={2.5} aria-hidden="true" />
-          ) : (
-            <ChevronDown size={12} strokeWidth={2.5} aria-hidden="true" />
-          )}
-        </button>
-        <span className="mx-auto" />
-        <IconButton
-          aria-label={copy.workspace.settings}
-          onClick={() => useUi.getState().openSettings()}
-          icon={<SettingsIcon size={18} aria-hidden="true" />}
-        />
-      </header>
-      <div className="flex min-h-0 flex-1 px-5 pb-5">
-        <Panel label={name} className="flex-1" bodyClassName="flex items-center justify-center">
-          <p className="text-[15px] text-muted">
-            {run ? `${run.runId} · ${run.phase}` : ''} · {copy.workspace.placeholder}
-          </p>
-        </Panel>
+      <Header run={run} projectId={projectId} name={name} />
+      <div className="flex min-h-0 flex-1 gap-3.5 px-5 pt-1 pb-5">
+        {run?.phase === 'interview' && <InterviewLayout run={run} />}
+        {run && run.phase !== 'interview' && <Placeholder run={run} />}
       </div>
-      <ProjectMenu anchorRef={buttonRef} />
     </div>
+  );
+}
+
+/** Interview (SPEC §6.3): site view + 420px chat. The user drives the site. */
+function InterviewLayout({ run }: { run: RunState }) {
+  const pointing = useUi((s) => s.pointing);
+  return (
+    <>
+      <SiteView
+        projectId={run.projectId}
+        className="flex-1"
+        interactive
+        toolbarEnd={
+          <>
+            <Chip tone="sun" className="px-2.5 py-1.5">
+              {copy.site.driving}
+            </Chip>
+            <Button
+              size="sm"
+              className="px-3.5 text-[14px]"
+              aria-pressed={pointing}
+              onClick={() => useUi.getState().set({ pointing: !pointing })}
+            >
+              {pointing ? copy.site.pointing : copy.site.point}
+            </Button>
+          </>
+        }
+      />
+      <ChatPanel run={run} className="w-[420px] flex-none" aboveComposer={<ReadyBar run={run} />} />
+    </>
+  );
+}
+
+function Placeholder({ run }: { run: RunState }) {
+  return (
+    <Panel label={run.phase} className="flex-1" bodyClassName="flex items-center justify-center">
+      <p className="text-[15px] text-muted">
+        {run.runId} · {run.phase}
+      </p>
+    </Panel>
   );
 }

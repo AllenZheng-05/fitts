@@ -166,13 +166,18 @@ export class MockRunEngine implements RunEngine {
   }
 
   answerInterview(projectId: string, text: string): void {
+    this.interviewAnswer(projectId, text, {});
+  }
+
+  /** Interview answers keep the spoken tag when they came from hold-to-talk. */
+  private interviewAnswer(projectId: string, text: string, opts: { spoken?: boolean }) {
     const ctrl = this.ensure(projectId);
     if (ctrl.state.phase !== 'interview') {
-      this.sendMessage(projectId, text);
+      this.sendMessage(projectId, text, opts);
       return;
     }
     this.mutate(ctrl, (s, ctx) => {
-      ctx.post({ type: 'user.message', text });
+      ctx.post({ type: 'user.message', text, ...opts });
       markQuickRepliesUsed(s);
       const step = ctrl.profile.interview[ctrl.interviewStep];
       if (step) {
@@ -262,7 +267,7 @@ export class MockRunEngine implements RunEngine {
   ): void {
     const ctrl = this.ensure(projectId);
     if (ctrl.state.phase === 'interview' && !opts.pointingAt) {
-      this.answerInterview(projectId, text);
+      this.interviewAnswer(projectId, text, opts.spoken ? { spoken: true } : {});
       return;
     }
     this.mutate(ctrl, (s, ctx) => {
@@ -399,6 +404,14 @@ export class MockRunEngine implements RunEngine {
   rewindTo(projectId: string, stepIndex: number | null): void {
     this.withRun(projectId, (s) => {
       s.rewindStep = stepIndex ?? undefined;
+    });
+  }
+
+  updateBrief(projectId: string, brief: Brief): void {
+    const ctrl = this.ensure(projectId);
+    this.mutate(ctrl, (s, ctx) => {
+      s.brief = { ...brief };
+      ctx.say(copy.fitts.briefSaved);
     });
   }
 
@@ -717,7 +730,10 @@ export class MockRunEngine implements RunEngine {
         return;
       case 'api-trouble':
         holdOn();
-        ctx.onAnswer(id, (_answer, _s2, c) => void c.say(copy.fitts.apiRecovered));
+        ctx.onAnswer(id, (answer, _s2, c) => {
+          if (answer === 'pause') return c.pause();
+          c.say(copy.fitts.apiRecovered);
+        });
         ctx.after(API_RETRY_MS, (s2, c) => {
           const card = s2.chat.find((x) => x.id === id);
           if (card?.type !== 'state' || card.answer) return;
