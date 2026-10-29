@@ -1,6 +1,5 @@
 import { lazy, Suspense, useSyncExternalStore } from 'react';
 import { ToastHost } from '../components/overlay/ToastHost';
-import { Background } from '../features/background/Background';
 import { AddProjectDialog } from '../features/projects/AddProjectDialog';
 import { PauseConfirm } from '../features/projects/PauseConfirm';
 import { Settings } from '../features/settings/Settings';
@@ -49,7 +48,6 @@ export function App() {
 
   return (
     <>
-      <Background />
       {/* The page sits above the fixed shape field (z-0). Separate Suspense boundaries:
           the page never waits for the dev panel's code to load. */}
       <div className="relative z-[1] h-full">

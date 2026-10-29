@@ -590,3 +590,15 @@ surface stays a pure DOM seam: `getElementRect(ref)` and `refAt(x, y)`.
 **Not verified on macOS.** Built and tested on Windows 11. The macOS-only parts (hiddenInset
 title bar, traffic-light inset, header drag region, ⌘ shortcut labels) are implemented but
 unverified.
+
+## After Phase 1 review
+
+**Blank screen in `pnpm dev` (fixed).** About a second after launch (when the shapes finish
+loading, the same moment the emblem cursor lands) Rapier threw "null pointer passed to rust"
+and the whole window went blank. React's StrictMode, in development only, mounts, unmounts
+and remounts components; `@react-three/rapier` frees its physics world on the simulated
+unmount and reuses it on the remount. The error happened inside the canvas, and with no
+error boundary React unmounted the entire app. Production builds don't run StrictMode's
+double mount, which is why the e2e suite (which tests the built app) passed. Fix: the
+background is rendered outside StrictMode, and wrapped in an error boundary so any WebGL or
+physics failure removes only the shapes, never the app.
