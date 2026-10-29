@@ -7,13 +7,12 @@ import { Kbd } from '../../components/Kbd';
 import { copy } from '../../copy';
 import { cx } from '../../lib/cx';
 import { format } from '../../lib/format';
-import { shortcutLabel } from '../../lib/platform';
 import { sendFromComposer } from '../../state/actions';
 import { getEngine } from '../../state/engine';
 import { useSettings } from '../../state/settings';
 import { useUi } from '../../state/ui';
 import { MESSAGE_BOX_ID } from '../site-view/SiteView';
-import { useHoldToTalk } from './useHoldToTalk';
+import { useMicToggle } from './useMicToggle';
 
 /**
  * The message box and everything pinned above it (SPEC §6.3, §6.4): the "Now:" line, the
@@ -25,7 +24,7 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
   const pointing = useUi((s) => s.pointing);
   const listening = useUi((s) => s.micListening);
   const talkMode = useSettings((s) => s.talkMode);
-  const mic = useHoldToTalk(run);
+  const toggleMic = useMicToggle(run);
   const engine = getEngine();
   const id = run.projectId;
   const auditing = run.phase === 'audit';
@@ -119,24 +118,10 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
           <IconButton
             size="round"
             variant="primary"
-            aria-label={copy.composer.holdToTalk}
+            aria-label={copy.composer.talk}
             aria-pressed={listening}
             className={cx('size-12', listening && 'bg-cobalt-deep')}
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              mic.start();
-            }}
-            onPointerUp={mic.end}
-            onPointerCancel={mic.end}
-            onKeyDown={(e) => {
-              if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
-                e.preventDefault();
-                mic.start();
-              }
-            }}
-            onKeyUp={(e) => {
-              if (e.key === ' ' || e.key === 'Enter') mic.end();
-            }}
+            onClick={toggleMic}
             icon={<Mic size={20} aria-hidden="true" />}
           />
         )}
@@ -144,7 +129,9 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
       <span className="text-[12px] text-muted">
         {talkMode === 'typing'
           ? copy.composer.hintTyping
-          : format(copy.composer.hint, { alt: shortcutLabel(['alt']) })}
+          : talkMode === 'wake'
+            ? copy.composer.hintWake
+            : copy.composer.hint}
       </span>
     </div>
   );

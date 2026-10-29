@@ -283,10 +283,29 @@ function Walls({ width, height }: { width: number; height: number }) {
   );
 }
 
-/** Pointer position in world units, read from window because the canvas sits under the UI. */
+/** A press on the empty paper around the UI, not on a control or panel. */
+function isBackdrop(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return (
+    el === document.documentElement ||
+    el === document.body ||
+    (el !== null && el.closest('[data-backdrop]') === el)
+  );
+}
+
+/**
+ * Pointer position in world units, read from window because the canvas sits under the UI.
+ * `pressed` is true while the main button is held after pressing on the backdrop.
+ */
 function usePointer(width: number, height: number) {
-  const pointer = useRef({ x: 99999, y: 99999, vx: 0, vy: 0, t: 0, inside: false });
+  const pointer = useRef({ x: 99999, y: 99999, vx: 0, vy: 0, t: 0, inside: false, pressed: false });
   useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (e.button === 0 && isBackdrop(e.target)) pointer.current.pressed = true;
+    };
+    const onUp = () => {
+      pointer.current.pressed = false;
+    };
     const onMove = (e: PointerEvent) => {
       const now = performance.now();
       const x = e.clientX - width / 2;
@@ -306,22 +325,36 @@ function usePointer(width: number, height: number) {
       pointer.current.y = 99999;
     };
     window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     document.documentElement.addEventListener('pointerleave', onLeave);
     return () => {
       window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       document.documentElement.removeEventListener('pointerleave', onLeave);
     };
   }, [width, height]);
   return pointer;
 }
 
-/** A kinematic ball that follows the pointer, so shapes bump away from it (§6.12). */
+/**
+ * A kinematic ball that pushes shapes away from the cursor (§6.12), only while the mouse
+ * is held down on the backdrop. Otherwise it waits far off-screen and the shapes ignore
+ * the cursor.
+ */
 function Cursor({ width, height }: { width: number; height: number }) {
   const body = useRef<RapierRigidBody>(null);
   const pointer = usePointer(width, height);
   useFrame(() => {
     const p = pointer.current;
-    body.current?.setNextKinematicTranslation({ x: p.x, y: p.y, z: 0 });
+    // Holding a shape is a drag, not a push: the collider would sit inside it and spoil
+    // the throw.
+    cursorActive = p.pressed && !dragging;
+    const at = cursorActive ? { x: p.x, y: p.y } : { x: 99999, y: 99999 };
+    body.current?.setNextKinematicTranslation({ ...at, z: 0 });
   });
   return (
     <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[99999, 99999, 0]}>
@@ -352,12 +385,7 @@ function Dragger({
   useEffect(() => {
     const raycaster = new Raycaster();
     const onDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement | null;
-      const onBackdrop =
-        target === document.documentElement ||
-        target === document.body ||
-        target?.closest('[data-backdrop]') === target;
-      if (!onBackdrop || e.button !== 0) return;
+      if (!isBackdrop(e.target) || e.button !== 0) return;
       raycaster.setFromCamera(
         new Vector2((e.clientX / width) * 2 - 1, -(e.clientY / height) * 2 + 1),
         camera,
@@ -375,11 +403,13 @@ function Dragger({
       e.preventDefault();
       body.setBodyType(KINEMATIC_POSITION, true);
       held.current = body;
+      dragging = true;
     };
     const onUp = () => {
       const body = held.current;
       if (!body) return;
       held.current = null;
+      dragging = false;
       body.setBodyType(DYNAMIC, true);
       const p = pointer.current;
       const clamp = (v: number) => Math.max(-1500, Math.min(1500, v));
@@ -402,6 +432,11 @@ function Dragger({
   return null;
 }
 
+/** Whether the cursor collider is in the scene this frame (read by the dev stats). */
+let cursorActive = false;
+/** A shape is being dragged; the cursor collider stands down meanwhile. */
+let dragging = false;
+
 /** Dev/e2e stats: frame count, mode, running, body positions. */
 function useStats(mode: FieldMode, running: boolean, bodies: Stats['bodies']) {
   const frames = useRef(0);
@@ -421,6 +456,7 @@ function useStats(mode: FieldMode, running: boolean, bodies: Stats['bodies']) {
       mode,
       running,
       bodies: () => bodiesRef.current(),
+      cursorActive: () => cursorActive,
     };
   }, [mode, running]);
 }

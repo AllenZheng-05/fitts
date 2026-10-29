@@ -14,11 +14,6 @@ export interface FittsBridge {
   notify(notification: { id: string; title: string; body: string }): void;
   /** Called with the notification id when the user clicks one. Returns an unsubscribe. */
   onNotificationClick(handler: (id: string) => void): () => void;
-  /**
-   * Hold-to-talk from ⌥Space / Alt+Space (§7.9). Main catches the chord before the OS does
-   * (on Windows it opens the window's system menu) and reports press and release.
-   */
-  onHoldToTalk(handler: (state: 'down' | 'up') => void): () => void;
 }
 
 /** IPC channel names shared by main and preload. */
@@ -27,7 +22,6 @@ export const IPC = {
   saveTextFile: 'fitts:save-text-file',
   notify: 'fitts:notify',
   notificationClick: 'fitts:notification-click',
-  holdToTalk: 'fitts:hold-to-talk',
 } as const;
 
 export type Mode = 'plan' | 'ask-every' | 'ask-unsure' | 'autonomous' | 'dangerous';

@@ -602,3 +602,27 @@ error boundary React unmounted the entire app. Production builds don't run Stric
 double mount, which is why the e2e suite (which tests the built app) passed. Fix: the
 background is rendered outside StrictMode, and wrapped in an error boundary so any WebGL or
 physics failure removes only the shapes, never the app.
+
+**Autonomous opens pull requests without asking (your call).** Autonomous does everything
+except destructive actions: fixes, redesigns and their PRs. This settles the M2 question
+about §7.1's "Push/PR asks" column. The Settings note now reads "Destructive actions
+**always** ask, in every mode above", and the Autonomous row says it opens pull requests
+without asking. In the Ask modes, approving a fix still covers opening its PR. Dangerous
+mode is unchanged.
+
+**No push-to-talk key (your call).** The ⌥Space / Alt+Space binding from §7.9 is gone, along
+with main's key relay and its IPC channel. You talk to Fitts in two ways:
+- the mic button: tap to start listening, tap again to send
+- "Always listening for 'Fitts'" in Settings, where only messages starting with "Fitts" count
+  as commands
+
+The Settings option "Hold ⌥Space" is now "Tap the mic button" (saved settings migrate from
+`hold` to `button`), and the composer hint follows the talk mode. With no binding, Alt+Space
+on Windows opens the window's system menu, as in any app.
+
+**Shapes react to the mouse only while it's held (your call).** The cursor collider exists in
+the physics scene only while the main button is held down after pressing on the backdrop
+(the empty paper, the same rule drag and throw uses). Moving the mouse, or clicking
+buttons and panels, never touches the shapes. They keep drifting and reacting (speaking
+pulse, finding drops, end-of-run burst) on every screen, and the Shape movement setting
+stays.

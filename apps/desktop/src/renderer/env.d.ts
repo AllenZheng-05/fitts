@@ -10,6 +10,8 @@ declare global {
       mode: 'lively' | 'calm' | 'still';
       running: boolean;
       bodies: () => { id: string; x: number; y: number; vx: number; vy: number }[];
+      /** True while the cursor collider is pushing (mouse held on the backdrop). */
+      cursorActive: () => boolean;
     };
   }
 

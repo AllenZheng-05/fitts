@@ -66,14 +66,17 @@ test('"Skip, just look around" starts the audit before the brief is ready', asyn
   );
 });
 
-test('hold to talk sends a spoken answer', async () => {
+test('the mic button: tap to listen, tap again to send', async () => {
   const { page } = launched;
-  const mic = page.getByRole('button', { name: 'Hold to talk' });
-  await mic.hover();
-  await page.mouse.down();
+  const mic = page.getByRole('button', { name: 'Talk to Fitts' });
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-pressed', 'true');
   await expect(messageBox(page)).toHaveValue('Listening…');
   await expect(page.getByRole('status').filter({ hasText: 'Mic on' })).toBeVisible();
-  await page.mouse.up();
+  await page.waitForTimeout(500);
+  await expect(messageBox(page)).toHaveValue('Listening…');
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-pressed', 'false');
   const bubble = chat(page).getByRole('listitem').filter({ hasText: 'SPOKEN' });
   await expect(bubble).toContainText('A messaging app so my grandparents can text the family.');
 });

@@ -247,7 +247,7 @@ function IconButtonsSection() {
         <IconButton
           size="round"
           variant="primary"
-          aria-label="Hold to talk"
+          aria-label="Talk to Fitts"
           icon={<Mic size={20} aria-hidden="true" />}
         />
       </Row>

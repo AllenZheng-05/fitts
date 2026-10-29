@@ -4,7 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type KeyName = 'meta' | 'elevenlabs' | 'baseten';
 export type ModelProfile = 'quality' | 'economy' | 'open';
-export type TalkMode = 'hold' | 'wake' | 'typing';
+export type TalkMode = 'button' | 'wake' | 'typing';
 export type ShapeMovement = 'still' | 'gentle' | 'lively';
 export type VoiceName = 'elevenlabs' | 'system';
 export type UserMode = Exclude<Mode, 'dangerous'>;
@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS = {
   contributorMode: false,
   speaksAloud: false,
   voice: 'system' as VoiceName,
-  talkMode: 'hold' as TalkMode,
+  talkMode: 'button' as TalkMode,
   shapesOn: true,
   shapeMovement: 'gentle' as ShapeMovement,
 };
@@ -70,6 +70,13 @@ export const useSettings = create<SettingsState>()(
     {
       name: 'fitts.settings',
       storage: createJSONStorage(() => localStorage),
+      // v1: "Hold ⌥Space" became "Tap the mic button" (no push-to-talk key binding).
+      version: 1,
+      migrate: (persisted) => {
+        const s = persisted as { talkMode?: string };
+        if (s.talkMode === 'hold') s.talkMode = 'button';
+        return s;
+      },
       partialize: ({
         dangerous: _dangerous,
         set: _set,

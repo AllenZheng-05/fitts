@@ -12,11 +12,6 @@ const bridge: FittsBridge = {
     ipcRenderer.on(IPC.notificationClick, listener);
     return () => ipcRenderer.removeListener(IPC.notificationClick, listener);
   },
-  onHoldToTalk: (handler) => {
-    const listener = (_event: unknown, state: 'down' | 'up') => handler(state);
-    ipcRenderer.on(IPC.holdToTalk, listener);
-    return () => ipcRenderer.removeListener(IPC.holdToTalk, listener);
-  },
 };
 
 contextBridge.exposeInMainWorld('fitts', bridge);

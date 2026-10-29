@@ -141,26 +141,13 @@ test('keyboard only: setup, interview and the audit', async () => {
   await expect(status(page)).toHaveText('Paused');
 });
 
-test('⌥Space / Alt+Space holds to talk', async () => {
-  const { page, app } = launched;
+test('there is no push-to-talk key: Alt+Space does nothing', async () => {
+  const { page } = launched;
   await completeSetup(page);
-  // Real key events from main go through before-input-event, like a physical key press
-  // (Playwright's keyboard goes through DevTools and skips it).
-  const send = (type: 'keyDown' | 'keyUp', keyCode: string, modifiers: string[]) =>
-    app.evaluate(
-      ({ BrowserWindow }, e) => {
-        BrowserWindow.getAllWindows()[0]?.webContents.sendInputEvent({
-          type: e.type,
-          keyCode: e.keyCode,
-          modifiers: e.modifiers as ('alt' | 'shift')[],
-        });
-      },
-      { type, keyCode, modifiers },
-    );
-  await send('keyDown', 'Alt', ['alt']);
-  await send('keyDown', 'Space', ['alt']);
-  await expect(page.getByRole('status').filter({ hasText: 'Mic on' })).toBeVisible();
-  // Windows swallows the key-ups, so the hold ends when the key repeat stops.
-  await send('keyUp', 'Alt', []);
-  await expect(chat(page).getByRole('listitem').filter({ hasText: 'SPOKEN' })).toBeVisible();
+  await page.keyboard.down('Alt');
+  await page.keyboard.press('Space');
+  await page.keyboard.up('Alt');
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('status').filter({ hasText: 'Mic on' })).toBeHidden();
+  await expect(page.getByLabel('Message Fitts')).not.toHaveValue('Listening…');
 });

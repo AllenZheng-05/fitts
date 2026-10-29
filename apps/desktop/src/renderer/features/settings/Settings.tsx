@@ -7,7 +7,6 @@ import { SegmentedControl } from '../../components/SegmentedControl';
 import { copy } from '../../copy';
 import { cx } from '../../lib/cx';
 import { format, formatUsd } from '../../lib/format';
-import { shortcutLabel } from '../../lib/platform';
 import { speak } from '../../lib/speech';
 import { RichText } from '../../components/RichText';
 import { isKeyValid } from '../../mock/detect';
@@ -216,7 +215,6 @@ function VoiceTab() {
   const s = useSettings();
   const sliderId = useId();
   const movementIndex = MOVEMENTS.indexOf(s.shapeMovement);
-  const altKey = shortcutLabel(['alt']);
 
   return (
     <>
@@ -251,9 +249,9 @@ function VoiceTab() {
           size="lg"
           value={s.talkMode}
           onChange={(e) => s.set({ talkMode: e.target.value as TalkMode })}
-          options={(['hold', 'wake', 'typing'] as const).map((m) => ({
+          options={(['button', 'wake', 'typing'] as const).map((m) => ({
             value: m,
-            label: format(copy.settings.talkModes[m], { alt: altKey }),
+            label: copy.settings.talkModes[m],
           }))}
         />
         <p className="rounded-control bg-surface-2 px-3 py-2.5 text-[13px] leading-normal">

@@ -68,20 +68,46 @@ test('reduced motion keeps the shapes still', async () => {
   await expect(field(page)).toHaveAttribute('data-shape-field', 'still');
 });
 
-test('the cursor pushes shapes away', async () => {
+test('the cursor reaches the shapes only while the mouse is held on the backdrop', async () => {
   const { page } = launched;
   await waitForField(page, 'lively');
-  await page.waitForTimeout(500);
-  const [target] = (await bodies(page)).filter((b) => b.id.startsWith('sphere'));
-  if (!target) throw new Error('no sphere');
-  await page.mouse.move(target.x - 120, target.y);
-  await page.mouse.move(target.x, target.y, { steps: 8 });
-  await expect
-    .poll(async () => {
-      const now = (await bodies(page)).find((b) => b.id === target.id);
-      return now ? Math.hypot(now.x - target.x, now.y - target.y) : 0;
-    })
-    .toBeGreaterThan(20);
+  const cursorActive = () => page.evaluate(() => window.__fittsShapes?.cursorActive() ?? false);
+
+  // Sweeping over the shapes without pressing: the cursor isn't in the physics scene.
+  for (const b of (await bodies(page)).slice(0, 4)) {
+    await page.mouse.move(b.x, b.y, { steps: 4 });
+  }
+  expect(await cursorActive()).toBe(false);
+
+  // Pressing on a button doesn't bring it in either.
+  await page.getByRole('button', { name: 'Allow microphone' }).hover();
+  await page.mouse.down();
+  expect(await cursorActive()).toBe(false);
+  await page.mouse.up();
+
+  // Pressing on empty backdrop (no shape under it, which would start a drag) does.
+  const point = await page.evaluate(
+    (list: Body[]) => {
+      for (let y = 40; y < window.innerHeight; y += 40) {
+        for (let x = 40; x < window.innerWidth; x += 40) {
+          const el = document.elementFromPoint(x, y);
+          const backdrop =
+            el?.hasAttribute('data-backdrop') ||
+            el === document.documentElement ||
+            el === document.body;
+          if (backdrop && list.every((b) => Math.hypot(b.x - x, b.y - y) > 140)) return { x, y };
+        }
+      }
+      return null;
+    },
+    await bodies(page),
+  );
+  if (!point) throw new Error('no empty backdrop');
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await expect.poll(cursorActive).toBe(true);
+  await page.mouse.up();
+  await expect.poll(cursorActive).toBe(false);
 });
 
 test('a shape on the backdrop can be dragged and thrown', async () => {
@@ -97,7 +123,8 @@ test('a shape on the backdrop can be dragged and thrown', async () => {
       );
     });
   }, all);
-  const target = onBackdrop.find((b) => !b.id.startsWith('sphere-5')) ?? onBackdrop[0];
+  // A large solid shape, so the press can't miss it while it drifts (the torus has a hole).
+  const target = onBackdrop.find((b) => /^(sphere-0|box-1|capsule-3)$/.test(b.id));
   if (!target) throw new Error('no shape on the backdrop');
   await page.mouse.move(target.x, target.y);
   await page.mouse.down();
@@ -131,10 +158,9 @@ test('Fitts speaks new lines when speaking is on, and the mic chimes', async () 
     'aria-pressed',
     'false',
   );
-  const mic = page.getByRole('button', { name: 'Hold to talk' });
-  await mic.hover();
-  await page.mouse.down();
-  await page.mouse.up();
+  const mic = page.getByRole('button', { name: 'Talk to Fitts' });
+  await mic.click();
+  await mic.click();
   await expect
     .poll(() => audio(page))
     .toEqual(
