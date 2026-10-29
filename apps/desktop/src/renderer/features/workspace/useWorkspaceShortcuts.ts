@@ -1,5 +1,6 @@
 import type { RunState } from '@fitts/schema';
 import { useEffect, useRef } from 'react';
+import { bridge } from '../../lib/bridge';
 import { getEngine } from '../../state/engine';
 import { useSettings } from '../../state/settings';
 import { useUi } from '../../state/ui';
@@ -43,17 +44,17 @@ export function useWorkspaceShortcuts(run: RunState | undefined) {
         document.getElementById(MESSAGE_BOX_ID)?.focus();
         return;
       }
-      if (e.altKey && e.code === 'Space' && useSettings.getState().talkMode !== 'typing') {
-        e.preventDefault();
-        if (!e.repeat) micRef.current.start();
-      }
     };
+    // ⌥Space / Alt+Space arrives from main, which catches it before the OS (§7.9).
+    const offHold = bridge().onHoldToTalk((state) => {
+      if (useSettings.getState().talkMode === 'typing') return;
+      if (state === 'down') micRef.current.start();
+      else if (useUi.getState().micListening) micRef.current.end();
+    });
+    // Fallback: releasing Space or Alt always ends a hold, even if main missed the key-up.
     const onUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.key === 'Alt') {
-        if (useUi.getState().micListening) {
-          e.preventDefault();
-          micRef.current.end();
-        }
+      if ((e.code === 'Space' || e.key === 'Alt') && useUi.getState().micListening) {
+        micRef.current.end();
       }
     };
     window.addEventListener('keydown', onDown);
@@ -61,6 +62,7 @@ export function useWorkspaceShortcuts(run: RunState | undefined) {
     return () => {
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
+      offHold();
     };
   }, []);
 }

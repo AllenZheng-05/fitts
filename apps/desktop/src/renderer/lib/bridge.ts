@@ -7,6 +7,7 @@ const fallback: FittsBridge = {
   saveTextFile: () => Promise.resolve(null),
   notify: () => undefined,
   onNotificationClick: () => () => undefined,
+  onHoldToTalk: () => () => undefined,
 };
 
 /** The preload bridge (`window.fitts`), or a no-op stand-in in tests. */

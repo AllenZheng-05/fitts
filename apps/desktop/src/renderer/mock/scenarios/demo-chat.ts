@@ -1,6 +1,7 @@
 // Scenario A: demo/chat in Ask when unsure, about 100s at 1× (SPEC §9.5).
 import type { Finding, RunState } from '@fitts/schema';
 import { copy } from '../../copy';
+import { format } from '../../lib/format';
 import { round2 } from '../../state/mock-engine';
 import type { BeatContext, Scenario } from '../../state/script';
 import { DEMO_ROUTES, LIVE_FINDINGS, demoChatDoneState } from '../fixtures/demo-chat';
@@ -21,7 +22,24 @@ function setRoute(
 
 function act(s: RunState, nowText: string, ref?: string, label?: string) {
   s.nowText = nowText;
-  s.overlays.attention = ref && label ? { ref, label } : undefined;
+  // Plan only observes: the ghost cursor looks rather than taps (§7.1).
+  const shown = s.mode === 'plan' ? label?.replace(/tapping|typing in/, 'looking at') : label;
+  s.overlays.attention = ref && shown ? { ref, label: shown } : undefined;
+}
+
+/** Ask every action: Fitts asks before each ordinary click or keystroke (§7.1). */
+function askFirst(ctx: BeatContext, action: string) {
+  if (ctx.mode !== 'ask-every') return;
+  ctx.ask(
+    {
+      text: format(copy.fitts.askToAct, { action }),
+      options: [copy.fitts.goAhead, copy.fitts.skipIt],
+      blocking: true,
+    },
+    (answer, _s, c) => {
+      if (answer === copy.fitts.skipIt) c.say(copy.fitts.skippedAction);
+    },
+  );
 }
 
 function spend(s: RunState, phase: keyof RunState['cost']['byPhase'], usd: number) {
@@ -84,6 +102,7 @@ export const demoChatAudit: Scenario = {
         });
         spend(s, 'crawling', 0.09);
         act(s, 'Tapping Compose', 'inbox-compose', 'Fitts · tapping Compose');
+        askFirst(ctx, 'tap Compose');
       },
     },
     {
@@ -106,6 +125,7 @@ export const demoChatAudit: Scenario = {
         report(s, ctx, F.nullName);
         setRoute(s, '/compose/recipient', 'testing', 1);
         act(s, 'Tapping NEXT and timing the response', 'compose-next', 'Fitts · tapping NEXT');
+        askFirst(ctx, 'tap NEXT');
       },
     },
     {
@@ -141,6 +161,7 @@ export const demoChatAudit: Scenario = {
           },
         );
         act(s, 'Sending a test message to Grandma', 'compose-send', 'Fitts · tapping Send Text');
+        askFirst(ctx, 'send a test message to Grandma');
       },
     },
     {
@@ -181,6 +202,7 @@ export const demoChatAudit: Scenario = {
         setRoute(s, '/compose/confirm', 'done');
         setRoute(s, '/search', 'testing');
         act(s, 'Typing "grandma" into search', 'search-input', 'Fitts · typing in search');
+        askFirst(ctx, 'type "grandma" into search');
         report(s, ctx, F.search);
       },
     },

@@ -23,7 +23,10 @@ const CURSOR_RADIUS = 40;
 /** Rapier body types. */
 const DYNAMIC = 0;
 const KINEMATIC_POSITION = 2;
-/** Extra shapes that drop in for new findings, oldest removed first. */
+/**
+ * Extra shapes that drop in for new findings. Once there are this many, no more are added:
+ * removing a body while Rapier still holds it crashes the WebAssembly world.
+ */
 const MAX_DROPS = 4;
 
 function tokenColor(name: ShapeColor): string {
@@ -173,10 +176,10 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
           x: (Math.random() * 2 - 1) * (width / 2 - 80),
           y: height / 2 + 40,
         };
-        setDrops((d) => [...d, drop].slice(-MAX_DROPS));
+        setDrops((d) => (d.length >= MAX_DROPS ? d : [...d, drop]));
       }
       if (run.phase === 'done' && previous.phase !== 'done') {
-        for (const body of bodies.current.values()) {
+        for (const body of liveBodies(bodies.current)) {
           const t = body.translation();
           const len = Math.hypot(t.x, t.y) || 1;
           body.applyImpulse(
@@ -194,7 +197,7 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
     if (!running) return;
     let timer: ReturnType<typeof setTimeout>;
     const nudge = () => {
-      for (const body of bodies.current.values()) {
+      for (const body of liveBodies(bodies.current)) {
         if (!body.isDynamic()) continue;
         const angle = Math.random() * Math.PI * 2;
         const strength = (40 + Math.random() * 60) * speed * body.mass();
@@ -252,6 +255,17 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
       </group>
     </Physics>
   );
+}
+
+/** Bodies Rapier still knows about (a body freed by an unmount must never be touched). */
+function liveBodies(map: Map<string, RapierRigidBody>): RapierRigidBody[] {
+  return [...map.values()].filter((b) => {
+    try {
+      return b.isValid();
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** Invisible walls at the window edges; shapes bounce off them and each other. */

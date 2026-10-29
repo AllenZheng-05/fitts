@@ -547,3 +547,46 @@ can't watch WebGL or listen.
 
 **E2E expect timeout is 10s.** Under a full run, Electron plus a live WebGL scene
 occasionally needed more than Playwright's 5s default for one visibility check.
+
+## M9 — Polish and self-check
+
+**⌥Space / Alt+Space is handled in main.** On Windows the OS opens the window's system menu
+for Alt+Space before the page sees it (flagged in M0). Main now swallows the chord in
+`before-input-event` and sends hold-to-talk press and release to the renderer. Windows also
+swallows the key-ups (Chromium drops the key-up of a swallowed key-down, and releasing Alt
+goes to the menu bar), so main treats the hold as released when the key's auto-repeat stops:
+up to 1.1s for the OS repeat delay, then 300ms between repeats. Any Space or Alt key-up that
+does arrive, or the window losing focus, also ends it. A renderer key-up fallback ends a
+hold too.
+
+**"Ask every action" asks before each click (§7.1).** Scenario A asks "Can I tap Compose?",
+"Can I tap NEXT?", "Can I send a test message to Grandma?" and "Can I type "grandma" into
+search?" as blocking questions (Go ahead / Skip it) in that mode only. In Plan only the
+ghost cursor says "looking at" rather than "tapping".
+
+**Approval cards ask only about open findings.** If you already pressed "Fix it" on a finding,
+the batch card leaves it out and it isn't fixed twice.
+
+**Rapier crash fixed: drop shapes are never removed.** Unmounting the oldest dropped-in shape
+while Rapier still referenced it panicked the WebAssembly world ("unreachable"), which took
+the page down at the end of Scenario A. Drops now stop at four instead of rotating, and body
+calls skip anything `isValid()` rejects.
+
+**Every Scenario panel entry is axe-clean and scroll-free** at 1440×900 and 1200×720
+(`scenarios.spec.ts`, 27 entries). The §12 flows have their own specs: first launch to undo
+(`flows.spec.ts` §12.1), the autonomous redesign (`redesign-done.spec.ts`), project switching
+with a background run plus the notification click (`flows.spec.ts` §12.3 and
+`finding-gate.spec.ts`), stop / pause / interject and Esc on the Finding panel (`audit.spec.ts`,
+`flows.spec.ts` §12.4), and Settings (`setup-settings.spec.ts`). A keyboard-only pass covers
+setup, the interview and starting the audit.
+
+**The e2e Scenario helper waits after each shortcut press.** Each press toggles the panel, and
+under load a re-render can take longer than a fixed short wait, so pressing again closed it.
+
+**`SiteSurface` has no `snapshot(step)`.** §13 lists `snapshot(step)`, but the step's state
+(the page and its pin) lives in run data (`rewindStep` and the finding's route), so the
+surface stays a pure DOM seam: `getElementRect(ref)` and `refAt(x, y)`.
+
+**Not verified on macOS.** Built and tested on Windows 11. The macOS-only parts (hiddenInset
+title bar, traffic-light inset, header drag region, ⌘ shortcut labels) are implemented but
+unverified.

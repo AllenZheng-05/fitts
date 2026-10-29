@@ -18,10 +18,11 @@ export async function completeSetup(
 /** Loads a Scenario panel entry by its label (dev/e2e builds only). */
 export async function loadScenario(page: Page, label: string | RegExp) {
   const panel = page.getByRole('complementary', { name: 'Scenarios' });
-  // The panel's code loads lazily, so the first press can land before it listens.
-  for (let i = 0; i < 20 && !(await panel.isVisible()); i++) {
+  // The panel's code loads lazily, so the first press can land before it listens. Each
+  // press toggles, so wait for it to show before pressing again.
+  for (let i = 0; i < 6 && !(await panel.isVisible()); i++) {
     await page.keyboard.press('ControlOrMeta+Shift+D');
-    await page.waitForTimeout(150);
+    await panel.waitFor({ state: 'visible', timeout: 2_000 }).catch(() => undefined);
   }
   await panel.getByRole('button', { name: label, exact: typeof label === 'string' }).click();
   await page.keyboard.press('ControlOrMeta+Shift+D');

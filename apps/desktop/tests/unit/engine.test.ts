@@ -260,6 +260,19 @@ describe('mode switching mid-run', () => {
     );
   });
 
+  it('Ask every action asks before each click', () => {
+    engine.loadAudit(DEMO_CHAT, 'ask-every');
+    advance(7_000);
+    const q = findItem(run(), 'question');
+    expect(q?.text).toBe(format(copy.fitts.askToAct, { action: 'tap Compose' }));
+    expect(run().waitingFor).toBe(`question:${q?.id}`);
+    advance(5_000);
+    expect(findItem(run(), 'fitts.thinking')).toBeUndefined();
+    engine.answerQuestion(DEMO_CHAT, q?.id ?? '', copy.fitts.goAhead);
+    advance(4_000);
+    expect(findItem(run(), 'fitts.thinking')).toBeDefined();
+  });
+
   it('Plan only proposes fixes without making them', () => {
     engine.loadAudit(DEMO_CHAT, 'plan');
     advance(35_000);

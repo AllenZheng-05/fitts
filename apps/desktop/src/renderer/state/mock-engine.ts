@@ -797,7 +797,10 @@ export class MockRunEngine implements RunEngine {
       onAnswer(itemId, handler) {
         ctrl.handlers.set(itemId, handler);
       },
-      requestApproval: (findingIds, onApproved) => {
+      requestApproval: (requested, onApproved) => {
+        // Findings already being fixed (say, from the Finding panel) aren't asked about again.
+        const findingIds = requested.filter((id) => isOpen(s, id));
+        if (findingIds.length === 0) return;
         if (isAuto(s.mode)) return onApproved(findingIds, s, ctx);
         if (s.mode === 'plan') {
           ctx.say(format(copy.fitts.planOnlyFixes, { n: findingIds.length }));
@@ -871,7 +874,7 @@ export class MockRunEngine implements RunEngine {
         const startedAuto = isAuto(s.mode);
         findingIds.forEach((id, i) => {
           const finding = s.findings.find((f) => f.id === id);
-          if (!finding) return;
+          if (finding?.status !== 'open') return;
           finding.status = 'fixing';
           s.fixingCount += 1;
           const at = Math.max(doneAtMs?.[i] ?? s.elapsedMs + durationMs, s.elapsedMs);
