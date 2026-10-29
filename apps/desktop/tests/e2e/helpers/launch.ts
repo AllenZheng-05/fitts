@@ -32,6 +32,9 @@ export async function launchApp({
     FITTS_USER_DATA: dir,
     FITTS_E2E_PICK_FOLDER: E2E_FOLDER,
     FITTS_E2E_SAVE_PATH: join(dir, 'report.md'),
+    // Tests never call the network and never read the developer's .env.local keys.
+    FITTS_OFFLINE: '1',
+    FITTS_NO_DEV_KEYS: '1',
     ...extra,
   };
   for (const [key, value] of Object.entries(process.env)) {

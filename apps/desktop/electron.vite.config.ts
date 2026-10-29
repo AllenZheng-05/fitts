@@ -13,7 +13,16 @@ export default defineConfig(({ command }) => {
 
   return {
     main: {
-      build: { externalizeDeps },
+      build: {
+        externalizeDeps,
+        // The agent runs in its own utility process (SPEC-phase2 §1).
+        rollupOptions: {
+          input: {
+            index: resolve(__dirname, 'src/main/index.ts'),
+            agent: resolve(__dirname, 'src/agent/index.ts'),
+          },
+        },
+      },
     },
     preload: {
       build: { externalizeDeps },

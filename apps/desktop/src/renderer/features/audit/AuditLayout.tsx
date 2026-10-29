@@ -6,7 +6,7 @@ import { Chip } from '../../components/Chip';
 import { copy } from '../../copy';
 import { format, formatClock } from '../../lib/format';
 import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
-import { getEngine, getMockEngine } from '../../state/engine';
+import { getEngine, recordUserClick } from '../../state/engine';
 import { useAuditOnly } from '../../state/projects';
 import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
@@ -71,7 +71,7 @@ function AuditSiteView({ run }: { run: RunState }) {
       className="flex-1"
       interactive={driving}
       onElementClick={(_ref, label) => {
-        if (driving) getMockEngine().recordUserClick(run.projectId, label.trim());
+        if (driving) recordUserClick(run.projectId, label.trim());
       }}
       toolbarEnd={
         <>

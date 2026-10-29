@@ -998,3 +998,76 @@ screencast fallback is needed.
   - `pnpm test` now also runs the plugin's unit tests.
   - `pnpm typecheck` also covers `scripts/` and both demos.
   - ESLint and Prettier ignore `.fitts-dev/` and `.fitts-worktrees/`.
+
+## Phase 2 — P1: events, reducer, IpcRunEngine, agent process, stores, secrets
+
+- **Events and the one reducer (`packages/schema/src/events.ts`):**
+  - `RunEvent` covers the §12.1 groups. Collections have `*.set` events (`routes.set`,
+    `findings.set`, `changes.set`, `chat.set`) for edits that aren't appends or in-place
+    updates. There is also a `now.changed` event, and a `run.patch` fallback that carries
+    `unset` keys, since JSON drops `undefined`.
+  - `reduce` is pure and returns the same object when nothing changes.
+  - `diff(prev, next)` turns two states into events.
+- **Exactness test:** `tests/unit/events.test.ts` checks that `replay(diff…)` equals the
+  engine's state after every step. It covers:
+  - a whole Ask-mode run with approvals and the gate
+  - the interview, pause, wheel, rewind and undo
+  - every edge state, the Hartwell redesign, and nothing found
+- **The P1 stub agent** is the spec's "replays Scenario A as events", done generally:
+  - The utility process (`src/agent/index.ts`, built as `out/main/agent.js`) runs the
+    scripted `MockRunEngine`.
+  - It turns every state change into events with `diff` and sends them as one batch per
+    change.
+  - So every Phase 1 flow (interview, audit, gate, approvals, redesign, done, undo) runs over
+    IPC unchanged, not just Scenario A.
+  - Later milestones replace the scripted engine behind the same message protocol
+    (`src/agent/protocol.ts`).
+- **Main's `RunHost`:**
+  - It validates every engine call: the method must be one of the 22 RunEngine methods, plus
+    two dev-only stub calls (`recordUserClick` for "You clicked …" while driving, until P2's
+    site recorder, and `setSpeed` for the Scenario panel). The project id must be a plain slug.
+  - It appends events to `userData/projects/<id>/runs/<runId>/events.ndjson`, with a
+    `snapshot.json` every 200 events.
+  - It reduces state per project for renderer reloads (`engine.states()`) and forwards batches
+    to the window.
+  - If the agent crashes, it's restarted.
+- **Engine selection:**
+  - `getEngine()` is `IpcRunEngine` whenever the preload exposes `engine`, otherwise
+    `MockRunEngine` (unit tests).
+  - Loading a Scenario panel entry calls `switchToMockEngine()`, so scenario specs stay on
+    the mock as the spec asks. The run store mirrors only the active engine.
+- **IPC latency, one test change:** with IPC, a run's first state arrives a few milliseconds
+  after "Open my project", and the composer only exists once a run does. The keyboard-only
+  flow pressed ⌘L instantly, so it now waits for the message box to be visible, as a person
+  would.
+- **The file-based project store:**
+  - Layout: `userData/projects/<id>/project.json` plus `projects/index.json` (the order,
+    `lastOpenId` and the persist version).
+  - How it plugs in: it's a zustand `persist` storage adapter that loads synchronously at
+    startup over `sendSync`, because `initialScreen()` reads projects at module load, and
+    saves asynchronously.
+  - Migration: projects in Phase 1's localStorage are imported once, then removed from
+    localStorage.
+  - Removing a project deletes Fitts's folder for it (`projects/<id>/`), never the user's
+    folder.
+- **Secrets:**
+  - `main/secrets` stores keys with safeStorage in `userData/secrets.json`, one encrypted
+    value per key, and reports weak storage on Linux `basic_text`.
+  - The preload's `keys` bridge has `set`, `clear`, `test` and `has`. The renderer never gets
+    a value back.
+  - Welcome and Settings › API keys now check keys for real, 600ms after typing stops (Meta:
+    `GET /v1/models`; ElevenLabs: `GET /v1/user`).
+  - **Baseten's check is `GET /models`** (free) instead of the spec's 1-token call.
+  - Checks run in the agent process (`agent/llm/test-key.ts`), because CLAUDE.md allows
+    network calls only under `agent/llm/`. Main sends the agent the current keys on start and
+    after any change.
+  - **Dev key fallback:** in unpackaged builds only, when safeStorage has no key, main reads
+    `.env.local` at the repo root with dotenv's `parse`, which never touches `process.env` and
+    never logs anything.
+  - **E2E runs** set `FITTS_NO_DEV_KEYS=1`, so they never see real keys, and
+    `FITTS_OFFLINE=1`, under which key checks fall back to Phase 1's 8-character rule. Tests
+    never call the network.
+- **Agent typecheck:** `tsconfig.agent.json` lists the renderer files the P1 stub reaches.
+  That list goes away when the real orchestrator replaces the stub.
+- **Main-process tests:** unit tests for main-process code live in `tests/main/` (Node
+  environment, node tsconfig).

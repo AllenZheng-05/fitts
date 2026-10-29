@@ -135,6 +135,9 @@ importers:
       cross-env:
         specifier: 10.1.0
         version: 10.1.0
+      dotenv:
+        specifier: 18.0.9
+        version: 18.0.9
       electron:
         specifier: 45.1.0
         version: 45.1.0

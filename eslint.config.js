@@ -61,6 +61,8 @@ export default tseslint.config(
       'apps/desktop/src/preload/**',
       '**/*.config.{ts,mts}',
       'apps/desktop/tests/e2e/**',
+      'apps/desktop/tests/main/**',
+      'apps/desktop/src/agent/**',
       'scripts/**',
     ],
     languageOptions: { globals: globals.node },

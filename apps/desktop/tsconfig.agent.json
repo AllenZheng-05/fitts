@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ES2023", "DOM"],
+    "types": ["node", "electron"]
+  },
+  "include": [
+    "src/agent/**/*",
+    "src/renderer/mock/profiles.ts",
+    "src/renderer/mock/fixtures/*.ts",
+    "src/renderer/mock/scenarios/demo-chat.ts",
+    "src/renderer/mock/scenarios/hartwell.ts",
+    "src/renderer/mock/scenarios/interview.ts",
+    "src/renderer/state/mock-engine.ts",
+    "src/renderer/state/script.ts",
+    "src/renderer/copy.ts",
+    "src/renderer/lib/format.ts"
+  ]
+}

@@ -1,7 +1,7 @@
 import type { RunState } from '@fitts/schema';
 import { create } from 'zustand';
 import { DEMO_CHAT } from '../mock/fixtures/projects';
-import { getMockEngine } from './engine';
+import { getEngineKind, getIpcEngine, getMockEngine, type EngineKind } from './engine';
 import { useProjects } from './projects';
 
 interface RunStore {
@@ -20,9 +20,10 @@ export const useRunStore = create<RunStore>((set) => ({
   setActiveProject: (projectId) => set({ activeProjectId: projectId }),
 }));
 
-// Mirror every engine update into the store, and keep each project's brief in step with
-// what its run learned (the interview and the Brief popover write to the run).
-getMockEngine().subscribeAll((projectId, state) => {
+// Mirror every update from the active engine into the store, and keep each project's brief in
+// step with what its run learned (the interview and the Brief popover write to the run).
+const mirror = (source: EngineKind) => (projectId: string, state: RunState) => {
+  if (source !== getEngineKind()) return;
   const previous = useRunStore.getState().runs[projectId];
   useRunStore.setState((s) => ({ runs: { ...s.runs, [projectId]: state } }));
   if (
@@ -31,7 +32,9 @@ getMockEngine().subscribeAll((projectId, state) => {
   ) {
     useProjects.getState().setBrief(projectId, state.brief);
   }
-});
+};
+getMockEngine().subscribeAll(mirror('mock'));
+getIpcEngine()?.subscribeAll(mirror('ipc'));
 
 /** Dev only: forget every run (the Scenario panel does this before loading one). */
 export function clearRuns() {

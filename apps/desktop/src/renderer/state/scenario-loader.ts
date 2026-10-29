@@ -1,6 +1,6 @@
 // Dev only: plays a Scenario panel entry and puts the app on its screen (SPEC §9.6).
 import { scenarioById } from '../mock/scenarios';
-import { getMockEngine } from './engine';
+import { getMockEngine, switchToMockEngine } from './engine';
 import { useProjects } from './projects';
 import { clearRuns, useRunStore } from './run-store';
 import { useUi } from './ui';
@@ -9,6 +9,8 @@ export function loadScenario(scenarioId: string): void {
   const entry = scenarioById(scenarioId);
   if (!entry) return;
   const projects = useProjects.getState();
+  // Scenarios are scripted: from here on the UI runs on the mock engine.
+  switchToMockEngine();
   clearRuns();
   if (entry.screen === 'welcome') projects.clear();
   else projects.seedDemo();

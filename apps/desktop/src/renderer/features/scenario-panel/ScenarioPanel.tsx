@@ -8,7 +8,7 @@ import { IconButton } from '../../components/IconButton';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { cx } from '../../lib/cx';
 import { SCENARIOS, type ScenarioEntry, type ScenarioScreen } from '../../mock/scenarios';
-import { getMockEngine } from '../../state/engine';
+import { getIpcEngine, getMockEngine } from '../../state/engine';
 import type { Speed } from '../../state/mock-engine';
 import { useRunStore } from '../../state/run-store';
 import { loadScenario } from '../../state/scenario-loader';
@@ -114,6 +114,8 @@ export function ScenarioPanel() {
             onSelect={(id) => {
               const next = Number(id) as Speed;
               engine.setSpeed(next);
+              // The P1 stub agent plays the same scripts, so it follows the speed too.
+              getIpcEngine()?.setStubSpeed(next);
               setSpeed(next);
             }}
             segments={[

@@ -1,6 +1,10 @@
 import { app, BrowserWindow, session } from 'electron';
 import { registerBridge } from './bridge';
+import { registerKeys } from './keys-ipc';
 import { buildAppMenu } from './menu';
+import { RunHost } from './run-host';
+import { Secrets } from './secrets';
+import { ProjectStore } from './store/projects';
 import { createMainWindow, ICON_PATH } from './window';
 
 // E2E runs point user data at a throwaway folder so they never touch real settings.
@@ -21,6 +25,12 @@ void app.whenReady().then(() => {
   // The window icon covers Windows and Linux; the macOS dock takes its own.
   app.dock?.setIcon(ICON_PATH);
   registerBridge();
+  // The real engine (SPEC-phase2 §1): the agent process, its run log and the project store.
+  const secrets = new Secrets();
+  const host = new RunHost(secrets);
+  host.start();
+  registerKeys(secrets, host);
+  new ProjectStore(app.getPath('userData')).register();
   buildAppMenu();
   createMainWindow();
 

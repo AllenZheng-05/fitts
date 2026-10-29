@@ -1,3 +1,5 @@
+import type { RunEvent } from './events';
+
 // Shared types for main, preload and renderer. No React or Electron imports here.
 // The run model is SPEC §9.1; additions are marked and explained in docs/DECISIONS.md.
 
@@ -14,6 +16,84 @@ export interface FittsBridge {
   notify(notification: { id: string; title: string; body: string }): void;
   /** Called with the notification id when the user clicks one. Returns an unsubscribe. */
   onNotificationClick(handler: (id: string) => void): () => void;
+
+  // Phase 2 (SPEC-phase2 §12, §15). Optional so stand-ins without them still type-check.
+  /** The real engine: calls go to the agent process; events come back. */
+  engine?: EngineBridge;
+  /** The file-based project store (`userData/projects/`). */
+  store?: StoreBridge;
+  /** API keys in safeStorage. The renderer only ever learns whether a key exists. */
+  keys?: KeysBridge;
+}
+
+/** RunEngine methods the renderer may call over IPC (everything but getState/subscribe). */
+export const ENGINE_METHODS = [
+  'startInterview',
+  'answerInterview',
+  'startAudit',
+  'pause',
+  'resume',
+  'stopAction',
+  'stopRun',
+  'takeWheel',
+  'handBack',
+  'sendMessage',
+  'interruptNow',
+  'answerQuestion',
+  'approveFixes',
+  'dismissFinding',
+  'respondGate',
+  'setMode',
+  'pickDirection',
+  'decideWording',
+  'undoChange',
+  'retryChange',
+  'rewindTo',
+  'updateBrief',
+] as const;
+export type EngineMethod = (typeof ENGINE_METHODS)[number];
+
+/** Calls the P1 stub agent also accepts (Phase 1 mock extras; P2 moves them into main). */
+export const STUB_ENGINE_METHODS = ['recordUserClick', 'setSpeed'] as const;
+export type StubEngineMethod = (typeof STUB_ENGINE_METHODS)[number];
+
+/** A renderer → agent engine call. `brief` is the project's saved brief, for the interview. */
+export interface EngineCall {
+  projectId: string;
+  method: EngineMethod | StubEngineMethod;
+  args: unknown[];
+  brief?: Brief;
+}
+
+/** Events for one project, in order, as one batch (one agent state change). */
+export interface EngineEvents {
+  projectId: string;
+  runId: string;
+  seq: number;
+  events: RunEvent[];
+}
+
+export interface EngineBridge {
+  call(call: EngineCall): void;
+  onEvents(handler: (batch: EngineEvents) => void): () => void;
+  /** Every run main knows about, for a renderer that (re)loads mid-run. */
+  states(): Promise<Record<string, RunState>>;
+}
+
+export interface StoreBridge {
+  /** The persisted projects blob, read synchronously once at startup (null if none). */
+  loadProjects(): string | null;
+  saveProjects(blob: string): void;
+}
+
+export type KeyName = 'meta' | 'elevenlabs' | 'baseten';
+
+export interface KeysBridge {
+  set(name: KeyName, value: string): Promise<void>;
+  clear(name: KeyName): Promise<void>;
+  /** Checks a key (the stored one if `value` is omitted) with its provider. */
+  test(name: KeyName, value?: string): Promise<{ ok: boolean; message: string }>;
+  has(): Promise<Record<KeyName, boolean>>;
 }
 
 /** IPC channel names shared by main and preload. */
@@ -22,6 +102,15 @@ export const IPC = {
   saveTextFile: 'fitts:save-text-file',
   notify: 'fitts:notify',
   notificationClick: 'fitts:notification-click',
+  engineCall: 'fitts:engine-call',
+  engineEvents: 'fitts:engine-events',
+  engineStates: 'fitts:engine-states',
+  projectsLoad: 'fitts:projects-load',
+  projectsSave: 'fitts:projects-save',
+  keysSet: 'fitts:keys-set',
+  keysClear: 'fitts:keys-clear',
+  keysTest: 'fitts:keys-test',
+  keysHas: 'fitts:keys-has',
 } as const;
 
 export type Mode = 'plan' | 'ask-every' | 'ask-unsure' | 'autonomous' | 'dangerous';
@@ -250,3 +339,5 @@ export const EDGE_STATE_ANSWERS = {
 
 export type EdgeStateAnswer<K extends EdgeStateKind = EdgeStateKind> =
   (typeof EDGE_STATE_ANSWERS)[K][number];
+
+export * from './events';

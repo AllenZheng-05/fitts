@@ -9,7 +9,7 @@ import { cx } from '../../lib/cx';
 import { format, formatUsd } from '../../lib/format';
 import { speak } from '../../lib/speech';
 import { RichText } from '../../components/RichText';
-import { isKeyValid } from '../../mock/detect';
+import { checkKey, storeKey } from '../../lib/keys';
 import { removeProject, setDangerous, setPermissionMode } from '../../state/actions';
 import { useProjects } from '../../state/projects';
 import {
@@ -316,11 +316,11 @@ function KeysTab() {
 
 function KeyRow({ name }: { name: KeyName }) {
   const added = useSettings((s) => s.keys[name]);
-  const setKey = useSettings((s) => s.setKey);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
+  const [invalid, setInvalid] = useState(false);
+  const [checking, setChecking] = useState(false);
   const row = copy.settings.keyRows[name];
-  const invalid = value.length > 0 && !isKeyValid(value);
   const inputRef = useFocusWhen(editing);
 
   return (
@@ -344,10 +344,16 @@ function KeyRow({ name }: { name: KeyName }) {
           className="flex items-start gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!isKeyValid(value)) return;
-            setKey(name, true);
-            setEditing(false);
-            setValue('');
+            if (!value.trim() || checking) return;
+            setChecking(true);
+            void checkKey(name, value).then((ok) => {
+              setChecking(false);
+              setInvalid(!ok);
+              if (!ok) return;
+              storeKey(name, value);
+              setEditing(false);
+              setValue('');
+            });
           }}
         >
           <TextField
@@ -360,9 +366,12 @@ function KeyRow({ name }: { name: KeyName }) {
             ref={inputRef}
             value={value}
             error={invalid ? copy.settings.keyError : undefined}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setInvalid(false);
+            }}
           />
-          <Button type="submit" variant="primary" size="sm" disabled={!isKeyValid(value)}>
+          <Button type="submit" variant="primary" size="sm" disabled={!value.trim() || checking}>
             {copy.settings.keySave}
           </Button>
           <Button size="sm" onClick={() => setEditing(false)}>

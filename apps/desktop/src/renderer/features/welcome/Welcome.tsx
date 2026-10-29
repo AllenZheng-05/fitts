@@ -8,7 +8,8 @@ import { FittsEmblem } from '../../components/brand/FittsEmblem';
 import { copy } from '../../copy';
 import { bridge } from '../../lib/bridge';
 import { format } from '../../lib/format';
-import { detectFolder, isKeyValid, KEY_CHECK_MS, projectFromFolder } from '../../mock/detect';
+import { checkKey, storeKey } from '../../lib/keys';
+import { detectFolder, KEY_CHECK_MS, projectFromFolder } from '../../mock/detect';
 import { LAST_RUN_CAPTIONS, MOCK_USER } from '../../mock/fixtures/projects';
 import { addAndOpenProject } from '../../state/actions';
 import { useProjects } from '../../state/projects';
@@ -56,11 +57,19 @@ function SetupCard() {
   const hintId = useId();
   const liveHintId = useId();
 
-  // Mock validation: 600ms after typing stops, "Works" if the key is 8+ characters (§6.1).
+  // 600ms after typing stops, check the key with Meta (SPEC-phase2 §15).
   useEffect(() => {
     if (!key) return;
-    const timer = setTimeout(() => setKeyWorks(isKeyValid(key)), KEY_CHECK_MS);
-    return () => clearTimeout(timer);
+    let current = true;
+    const timer = setTimeout(() => {
+      void checkKey('meta', key).then((ok) => {
+        if (current) setKeyWorks(ok);
+      });
+    }, KEY_CHECK_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
   }, [key]);
 
   const detection = detectFolder(folder);
@@ -68,14 +77,14 @@ function SetupCard() {
 
   const open = () => {
     if (!detection) return;
-    settings.setKey('meta', true);
+    storeKey('meta', key);
     settings.set({ defaultMode: mode });
     addAndOpenProject(projectFromFolder(folder.trim(), detection.name, detection));
   };
 
   // A live site is audit-only: the same Add a project dialog, opened on its Live tab.
   const openLive = () => {
-    settings.setKey('meta', true);
+    storeKey('meta', key);
     settings.set({ defaultMode: mode });
     useUi.getState().set({ addProjectOpen: true, addProjectKind: 'live' });
   };

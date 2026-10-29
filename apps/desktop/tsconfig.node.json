@@ -9,6 +9,8 @@
     "vitest.config.mts",
     "playwright.config.ts",
     "src/main/**/*",
-    "src/preload/**/*"
+    "src/preload/**/*",
+    "src/agent/protocol.ts",
+    "tests/main/**/*"
   ]
 }

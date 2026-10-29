@@ -128,6 +128,8 @@ test('keyboard only: setup, interview and the audit', async () => {
   await expect(page.getByRole('button', { name: 'Open my project' })).toBeFocused();
   await page.keyboard.press('Enter');
 
+  // The run's first state arrives over IPC a moment later; the message box comes with it.
+  await expect(page.getByLabel('Message Fitts')).toBeVisible();
   await page.keyboard.press('ControlOrMeta+L');
   await page.keyboard.type('A messaging app for my grandparents.');
   await page.keyboard.press('Enter');

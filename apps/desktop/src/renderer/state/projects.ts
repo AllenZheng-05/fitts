@@ -1,7 +1,32 @@
 import type { Brief, Project } from '@fitts/schema';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { bridge } from '../lib/bridge';
 import { DEMO_PROJECTS } from '../mock/fixtures/projects';
+
+/**
+ * Where projects live (SPEC-phase2 §4.1): main's file store (userData/projects/) inside
+ * Electron, localStorage elsewhere (unit tests). Projects Phase 1 kept in localStorage are
+ * imported into the file store once.
+ */
+function projectStorage(): StateStorage {
+  const store = bridge().store;
+  if (!store) return localStorage;
+  return {
+    getItem: (name) => {
+      const saved = store.loadProjects();
+      if (saved !== null) return saved;
+      const legacy = localStorage.getItem(name);
+      if (legacy !== null) {
+        store.saveProjects(legacy);
+        localStorage.removeItem(name);
+      }
+      return legacy;
+    },
+    setItem: (_name, value) => store.saveProjects(value),
+    removeItem: () => undefined,
+  };
+}
 
 interface ProjectsState {
   projects: Project[];
@@ -44,7 +69,7 @@ export const useProjects = create<ProjectsState>()(
         })),
       clear: () => set({ projects: [], lastOpenId: null }),
     }),
-    { name: 'fitts.projects', storage: createJSONStorage(() => localStorage) },
+    { name: 'fitts.projects', storage: createJSONStorage(projectStorage) },
   ),
 );
 
