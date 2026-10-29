@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { isSeeThrough } from '../../src/renderer/features/background/seeThrough';
 import { format, formatUsd } from '../../src/renderer/lib/format';
 import { shortcutLabel } from '../../src/renderer/lib/platform';
 import { severityLabel, severityTone } from '../../src/renderer/lib/severity';
@@ -51,5 +52,30 @@ describe('shortcutLabel (SPEC §7.9)', () => {
     g.fitts = { platform: 'win32' };
     expect(shortcutLabel(['mod', '.'])).toBe('Ctrl+.');
     expect(shortcutLabel(['alt', 'Space'])).toBe('Alt+Space');
+  });
+});
+
+describe('isSeeThrough (grabbing shapes through the UI)', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('lets presses through text and transparent boxes, not controls or painted panels', () => {
+    document.body.innerHTML = `
+      <main data-backdrop><div><h1 id="title">Hi</h1></div>
+        <section style="background-color: rgb(255, 255, 255)"><p id="card-text">x</p></section>
+        <div style="background-color: rgba(0, 0, 0, 0)"><span id="clear">y</span></div>
+        <button id="btn"><span id="btn-label">Go</span></button>
+        <label id="lbl">Name</label>
+      </main>`;
+    const at = (id: string) => document.getElementById(id);
+    expect(isSeeThrough(document.body)).toBe(true);
+    expect(isSeeThrough(document.querySelector('main'))).toBe(true);
+    expect(isSeeThrough(at('title'))).toBe(true);
+    expect(isSeeThrough(at('clear'))).toBe(true);
+    expect(isSeeThrough(at('card-text'))).toBe(false);
+    expect(isSeeThrough(at('btn-label'))).toBe(false);
+    expect(isSeeThrough(at('lbl'))).toBe(false);
+    expect(isSeeThrough(null)).toBe(false);
   });
 });

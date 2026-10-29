@@ -10,6 +10,7 @@ interface Body {
   y: number;
   vx: number;
   vy: number;
+  spin: number;
 }
 
 const field = (page: Page) => page.locator('[data-shape-field]');
@@ -134,8 +135,8 @@ test('a shape on the backdrop can be dragged and thrown', async () => {
   const thrown = (await bodies(page)).find((b) => b.id === target.id);
   const speed = thrown ? Math.hypot(thrown.vx, thrown.vy) : 0;
   expect(speed).toBeGreaterThan(50);
-  // Throws are gentle and capped (600 px/s).
-  expect(speed).toBeLessThanOrEqual(610);
+  // Throws are capped (1600 px/s).
+  expect(speed).toBeLessThanOrEqual(1610);
 
   // A hard fling at the edge still leaves every shape on screen: the window edge is a wall.
   const again = (await bodies(page)).find((b) => b.id === target.id);
@@ -151,7 +152,53 @@ test('a shape on the backdrop can be dragged and thrown', async () => {
     expect(b.x).toBeLessThanOrEqual(size.w);
     expect(b.y).toBeGreaterThanOrEqual(0);
     expect(b.y).toBeLessThanOrEqual(size.h);
+    // However hard they hit, no shape spins faster than 4 rad/s.
+    expect(b.spin).toBeLessThanOrEqual(4.05);
   }
+});
+
+test('a shape behind see-through text can be grabbed through it', async () => {
+  const { page } = launched;
+  await waitForField(page, 'lively');
+  const heading = await page.getByRole('heading', { level: 1 }).boundingBox();
+  if (!heading) throw new Error('no heading');
+  const hx = heading.x + heading.width / 2;
+  const hy = heading.y + heading.height / 2;
+
+  // Park a large shape behind the heading: drag it there and let go without a throw.
+  const free = await page.evaluate(
+    (list: Body[]) => {
+      return list.filter((b) => {
+        const el = document.elementFromPoint(b.x, b.y);
+        return (
+          el?.hasAttribute('data-backdrop') ||
+          el === document.documentElement ||
+          el === document.body
+        );
+      });
+    },
+    await bodies(page),
+  );
+  const target = free.find((b) => /^(sphere-0|box-1|capsule-3)$/.test(b.id));
+  if (!target) throw new Error('no shape on the backdrop');
+  const id = target.id;
+  await page.mouse.move(target.x, target.y);
+  await page.mouse.down();
+  await page.mouse.move(hx, hy, { steps: 6 });
+  await page.waitForTimeout(200);
+  await page.mouse.up();
+
+  // Press on the heading text right over the shape: it's grabbed, not the text.
+  const parked = (await bodies(page)).find((b) => b.id === id);
+  if (!parked) throw new Error('shape gone');
+  await page.mouse.move(parked.x, parked.y);
+  await page.mouse.down();
+  await page.mouse.move(parked.x, parked.y + 160, { steps: 6 });
+  await expect
+    .poll(async () => (await bodies(page)).find((b) => b.id === id)?.y ?? 0)
+    .toBeGreaterThan(parked.y + 100);
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
 });
 
 test('Settings: floating shapes off, and shape movement', async () => {

@@ -643,3 +643,15 @@ stays.
 - A throw uses the pointer's average velocity over the last 80 ms, halved and capped at
   600 px/s.
 - New finding drops spawn inside the top edge, and the end-of-run burst is gentler.
+
+**Faster throws, capped spin, grabbing through see-through UI.**
+- Throws now keep 90% of the pointer's speed and are capped at 1600 px/s (overall speed cap
+  1800 px/s). Continuous collision detection and the bounds check still keep every shape on
+  screen.
+- Spin is capped at 4 rad/s every frame, so hard collisions can't wind a shape up.
+- Shapes can be grabbed (and the press-to-push cursor works) through any see-through UI, not
+  only the bare backdrop: text, headings and transparent layout boxes count. Controls
+  (buttons, links, fields, labels, ARIA widgets) and anything with its own background or
+  inside one (cards, panels, fields) don't, so they keep their clicks and hide the shapes
+  behind them. The check lives in `features/background/seeThrough.ts`. Pressing on text with
+  no shape under it still selects text as usual; a press that grabs a shape doesn't.

@@ -13,17 +13,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Raycaster, Vector2, type Group, type Mesh } from 'three';
 import { useRunStore } from '../../state/run-store';
 import { useSpeech } from '../../state/speech';
+import { isSeeThrough } from './seeThrough';
 import { layout, SEVERITY_COLOR, type FieldMode, type ShapeColor, type ShapeSpec } from './shapes';
 import { useFieldRunning } from './useFieldRunning';
 
 /** Frame cap (§6.12). */
 const FPS = 30;
 /** Fastest a shape may move, in px/s, so nothing outruns the walls. */
-const MAX_SPEED = 700;
+const MAX_SPEED = 1800;
+/** Fastest a shape may spin, in rad/s; collisions can't wind it up past this. */
+const MAX_SPIN = 4;
 /** Throws: release velocity is the last ~80ms of pointer motion, scaled and capped. */
 const THROW_WINDOW_MS = 80;
-const THROW_SCALE = 0.5;
-const THROW_MAX = 600;
+const THROW_SCALE = 0.9;
+const THROW_MAX = 1600;
 /** Wandering (px/s and rad/s, scaled by the mode's speed). */
 const CRUISE = [16, 36] as const;
 const SPIN = [0.15, 0.45] as const;
@@ -170,7 +173,9 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
     [...bodies.current].map(([id, b]) => {
       const t = b.translation();
       const v = b.linvel();
-      return { id, x: t.x + width / 2, y: height / 2 - t.y, vx: v.x, vy: v.y };
+      const w = b.angvel();
+      const spin = Math.hypot(w.x, w.y, w.z);
+      return { id, x: t.x + width / 2, y: height / 2 - t.y, vx: v.x, vy: v.y, spin };
     }),
   );
 
@@ -266,14 +271,16 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
       body.setLinvel({ x: vx, y: vy, z: 0 }, true);
 
       const a = body.angvel();
-      body.setAngvel(
-        {
-          x: a.x + (w.spin.x - a.x) * k,
-          y: a.y + (w.spin.y - a.y) * k,
-          z: a.z + (w.spin.z - a.z) * k,
-        },
-        true,
-      );
+      let ax = a.x + (w.spin.x - a.x) * k;
+      let ay = a.y + (w.spin.y - a.y) * k;
+      let az = a.z + (w.spin.z - a.z) * k;
+      const spin = Math.hypot(ax, ay, az);
+      if (spin > MAX_SPIN) {
+        ax *= MAX_SPIN / spin;
+        ay *= MAX_SPIN / spin;
+        az *= MAX_SPIN / spin;
+      }
+      body.setAngvel({ x: ax, y: ay, z: az }, true);
     }
   });
 
@@ -362,19 +369,9 @@ function Walls({ width, height }: { width: number; height: number }) {
   );
 }
 
-/** A press on the empty paper around the UI, not on a control or panel. */
-function isBackdrop(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  return (
-    el === document.documentElement ||
-    el === document.body ||
-    (el !== null && el.closest('[data-backdrop]') === el)
-  );
-}
-
 /**
  * Pointer position in world units, read from window because the canvas sits under the UI.
- * `pressed` is true while the main button is held after pressing on the backdrop.
+ * `pressed` is true while the main button is held after pressing on see-through paper.
  */
 function usePointer(width: number, height: number) {
   const pointer = useRef({
@@ -387,7 +384,7 @@ function usePointer(width: number, height: number) {
   });
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
-      if (e.button === 0 && isBackdrop(e.target)) pointer.current.pressed = true;
+      if (e.button === 0 && isSeeThrough(e.target)) pointer.current.pressed = true;
     };
     const onUp = () => {
       pointer.current.pressed = false;
@@ -448,8 +445,9 @@ function Cursor({ width, height }: { width: number; height: number }) {
 }
 
 /**
- * Drag and throw (§6.12): a pointerdown on the backdrop (not on UI) raycasts into the scene;
- * a hit shape turns kinematic and follows the pointer, then is released with its velocity.
+ * Drag and throw (§6.12): a pointerdown on see-through paper (not a control or panel) raycasts
+ * into the scene; a hit shape turns kinematic and follows the pointer, then is released with
+ * its velocity.
  */
 function Dragger({
   bodies,
@@ -469,7 +467,7 @@ function Dragger({
   useEffect(() => {
     const raycaster = new Raycaster();
     const onDown = (e: PointerEvent) => {
-      if (!isBackdrop(e.target) || e.button !== 0) return;
+      if (!isSeeThrough(e.target) || e.button !== 0) return;
       raycaster.setFromCamera(
         new Vector2((e.clientX / width) * 2 - 1, -(e.clientY / height) * 2 + 1),
         camera,
@@ -495,7 +493,7 @@ function Dragger({
       held.current = null;
       dragging = false;
       body.setBodyType(DYNAMIC, true);
-      // Throw with the pointer's velocity over the last ~80ms: gentle, and capped.
+      // Throw with the pointer's velocity over the last ~80ms, capped.
       const now = performance.now();
       const recent = pointer.current.samples.filter((q) => now - q.t <= THROW_WINDOW_MS);
       const first = recent[0];
@@ -514,10 +512,16 @@ function Dragger({
       }
       body.setLinvel({ x: vx, y: vy, z: 0 }, true);
     };
+    // Grabbing through text must not start a text selection (that's mousedown's default).
+    const onMouseDown = (e: MouseEvent) => {
+      if (held.current) e.preventDefault();
+    };
     window.addEventListener('pointerdown', onDown);
+    window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('pointerup', onUp);
     return () => {
       window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('pointerup', onUp);
     };
   }, [bodies, meshes, camera, width, height, pointer]);

@@ -9,8 +9,9 @@ declare global {
       readonly frames: number;
       mode: 'lively' | 'calm' | 'still';
       running: boolean;
-      bodies: () => { id: string; x: number; y: number; vx: number; vy: number }[];
-      /** True while the cursor collider is pushing (mouse held on the backdrop). */
+      /** Positions in window px, velocity in px/s, spin in rad/s. */
+      bodies: () => { id: string; x: number; y: number; vx: number; vy: number; spin: number }[];
+      /** True while the cursor collider is pushing (mouse held on see-through paper). */
       cursorActive: () => boolean;
     };
   }
