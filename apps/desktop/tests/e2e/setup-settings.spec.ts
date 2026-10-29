@@ -112,7 +112,30 @@ test('Add a project: code folder and live site', async () => {
 
   await dialog.getByRole('tab', { name: /Live site only/ }).click();
   await expect(submit).toBeDisabled();
-  await dialog.getByLabel('Site URL').fill('https://shop.example.com');
+  const url = dialog.getByLabel('Site URL');
+  await url.fill('https://shop.example.com');
+
+  // Connecting your host comes first: a site is yours when its domain is on your account.
+  await expect(dialog.getByRole('button', { name: 'Connect your host' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await dialog.getByRole('button', { name: 'Connect Vercel' }).click();
+  await expect(dialog.getByRole('status')).toContainText('Connecting to Vercel');
+  await expect(dialog.getByRole('status')).toContainText(
+    "shop.example.com isn't on this Vercel account",
+  );
+  await expect(submit).toBeDisabled();
+  await dialog.getByRole('radio', { name: /portfolio/ }).check();
+  await expect(url).toHaveValue('https://allenzheng.dev');
+  await expect(dialog.getByRole('status')).toHaveText('Verified through Vercel');
+  await expect(submit).toBeEnabled();
+
+  // The fallbacks: a DNS record (or a file), checked against whatever URL you type.
+  await dialog.getByRole('button', { name: 'DNS record' }).click();
+  await expect(submit).toBeDisabled();
+  await url.fill('https://shop.example.com');
+  await expect(dialog.getByText('_fitts-verify.shop.example.com')).toBeVisible();
   await dialog.getByRole('button', { name: 'Check now' }).click();
   await expect(dialog.getByRole('status').filter({ hasText: 'Verified' })).toBeVisible();
   await submit.click();

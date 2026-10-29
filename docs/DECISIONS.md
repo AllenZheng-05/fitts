@@ -722,5 +722,22 @@ SPEC §7.7's "Finish on Economy").**
 - Fallbacks, in order: a DNS TXT record, then a token file or `<meta>` tag.
 - Verification is re-checked at the start of each run.
 - Fitts never runs on an unverified site, not even read-only.
-- Phase 1's Add a project dialog still shows the token-file mock until the hosting-connection
-  UI is designed.
+- Phase 1 mocks this flow in the Add a project dialog (see "Live sites verify by connecting
+  your host" below).
+
+**Live sites verify by connecting your host (mocked).**
+- The "Live site only" tab has a "Prove you own it" section. Its segmented control offers
+  Connect your host (default, tagged Recommended), DNS record and File on your site.
+- **Connect your host:** buttons for Vercel, Netlify, Cloudflare and GitHub Pages. A
+  1.2 s "Connecting to Vercel… approve Fitts in the window your host opens" stands in for
+  OAuth. Then the account's sites appear as radio cards (fixed fixtures in
+  `mock/hosting.ts`).
+  - Picking a site fills the URL and shows "Verified through Vercel".
+  - A typed URL that isn't on the account says so and isn't verified.
+  - "Use a different host" goes back to the host list.
+- **Fallbacks:** DNS shows the TXT record (`_fitts-verify.<domain>`) and the token, each with
+  a copy button. File keeps the `/.well-known/fitts-verify.txt` token. Both use "Check now",
+  which succeeds after 1 s.
+- Verification is tied to the domain. Changing the URL or the method undoes it, and
+  "Add and open" stays disabled until the current URL is verified.
+- Host names are plain text buttons, with no brand logos.

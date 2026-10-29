@@ -1,7 +1,6 @@
-import { Copy, FolderOpen, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { FolderOpen, X } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '../../components/Button';
-import { Chip } from '../../components/Chip';
 import { Checkbox, TextField } from '../../components/fields';
 import { IconButton } from '../../components/IconButton';
 import { Modal } from '../../components/overlay/Modal';
@@ -9,20 +8,12 @@ import { Tabs } from '../../components/Tabs';
 import { copy } from '../../copy';
 import { bridge } from '../../lib/bridge';
 import { format } from '../../lib/format';
-import {
-  detectFolder,
-  projectFromFolder,
-  projectFromUrl,
-  VERIFY_MS,
-  VERIFY_TOKEN,
-  type Detection,
-} from '../../mock/detect';
+import { detectFolder, projectFromFolder, projectFromUrl, type Detection } from '../../mock/detect';
 import { addAndOpenProject } from '../../state/actions';
-import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
+import { LiveVerify } from './LiveVerify';
 
 type Kind = 'code' | 'live';
-type Verify = 'idle' | 'checking' | 'verified';
 
 /** Add a project: code on this computer or a live site (SPEC §6.11). */
 export function AddProjectDialog() {
@@ -39,8 +30,7 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
   const [plugin, setPlugin] = useState(true);
   const [devCommand, setDevCommand] = useState<string | null>(null);
   const [url, setUrl] = useState('');
-  const [verify, setVerify] = useState<Verify>('idle');
-  const showToast = useToasts((s) => s.show);
+  const [verified, setVerified] = useState(false);
 
   const detection = detectFolder(folder);
   const suggested =
@@ -49,15 +39,9 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
       : url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const shownName = nameEdited ? name : suggested;
 
-  useEffect(() => {
-    if (verify !== 'checking') return;
-    const timer = setTimeout(() => setVerify('verified'), VERIFY_MS);
-    return () => clearTimeout(timer);
-  }, [verify]);
-
   const canSubmit =
     shownName.trim().length > 0 &&
-    (kind === 'code' ? detection !== null : url.trim().length > 0 && verify === 'verified');
+    (kind === 'code' ? detection !== null : url.trim().length > 0 && verified);
 
   const submit = () => {
     if (!canSubmit) return;
@@ -163,45 +147,9 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
                     mono
                     value={url}
                     placeholder={copy.addProject.urlPlaceholder}
-                    onChange={(e) => {
-                      setUrl(e.target.value);
-                      setVerify('idle');
-                    }}
+                    onChange={(e) => setUrl(e.target.value)}
                   />
-                  <div className="flex flex-col gap-2 rounded-card border border-ink bg-surface-2 px-3.5 py-3 text-[14px]">
-                    <p className="leading-normal">{copy.addProject.verifyIntro}</p>
-                    <span className="font-mono text-[13px]">{copy.addProject.verifyPath}</span>
-                    <div className="flex items-center gap-2">
-                      <code className="min-w-0 flex-1 truncate rounded-row border border-ink bg-card px-3 py-2 font-mono text-[13px]">
-                        {VERIFY_TOKEN}
-                      </code>
-                      <IconButton
-                        aria-label={copy.addProject.copyToken}
-                        onClick={() => {
-                          void navigator.clipboard
-                            ?.writeText(VERIFY_TOKEN)
-                            .then(() => showToast(copy.addProject.copied));
-                        }}
-                        icon={<Copy size={16} aria-hidden="true" />}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        disabled={!url.trim() || verify === 'checking'}
-                        onClick={() => setVerify('checking')}
-                      >
-                        {verify === 'checking'
-                          ? copy.addProject.checking
-                          : copy.addProject.checkNow}
-                      </Button>
-                      {verify === 'verified' && (
-                        <Chip tone="mint" role="status">
-                          {copy.addProject.verified}
-                        </Chip>
-                      )}
-                    </div>
-                  </div>
+                  <LiveVerify url={url} onUrl={setUrl} onVerifiedChange={setVerified} />
                   {nameField}
                 </>
               ),
