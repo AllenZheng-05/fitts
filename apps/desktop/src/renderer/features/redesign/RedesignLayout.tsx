@@ -61,9 +61,22 @@ export function RedesignLayout({ run }: { run: RunState }) {
             <ul className="absolute inset-0 z-10 flex flex-col gap-3 overflow-y-auto bg-surface-2 p-3">
               {ALL_PAGES.map((page) => (
                 <li key={page} className="flex flex-col gap-1">
-                  <span className="font-mono text-[12px] text-muted">{page}</span>
+                  {/* Tags sit above each small comparison, where they can't cover the site. */}
+                  <div className="flex items-center gap-2 text-[11px] font-bold">
+                    <span className="rounded-tag border border-ink bg-card px-[7px] py-0.5">
+                      {copy.slider.before}
+                    </span>
+                    <span className="flex-1 text-center font-mono text-[12px] font-normal text-muted">
+                      {page}
+                    </span>
+                    <span className="rounded-tag border border-ink bg-card px-[7px] py-0.5">
+                      {afterLabel}
+                    </span>
+                  </div>
                   <BeforeAfterSlider
                     className="h-[220px] bg-card"
+                    showTags={false}
+                    beforeLabel={copy.slider.before}
                     afterLabel={afterLabel}
                     before={<Mini run={run} route={page} variant="now" />}
                     after={<Mini run={run} route={page} variant="fixed" direction={direction} />}

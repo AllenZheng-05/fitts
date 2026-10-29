@@ -19,6 +19,8 @@ interface BeforeAfterSliderProps {
   onDragChange?: (dragging: boolean) => void;
   /** Cover the nearest positioned parent (a full-height comparison) instead of flowing. */
   fill?: boolean;
+  /** Draw the NOW / WITH FIX tags over the panes. Off when the caller labels them itself. */
+  showTags?: boolean;
   className?: string;
 }
 
@@ -38,6 +40,7 @@ export function BeforeAfterSlider({
   onChange,
   onDragChange,
   fill = false,
+  showTags = true,
   className,
 }: BeforeAfterSliderProps) {
   const [internal, setInternal] = useState(defaultValue);
@@ -107,8 +110,12 @@ export function BeforeAfterSlider({
       >
         {before}
       </div>
-      <PaneTag className="left-3">{beforeLabel}</PaneTag>
-      <PaneTag className="right-3">{afterLabel}</PaneTag>
+      {showTags && (
+        <>
+          <PaneTag className="left-3">{beforeLabel}</PaneTag>
+          <PaneTag className="right-3">{afterLabel}</PaneTag>
+        </>
+      )}
 
       <div
         role="slider"

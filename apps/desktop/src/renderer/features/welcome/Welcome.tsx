@@ -1,7 +1,8 @@
-import { Check, FolderOpen } from 'lucide-react';
+import { Check, FolderOpen, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { Chip } from '../../components/Chip';
+import { IconButton } from '../../components/IconButton';
 import { Select, TextField } from '../../components/fields';
 import { FittsEmblem } from '../../components/brand/FittsEmblem';
 import { copy } from '../../copy';
@@ -34,6 +35,12 @@ export function Welcome() {
         <p className="max-w-[500px] text-[14px] leading-normal text-muted">{copy.welcome.small}</p>
       </div>
       {hasProjects ? <WelcomeBack /> : <SetupCard />}
+      <IconButton
+        aria-label={copy.workspace.settings}
+        onClick={() => useUi.getState().openSettings()}
+        className="app-no-drag fixed top-4 right-5"
+        icon={<SettingsIcon size={18} aria-hidden="true" />}
+      />
     </main>
   );
 }
@@ -262,19 +269,19 @@ function WelcomeBack() {
               ? format(copy.welcome.backRunning, { step: run.step })
               : (LAST_RUN_CAPTIONS[project.id] ?? copy.welcome.backNeverRun);
           return (
-            <li
-              key={project.id}
-              className="flex flex-[1_1_240px] flex-col gap-1 rounded-card border border-ink p-3.5"
-            >
-              <strong>{project.name}</strong>
-              <span className="text-[14px] text-muted">{caption}</span>
+            <li key={project.id} className="flex flex-[1_1_240px]">
+              {/* The whole card opens the project: a big target instead of a small link. */}
               <button
                 type="button"
                 onClick={() => openProject(project.id)}
-                aria-label={`${copy.welcome.backOpen} ${project.name}`}
-                className="self-start text-[14px] font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
+                // No aria-label: the name is the card's visible text (WCAG 2.5.3).
+                className="group flex flex-1 flex-col gap-1 rounded-card border border-ink p-3.5 text-left transition-tint hover:bg-cobalt-tint"
               >
-                {copy.welcome.backOpen}
+                <strong>{project.name}</strong>
+                <span className="text-[14px] text-muted">{caption}</span>
+                <span className="text-[14px] font-semibold text-cobalt-ink underline group-hover:text-cobalt-deep">
+                  {copy.welcome.backOpen}
+                </span>
               </button>
             </li>
           );

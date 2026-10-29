@@ -1,10 +1,12 @@
 import type { Finding, RunState, Severity } from '@fitts/schema';
 import { FilterChip, SeverityBadge } from '../../components/Chip';
 import { copy } from '../../copy';
+import { X } from 'lucide-react';
 import { cx } from '../../lib/cx';
 import { format, formatClock } from '../../lib/format';
 import { getEngine } from '../../state/engine';
 import { useUi } from '../../state/ui';
+import { onRoute } from './routes';
 
 type Filter = 'all' | 'usability' | 'accessibility' | 'performance' | 'look-and-feel';
 const FILTERS: Filter[] = ['all', 'usability', 'accessibility', 'performance', 'look-and-feel'];
@@ -23,7 +25,8 @@ function statusLine(f: Finding): { text: string; className: string } {
     case 'dismissed':
       return { text: copy.audit.dismissed, className: 'text-muted' };
     case 'rolled-back':
-      return { text: copy.audit.rolledBack, className: 'font-semibold text-danger-ink' };
+      // Rolled back is safe (nothing was pushed), so sun, not the destructive red.
+      return { text: copy.audit.rolledBack, className: 'font-semibold text-sun-ink' };
     case 'undone':
       return { text: copy.audit.undone, className: 'text-muted' };
     default:
@@ -38,7 +41,10 @@ function statusLine(f: Finding): { text: string; className: string } {
 export function FindingsTray({ run }: { run: RunState }) {
   const filter = useUi((s) => s.findingsFilter);
   const selectedId = useUi((s) => s.openFindingId);
-  const shown = run.findings.filter((f) => filter === 'all' || filterOf(f) === filter);
+  const route = useUi((s) => s.findingsRoute);
+  const shown = run.findings.filter(
+    (f) => (filter === 'all' || filterOf(f) === filter) && (!route || onRoute(f.route, route)),
+  );
 
   return (
     <section
@@ -50,9 +56,23 @@ export function FindingsTray({ run }: { run: RunState }) {
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <h2 id="tray-title" className="mr-auto font-display text-[16px] font-bold">
+        <h2 id="tray-title" className="font-display text-[16px] font-bold">
           {format(copy.audit.trayTitle, { n: run.findings.length })}
         </h2>
+        {route && (
+          <span className="inline-flex items-center gap-1 rounded-pill border border-ink py-0.5 pr-0.5 pl-2.5 font-mono text-[12px]">
+            {format(copy.audit.onPage, { route })}
+            <button
+              type="button"
+              aria-label={copy.audit.allPages}
+              onClick={() => useUi.getState().set({ findingsRoute: null })}
+              className="flex size-6 items-center justify-center rounded-pill hover:bg-paper"
+            >
+              <X size={12} strokeWidth={2.5} aria-hidden="true" />
+            </button>
+          </span>
+        )}
+        <span className="mr-auto" />
         <div role="group" aria-label={copy.audit.filters} className="flex flex-wrap gap-2">
           {FILTERS.map((f) => (
             <FilterChip

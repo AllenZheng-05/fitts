@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { onRoute } from '../../src/renderer/features/audit/routes';
 import { isSeeThrough } from '../../src/renderer/features/background/seeThrough';
 import { format, formatUsd } from '../../src/renderer/lib/format';
 import { shortcutLabel } from '../../src/renderer/lib/platform';
@@ -77,5 +78,16 @@ describe('isSeeThrough (grabbing shapes through the UI)', () => {
     expect(isSeeThrough(at('btn-label'))).toBe(false);
     expect(isSeeThrough(at('lbl'))).toBe(false);
     expect(isSeeThrough(null)).toBe(false);
+  });
+});
+
+describe('onRoute (site map rows narrow the findings tray)', () => {
+  it('matches the page and the pages under it, and "/" only itself', () => {
+    expect(onRoute('/compose', '/compose')).toBe(true);
+    expect(onRoute('/compose/recipient', '/compose')).toBe(true);
+    expect(onRoute('/composer', '/compose')).toBe(false);
+    expect(onRoute('/search', '/compose')).toBe(false);
+    expect(onRoute('/', '/')).toBe(true);
+    expect(onRoute('/compose', '/')).toBe(false);
   });
 });

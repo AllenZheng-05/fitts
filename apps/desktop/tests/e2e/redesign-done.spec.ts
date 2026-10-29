@@ -77,7 +77,7 @@ test('Autonomous redesign: pick another direction, undo wording, reach Done', as
 test('Redesign in an Ask mode waits for a pick', async () => {
   const { page } = launched;
   await loadScenario(page, 'Welcome back');
-  await page.getByRole('button', { name: 'Open hartwell-site' }).click();
+  await page.getByRole('button', { name: /^hartwell-site Last run/ }).click();
   await expect(chat(page)).toContainText('Anything changed since last time?');
   await page.getByLabel('Permission mode').selectOption('ask-unsure');
   await page.getByRole('button', { name: 'Start the audit' }).click();

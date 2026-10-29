@@ -40,6 +40,8 @@ interface UiState {
   /** Redesign view (§6.7): before/after is on by default; "Every page" lists them all. */
   redesignCompare: boolean;
   everyPage: boolean;
+  /** A site map row narrowing the findings tray to one page and the pages under it. */
+  findingsRoute: string | null;
   /** Findings tray filter (§6.4). */
   findingsFilter: 'all' | 'usability' | 'accessibility' | 'performance' | 'look-and-feel';
 
@@ -95,6 +97,7 @@ export const useUi = create<UiState>((set, get) => ({
   redesignCompare: true,
   everyPage: false,
   findingsFilter: 'all',
+  findingsRoute: null,
 
   openSettings: (tab) =>
     set((s) => ({
@@ -128,6 +131,7 @@ export const useUi = create<UiState>((set, get) => ({
       addProjectOpen: false,
       openFindingId: null,
       review: null,
+      findingsRoute: null,
     });
   },
   goWelcome: () => set({ screen: 'welcome', projectMenuOpen: false, addProjectOpen: false }),

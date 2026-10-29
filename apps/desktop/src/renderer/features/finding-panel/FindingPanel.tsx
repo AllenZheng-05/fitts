@@ -301,8 +301,8 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
   }
   if (finding.status === 'rolled-back' && change) {
     return (
-      <div className={`${bar} bg-danger-tint`}>
-        <span className="flex-[1_1_180px] font-bold text-danger-ink">
+      <div className={`${bar} bg-sun-tint`}>
+        <span className="flex-[1_1_180px] font-bold text-sun-ink">
           {format(copy.finding.rolledBack, { reason: change.reason ?? '' })}
         </span>
         <Button

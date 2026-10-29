@@ -95,12 +95,14 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
       <h2 id={titleId} className="sr-only">
         {copy.done.summary}
       </h2>
-      <div className="flex flex-none items-start gap-3 border-b border-ink px-[18px] py-4">
+      {/* In a narrow window the actions wrap under the message instead of squeezing it
+          into a tall column. */}
+      <div className="flex flex-none flex-wrap items-start gap-3 border-b border-ink px-[18px] py-4">
         <FittsAvatar size={40} />
-        <p className="flex-1 text-[16px] leading-normal">
+        <p className="min-w-[300px] flex-1 text-[16px] leading-normal">
           <RichText text={closing} />
         </p>
-        <div className="flex flex-none gap-2">
+        <div className="ml-auto flex flex-none gap-2">
           <Select
             label={copy.done.runPicker}
             hideLabel
@@ -228,7 +230,8 @@ function ChangeRow({ run, change }: { run: RunState; change: Change }) {
       className={cx(
         'flex min-h-[50px] items-center gap-2.5 rounded-control px-2.5 py-2',
         rolledBack || retrying
-          ? 'border border-dashed border-danger bg-danger-tint'
+          ? // Sun, not red: a rollback is safe; red is only for destructive actions and stop.
+            'border border-dashed border-sun bg-sun-tint'
           : 'border border-ink',
         undone && 'bg-neutral-tint',
       )}

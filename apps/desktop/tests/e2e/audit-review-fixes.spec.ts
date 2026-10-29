@@ -90,3 +90,33 @@ test('taking the wheel while rewound goes back to live first', async () => {
   await expect(page.getByText(/^Rewound · step/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Back to live' })).toHaveCount(0);
 });
+
+test('the site map is clickable: a row shows that page and narrows the findings to it', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Audit (Ask)');
+  await page.getByRole('button', { name: 'Pause' }).click();
+  const siteMap = page.getByRole('region', { name: 'Site map' }).first();
+  const row = siteMap.getByRole('button', { name: /^\/recipient/ });
+  await row.click();
+  await expect(row).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Address')).toHaveValue('localhost:5173/compose/recipient');
+  await expect(tray(page)).toContainText('on /compose/recipient');
+  await expect(tray(page)).toContainText('"(null)" shown as a name');
+  await expect(tray(page)).not.toContainText('One action, three names');
+
+  await tray(page).getByRole('button', { name: 'Show findings from every page' }).click();
+  await expect(row).toHaveAttribute('aria-pressed', 'false');
+  await expect(tray(page)).toContainText('One action, three names');
+});
+
+test('Welcome back: the whole card opens a project, and Settings is one click away', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Welcome back');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByText('Last run Oct 26').click();
+  await expect(
+    page.getByRole('button', { name: /^Switch project, current: hartwell-site/ }),
+  ).toBeVisible();
+});

@@ -132,7 +132,6 @@ test('keyboard only: setup, interview and the audit', async () => {
   await page.keyboard.type('A messaging app for my grandparents.');
   await page.keyboard.press('Enter');
   await expect(page.getByText('I know enough to start')).toBeVisible();
-  await page.keyboard.press('Shift+Tab'); // Skip the rest
   await page.keyboard.press('Shift+Tab'); // Start the audit
   await expect(page.getByRole('button', { name: 'Start the audit' })).toBeFocused();
   await page.keyboard.press('Enter');

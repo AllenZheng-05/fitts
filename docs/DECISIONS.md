@@ -787,3 +787,30 @@ SPEC §7.7's "Finish on Economy").**
   - "1 issue" singular
   - timeline dots have 24px targets
   - Workspace and Settings have a `<main>` landmark, and the workspace has an sr-only h1
+
+**Frontend audit fixes (second group, your calls).**
+- **Done header:** the actions wrap under the closing message in narrow windows, instead of
+  squeezing the message into a tall column (1200px fits the stats above the fold).
+- **Interview ready bar:** one button, "Start the audit". "Skip the rest" did the same thing.
+  This replaces SPEC §6.3's two buttons.
+- **Clickable site map:** each row is a toggle button.
+  - Pressing a row shows that page in the site view (unless you have the wheel) and narrows
+    the findings tray to that page and the pages under it.
+  - The tray shows an "on /compose ×" chip that clears it. Pressing the row again also
+    clears it.
+  - The filter combines with the lens filters and resets when a project opens.
+- **Welcome back:** each project card is one button, whose accessible name is its visible
+  text. A Settings gear sits at the top right of Welcome, in both modes.
+- **Rolled back is sun, not red:** Done rows, the tray status and the Finding panel footer
+  use sun. CLAUDE.md reserves red for destructive actions and stop, and a rollback is safe.
+  This departs from Done.html.
+- **Settings panels:** sized to their content (`self-start`); they still scroll when long.
+- **Every page (Redesign):** the NOW / AFTER tags sit in a row above each comparison, with
+  the route between them, so they can't cover the site. `BeforeAfterSlider` has a `showTags`
+  prop for this.
+- **Console warnings (not fixed, upstream):**
+  - "THREE.Clock … deprecated" comes from @react-three/fiber's own clock.
+  - "deprecated parameters for the initialization function" comes from @react-three/rapier
+    calling Rapier's `init()`.
+  - Neither is in our code, both packages are on their latest versions, and both warnings
+    are harmless. They'll go away when those libraries update.

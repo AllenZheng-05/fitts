@@ -86,7 +86,7 @@ function Section({
     <section
       aria-labelledby={id}
       className={cx(
-        'flex max-h-full min-w-0 flex-[1_1_0] flex-col gap-3 overflow-y-auto rounded-panel border-[1.5px] border-ink bg-card p-5 shadow-panel',
+        'flex max-h-full min-w-0 flex-[1_1_0] flex-col gap-3 self-start overflow-y-auto rounded-panel border-[1.5px] border-ink bg-card p-5 shadow-panel',
         className,
       )}
     >

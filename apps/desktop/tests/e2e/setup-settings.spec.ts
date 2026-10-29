@@ -275,7 +275,7 @@ test('Welcome back lists projects', async () => {
   await expect(page.getByText('Last run yesterday · 24 fixes · 9 PRs')).toBeVisible();
   await expectNoSeriousA11yViolations(page);
   await expectNoWindowScrollAt(page, { width: 1200, height: 720 });
-  await page.getByRole('button', { name: 'Open hartwell-site' }).click();
+  await page.getByRole('button', { name: /^hartwell-site Last run/ }).click();
   await expect(
     page.getByRole('button', { name: 'Switch project, current: hartwell-site' }),
   ).toBeVisible();

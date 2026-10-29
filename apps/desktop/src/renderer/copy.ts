@@ -285,6 +285,8 @@ export const copy = {
     dismissed: 'Not a problem',
     rolledBack: 'Rolled back',
     undone: 'Undone',
+    onPage: 'on {route}',
+    allPages: 'Show findings from every page',
     noFindings: "No findings yet. I'll list them here as I go.",
     noFindingsDone: 'No findings. I tried every control, and your site holds up.',
     noMatches: 'No findings in this group yet.',
@@ -434,7 +436,6 @@ export const copy = {
     notYet: 'Want to skip the interview?',
     skipLook: 'Skip, just look around',
     start: 'Start the audit',
-    skipRest: 'Skip the rest',
   },
   brief: {
     cardTitle: 'What I know so far',

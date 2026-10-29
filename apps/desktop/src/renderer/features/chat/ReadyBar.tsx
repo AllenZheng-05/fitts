@@ -17,14 +17,10 @@ export function ReadyBar({ run }: { run: RunState }) {
         {ready ? copy.fitts.readyBar : copy.ready.notYet}
       </span>
       {ready ? (
-        <>
-          <Button variant="primary" size="sm" className="px-3.5 text-[14px]" onClick={start}>
-            {copy.ready.start}
-          </Button>
-          <Button size="sm" onClick={start}>
-            {copy.ready.skipRest}
-          </Button>
-        </>
+        // One way to start: answering more questions is just carrying on the chat.
+        <Button variant="primary" size="sm" className="px-3.5 text-[14px]" onClick={start}>
+          {copy.ready.start}
+        </Button>
       ) : (
         <Button size="sm" onClick={start}>
           {copy.ready.skipLook}
