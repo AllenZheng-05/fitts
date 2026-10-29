@@ -18,10 +18,14 @@ interface SiteViewProps {
   toolbarEnd?: ReactNode;
   /** Text after the address, e.g. " · rewound to step 42". */
   addressSuffix?: string;
+  /** Host shown in the address instead of the project's (the Done preview server). */
+  addressHost?: string | undefined;
   /** Can the user click inside the site? (Interview, or after "Take the wheel".) */
   interactive: boolean;
   /** `fixed` renders the Done preview with every fix applied. */
   variant?: 'now' | 'fixed';
+  /** Redesign direction for the `fixed` variant (§6.7). */
+  direction?: string | undefined;
   /** Drawn over the site, aligned through the surface (M5 overlays). */
   overlay?: (surface: SiteSurface) => ReactNode;
   onElementClick?: (ref: string, label: string) => void;
@@ -40,8 +44,10 @@ export function SiteView({
   projectId,
   toolbarEnd,
   addressSuffix = '',
+  addressHost,
   interactive,
   variant = 'now',
+  direction,
   overlay,
   onElementClick,
   footer,
@@ -95,7 +101,7 @@ export function SiteView({
           <input
             readOnly
             aria-label={copy.site.url}
-            value={`${project?.url ?? 'localhost'}${route}${addressSuffix}`}
+            value={`${addressHost ?? project?.url ?? 'localhost'}${route}${addressSuffix}`}
             className="min-w-0 flex-[1_1_180px] truncate rounded-row bg-surface-2 px-3 py-[9px] font-mono text-[12px]"
           />
           {toolbarEnd}
@@ -122,6 +128,7 @@ export function SiteView({
               route,
               navigate: (r) => site.navigate(projectId, r),
               variant,
+              direction,
               onElementClick,
             })}
           </Fragment>

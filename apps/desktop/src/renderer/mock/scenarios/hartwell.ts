@@ -6,9 +6,9 @@ import type { BeatContext, Scenario } from '../../state/script';
 const S = 1000;
 
 export const HARTWELL_DIRECTIONS = [
-  { id: 'quiet', name: 'Quiet & dignified', swatches: ['#1F2A44', '#DDD6CB', '#F6F4EF'] },
-  { id: 'warm', name: 'Warm & personal', swatches: ['#5B3A29', '#C8955C', '#FBF3E8'] },
-  { id: 'classic', name: 'Classic & formal', swatches: ['#16161D', '#8A8A93', '#FFFFFF'] },
+  { id: 'quiet', name: 'Quiet & dignified', swatches: ['#1F2A44', '#DDD6CB'] },
+  { id: 'warm', name: 'Warm & personal', swatches: ['#5B4636', '#C9A27A'] },
+  { id: 'classic', name: 'Classic & formal', swatches: ['#111111', '#8C8C8C'] },
 ];
 
 const PAGES = 14;
@@ -20,7 +20,9 @@ function progressItem(s: RunState): ProgressItem | undefined {
   return [...s.chat].reverse().find((c): c is ProgressItem => c.type === 'progress');
 }
 
-/** "Applying the look": ✓ ✓ ◐ 9 of 14 pages ○ PR (SPEC §9.5 B). */
+const recheck = (n: number) => `Re-checking contrast and layout on ${n} of ${PAGES} pages`;
+
+/** "Applying the look": ✓ ✓ ◐ 9 of 14 pages ○ PR (Redesign.html, SPEC §9.5 B). */
 function applyLook(directionId: string, s: RunState, ctx: BeatContext) {
   const name = HARTWELL_DIRECTIONS.find((d) => d.id === directionId)?.name ?? directionId;
   s.activity = 'redesigning';
@@ -29,10 +31,10 @@ function applyLook(directionId: string, s: RunState, ctx: BeatContext) {
     type: 'progress',
     title: 'Applying the look',
     items: [
-      { text: 'Mocked up three directions', state: 'done' },
-      { text: `${name} colors and type`, state: 'doing' },
-      { text: `Restyling pages · 0 of ${PAGES}`, state: 'todo' },
-      { text: 'Open the pull request', state: 'todo' },
+      { text: 'Colors, type and spacing updated in theme.css', state: 'doing' },
+      { text: 'Removed confetti and bounce animations', state: 'todo' },
+      { text: recheck(0), state: 'todo' },
+      { text: 'One redesign PR with before/after of every page', state: 'todo' },
     ],
   });
   const t = s.elapsedMs;
@@ -43,10 +45,14 @@ function applyLook(directionId: string, s: RunState, ctx: BeatContext) {
     });
 
   tick(3 * S, (items) => {
-    setItem(items, 1, 'done');
-    setItem(items, 2, 'doing', `Restyling pages · 3 of ${PAGES}`);
+    setItem(items, 0, 'done');
+    setItem(items, 1, 'doing');
   });
-  tick(8 * S, (items) => setItem(items, 2, 'doing', `Restyling pages · 9 of ${PAGES}`));
+  tick(6 * S, (items) => {
+    setItem(items, 1, 'done');
+    setItem(items, 2, 'doing', recheck(3));
+  });
+  tick(9 * S, (items) => setItem(items, 2, 'doing', recheck(9)));
   ctx.at(t + 11 * S, (s2, c) => {
     c.post({ type: 'wording', from: 'Party packages', to: 'Service options' });
     s2.changes.push({
@@ -60,12 +66,12 @@ function applyLook(directionId: string, s: RunState, ctx: BeatContext) {
     });
   });
   tick(16 * S, (items) => {
-    setItem(items, 2, 'done', `Restyling pages · ${PAGES} of ${PAGES}`);
+    setItem(items, 2, 'done', recheck(PAGES));
     setItem(items, 3, 'doing');
   });
   ctx.at(t + 20 * S, (s2, c) => {
     const item = progressItem(s2);
-    if (item) setItem(item.items, 3, 'done', `Opened PR #${PR}`);
+    if (item) setItem(item.items, 3, 'done', `Redesign PR #${PR} with before/after of every page`);
     s2.changes.push({
       id: 'change-redesign',
       findingIds: ['f-hartwell-look'],
@@ -81,9 +87,9 @@ function applyLook(directionId: string, s: RunState, ctx: BeatContext) {
       look.status = 'pr-opened';
       look.prNumber = PR;
     }
-    s2.cost.byPhase.fixes += 2.86;
-    s2.cost.byPhase.media += 1.1;
-    s2.cost.spentUsd = Math.round((s2.cost.spentUsd + 3.96) * 100) / 100;
+    s2.cost.byPhase.fixes = Math.round((s2.cost.byPhase.fixes + 2.98) * 100) / 100;
+    s2.cost.byPhase.media = Math.round((s2.cost.byPhase.media + 1.1) * 100) / 100;
+    s2.cost.spentUsd = Math.round((s2.cost.spentUsd + 4.08) * 100) / 100;
     c.post({ type: 'fix.result', changeId: 'change-redesign' });
     s2.activity = 'acting';
   });

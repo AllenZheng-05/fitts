@@ -1,7 +1,6 @@
 import type { RunState } from '@fitts/schema';
 import { useEffect } from 'react';
 import { Chip } from '../../components/Chip';
-import { Panel } from '../../components/Panel';
 import { Button } from '../../components/Button';
 import { copy } from '../../copy';
 import { useProject } from '../../state/projects';
@@ -9,6 +8,9 @@ import { useActiveRun, useRunStore } from '../../state/run-store';
 import { useUi } from '../../state/ui';
 import { AuditLayout } from '../audit/AuditLayout';
 import { GateModal } from '../gate/GateModal';
+import { isRedesigning } from '../redesign/redesign';
+import { RedesignLayout } from '../redesign/RedesignLayout';
+import { DoneLayout } from '../summary/DoneLayout';
 import { ChatPanel } from '../chat/ChatPanel';
 import { ReadyBar } from '../chat/ReadyBar';
 import { SiteView } from '../site-view/SiteView';
@@ -35,8 +37,9 @@ export function Workspace() {
       <Header run={run} projectId={projectId} name={name} />
       <div className="flex min-h-0 flex-1 gap-3.5 px-5 pt-1 pb-5">
         {run?.phase === 'interview' && <InterviewLayout run={run} />}
-        {run?.phase === 'audit' && <AuditLayout run={run} />}
-        {run?.phase === 'done' && <Placeholder run={run} />}
+        {run?.phase === 'audit' &&
+          (isRedesigning(run) ? <RedesignLayout run={run} /> : <AuditLayout run={run} />)}
+        {run?.phase === 'done' && <DoneLayout run={run} />}
       </div>
       {run && <GateModal run={run} />}
     </div>
@@ -70,15 +73,5 @@ function InterviewLayout({ run }: { run: RunState }) {
       />
       <ChatPanel run={run} className="w-[420px] flex-none" aboveComposer={<ReadyBar run={run} />} />
     </>
-  );
-}
-
-function Placeholder({ run }: { run: RunState }) {
-  return (
-    <Panel label={run.phase} className="flex-1" bodyClassName="flex items-center justify-center">
-      <p className="text-[15px] text-muted">
-        {run.runId} · {run.phase}
-      </p>
-    </Panel>
   );
 }

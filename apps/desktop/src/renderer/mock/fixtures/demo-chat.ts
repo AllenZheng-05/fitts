@@ -298,7 +298,7 @@ function rowFinding(row: Row, i: number, status: Finding['status']): Finding {
 }
 
 const PRS = [12, 13, 14, 15, 16, 17, 18, 19, 20];
-const FIXES_TOTAL = 6.1;
+const FIXES_TOTAL = 7.02;
 
 /** The complete Scenario A run as it stands on the Done screen. */
 export function demoChatDoneState(): Pick<RunState, 'findings' | 'changes' | 'cost' | 'routes'> {
@@ -366,7 +366,7 @@ export function demoChatDoneState(): Pick<RunState, 'findings' | 'changes' | 'co
     findings.push(rowFinding(row, FIXED_ROWS.length + 4 + i, 'open')),
   );
 
-  // Spread $6.10 of fix spending across the 26 changes, in whole cents.
+  // Spread $7.02 of fix spending across the 26 changes, in whole cents.
   const cents = Math.round(FIXES_TOTAL * 100);
   const each = Math.floor(cents / changes.length);
   changes.forEach((c, i) => {
@@ -379,7 +379,7 @@ export function demoChatDoneState(): Pick<RunState, 'findings' | 'changes' | 'co
     cost: {
       spentUsd: 13.92,
       capUsd: 20,
-      byPhase: { fixes: 6.1, reviewers: 3.4, crawling: 2.12, summing: 0.9, media: 1.4 },
+      byPhase: { fixes: 7.02, reviewers: 3.31, crawling: 1.62, summing: 1.18, media: 0.79 },
     },
     routes: DEMO_ROUTES.map((r) => ({ ...r, status: 'done' as const })),
   };

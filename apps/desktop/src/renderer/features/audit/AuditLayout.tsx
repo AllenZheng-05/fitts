@@ -106,7 +106,7 @@ function AuditSiteView({ run }: { run: RunState }) {
       overlay={(surface) =>
         beforeAfter ? (
           <BeforeAfterSlider
-            className="absolute inset-0 z-10 rounded-none border-0"
+            fill
             before={renderSite(run.projectId, { route, navigate: () => undefined, variant: 'now' })}
             after={renderSite(run.projectId, {
               route,

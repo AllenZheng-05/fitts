@@ -16,6 +16,8 @@ interface BeforeAfterSliderProps {
   onChange?: (value: number) => void;
   /** Lets the background shape field pause while the divider is dragged (SPEC §6.12). */
   onDragChange?: (dragging: boolean) => void;
+  /** Cover the nearest positioned parent (a full-height comparison) instead of flowing. */
+  fill?: boolean;
   className?: string;
 }
 
@@ -34,6 +36,7 @@ export function BeforeAfterSlider({
   defaultValue = 50,
   onChange,
   onDragChange,
+  fill = false,
   className,
 }: BeforeAfterSliderProps) {
   const [internal, setInternal] = useState(defaultValue);
@@ -72,7 +75,8 @@ export function BeforeAfterSlider({
     <div
       ref={trackRef}
       className={cx(
-        'relative isolate flex-none touch-none overflow-hidden rounded-control border border-ink select-none',
+        'isolate flex-none touch-none overflow-hidden select-none',
+        fill ? 'absolute inset-0 z-10' : 'relative rounded-control border border-ink',
         className,
       )}
       onPointerDown={(event) => {

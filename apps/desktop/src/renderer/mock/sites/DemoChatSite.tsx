@@ -55,7 +55,7 @@ export function DemoChatSite({ route, navigate, variant, onElementClick }: MockS
       className={`${SITE_FONT} flex h-full w-full justify-center overflow-y-auto bg-[#F3F1EC] px-6 py-8 text-[#1d1d1b]`}
     >
       <div
-        className={`flex h-fit w-full flex-col gap-3.5 rounded-[8px] border border-[#D4D1C9] bg-white p-[22px] ${fixed ? 'max-w-[360px] text-[17px]' : 'max-w-[440px] text-[14px]'}`}
+        className={`flex h-fit w-full flex-col gap-3.5 rounded-[8px] border border-[#D4D1C9] bg-[#fff] p-[22px] ${fixed ? 'max-w-[360px] text-[17px]' : 'max-w-[440px] text-[14px]'}`}
       >
         {page}
       </div>
@@ -79,9 +79,9 @@ function SiteButton({
   fixed?: boolean;
 }) {
   const tones = {
-    gray: 'bg-[#8A8780] text-white',
-    blue: 'bg-[#1F2A88] text-white',
-    outline: 'border-[1.5px] border-[#1F2A88] text-[#1F2A88] bg-white',
+    gray: 'bg-[#8A8780] text-[#fff]',
+    blue: 'bg-[#1F2A88] text-[#fff]',
+    outline: 'border-[1.5px] border-[#1F2A88] text-[#1F2A88] bg-[#fff]',
   };
   return (
     <button

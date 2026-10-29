@@ -30,6 +30,9 @@ interface UiState {
   /** Site-view toggles during the audit (§6.4). */
   highlightsOn: boolean;
   beforeAfter: boolean;
+  /** Redesign view (§6.7): before/after is on by default; "Every page" lists them all. */
+  redesignCompare: boolean;
+  everyPage: boolean;
   /** Findings tray filter (§6.4). */
   findingsFilter: 'all' | 'usability' | 'accessibility' | 'performance' | 'look-and-feel';
 
@@ -74,6 +77,8 @@ export const useUi = create<UiState>((set, get) => ({
   micListening: false,
   highlightsOn: true,
   beforeAfter: false,
+  redesignCompare: true,
+  everyPage: false,
   findingsFilter: 'all',
 
   openSettings: (tab) =>

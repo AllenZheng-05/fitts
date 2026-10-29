@@ -531,7 +531,8 @@ describe('scenarios end to end', () => {
     engine.pickDirection(HARTWELL, 'warm');
     const s = run(HARTWELL);
     expect(findItem(s, 'directions')?.selectedId).toBe('warm');
-    expect(findItem(s, 'progress')?.items[1]?.text).toBe('Warm & personal colors and type');
+    expect(findItem(s, 'progress')?.title).toBe('Applying the look');
+    expect(s.nowText).toBe('Applying Warm & personal to every page');
     expect(s.activity).toBe('redesigning');
   });
 

@@ -393,6 +393,8 @@ export class MockRunEngine implements RunEngine {
         if (c?.status !== 'retrying') return;
         c.status = 'verified';
         c.reason = undefined;
+        // A rolled-back change never had a PR; the retry opens one.
+        c.prNumber ??= Math.max(0, ...s2.changes.map((x) => x.prNumber ?? 0)) + 1;
         for (const f of s2.findings) {
           if (c.findingIds.includes(f.id))
             f.status = previous === 'undone' ? 'pr-opened' : 'verified';

@@ -6,6 +6,8 @@ export interface MockSiteProps {
   variant: 'now' | 'fixed';
   /** Reports a click on an element with a `data-ref`, for "You clicked …" while driving. */
   onElementClick?: (ref: string, label: string) => void;
+  /** Redesign direction for the `fixed` variant (hartwell-site, §6.7). */
+  direction?: string | undefined;
 }
 
 /** Shared base styles: mock sites are plain websites in system fonts, not app tokens. */

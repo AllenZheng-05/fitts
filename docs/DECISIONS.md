@@ -436,3 +436,53 @@ after finishing would vanish. The nothing-found card pauses the run on the audit
 
 **New `sun` button variant** for "Try again" (§6.8), and a `panel-in` animation (slide 16px +
 fade, §6.5), off under reduced motion.
+
+## M7 — Redesign + Done
+
+**When the redesign view shows.** From the look-and-feel card until the run is done, the
+audit layout switches to the redesign variant: no site map or tray, a full-height
+before/after of the Hartwell site, and the 420px chat (§6.7). "Before / after" (on by
+default) and "Every page" are toggles. "Every page" lists all six pages as smaller
+before/after comparisons. These toggles are separate from the audit's.
+
+**The Hartwell site.** `now`: pink background, confetti dots, a rounded "bouncy" system font,
+"Party packages", a tilted yellow "Book now" pill. The three directions follow §9.4:
+Quiet & dignified (navy and stone, Fraunces, now bundled from
+`@fontsource-variable/fraunces`), Warm & personal (brown and caramel, Georgia), Classic &
+formal (black and grey, Times). The AFTER tag names the direction ("AFTER · QUIET &
+DIGNIFIED"), as in Redesign.html. Swatches and progress steps also follow Redesign.html.
+
+**BeforeAfterSlider got a `fill` mode** to cover its container (full-height comparisons).
+Passing `absolute inset-0` as a class lost to the slider's own `relative`, which broke the
+audit's before/after too.
+
+**Mock sites use literal colors only.** Tailwind's default palette is removed (M0), so
+`text-white` / `bg-white` silently did nothing in the mock sites; they now use `#fff`.
+
+**Done stats are computed from the run,** so Undo, Redo and Try again move them: Fixed &
+verified counts verified changes, Pull requests counts distinct PR numbers among them, and
+the math line gains an "undone" term when something was undone.
+
+**The change list** shows the four most severe verified changes plus every rolled-back one,
+with "See all N changes" to expand (Done.html shows a short list). Redesign and wording
+changes get "Look & feel" and "Wording" badges. Undo shows "Undone · PR #13 closed", or
+"Revert PR #21 opened" for the merged one (§7.6), with a Redo. Try again shows "Retrying…"
+with the rollback reason, then the change verifies and gets a new PR number.
+
+**Cost fixture follows Done.html:** Fixes $7.02 · Reviewers $3.31 · Crawling $1.62 ·
+Summing up $1.18 · Images, outlines, voice $0.79 = $13.92.
+
+**Preview pane:** demo/chat previews on `localhost:5180` (the preview server) at
+`/compose/confirm`, which shows "Sent to Grandma ✓". The caption counts verified fixes.
+hartwell-site previews in the chosen direction.
+
+**Run picker:** past runs exist for demo/chat only (fixtures). Picking one shows its four
+stats and "This is an earlier run. Its changes live in their pull requests." instead of the
+list and cost bar, which Phase 1 doesn't store for old runs.
+
+**Export report** writes markdown through the native save dialog: summary stats, the math
+line, every change with PR, cost and status, every finding, and the cost breakdown. A toast
+confirms it.
+
+**The closing message** at the top of Done is Fitts's last chat message, so a stopped run
+shows "Stopped the run…" rather than the canned "All done" line.

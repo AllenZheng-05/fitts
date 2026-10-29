@@ -6,7 +6,7 @@ export function GenericSite({ route, navigate }: MockSiteProps) {
   return (
     <div
       data-mock-site
-      className={`${SITE_FONT} flex h-full w-full flex-col overflow-y-auto bg-white text-[#1d1d1b]`}
+      className={`${SITE_FONT} flex h-full w-full flex-col overflow-y-auto bg-[#fff] text-[#1d1d1b]`}
     >
       <nav className="flex gap-4 border-b border-[#E4E1DA] px-6 py-3 text-[14px]">
         {pages.map((p) => (
@@ -32,7 +32,7 @@ export function GenericSite({ route, navigate }: MockSiteProps) {
           data-ref="hero-cta"
           data-label="Get in touch"
           onClick={() => navigate('/contact')}
-          className="self-start rounded-[6px] bg-[#1F2A88] px-4 py-2 text-white"
+          className="self-start rounded-[6px] bg-[#1F2A88] px-4 py-2 text-[#fff]"
         >
           Get in touch
         </button>

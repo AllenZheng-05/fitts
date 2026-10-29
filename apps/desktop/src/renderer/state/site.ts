@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { startRoute } from '../mock/sites';
 
 interface SiteHistory {
   stack: string[];
@@ -18,13 +19,11 @@ interface SiteState {
 
 const fresh = (route: string): SiteHistory => ({ stack: [route], index: 0, reloads: 0 });
 
-export const START_ROUTE = '/compose';
-
 export const useSite = create<SiteState>((set) => ({
   sites: {},
   navigate: (projectId, route) =>
     set((s) => {
-      const site = s.sites[projectId] ?? fresh(START_ROUTE);
+      const site = s.sites[projectId] ?? fresh(startRoute(projectId));
       if (site.stack[site.index] === route) return s;
       const stack = [...site.stack.slice(0, site.index + 1), route];
       return { sites: { ...s.sites, [projectId]: { ...site, stack, index: stack.length - 1 } } };
@@ -43,7 +42,7 @@ export const useSite = create<SiteState>((set) => ({
     }),
   reload: (projectId) =>
     set((s) => {
-      const site = s.sites[projectId] ?? fresh(START_ROUTE);
+      const site = s.sites[projectId] ?? fresh(startRoute(projectId));
       return { sites: { ...s.sites, [projectId]: { ...site, reloads: site.reloads + 1 } } };
     }),
 }));
@@ -51,7 +50,7 @@ export const useSite = create<SiteState>((set) => ({
 export function useSiteRoute(projectId: string) {
   const site = useSite((s) => s.sites[projectId]);
   return {
-    route: site?.stack[site.index] ?? START_ROUTE,
+    route: site?.stack[site.index] ?? startRoute(projectId),
     canBack: Boolean(site && site.index > 0),
     canForward: Boolean(site && site.index < site.stack.length - 1),
     reloads: site?.reloads ?? 0,
