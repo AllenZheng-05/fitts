@@ -132,7 +132,26 @@ test('a shape on the backdrop can be dragged and thrown', async () => {
   await page.mouse.move(target.x + 180, target.y + 30, { steps: 3 });
   await page.mouse.up();
   const thrown = (await bodies(page)).find((b) => b.id === target.id);
-  expect(thrown && Math.hypot(thrown.vx, thrown.vy)).toBeGreaterThan(50);
+  const speed = thrown ? Math.hypot(thrown.vx, thrown.vy) : 0;
+  expect(speed).toBeGreaterThan(50);
+  // Throws are gentle and capped (600 px/s).
+  expect(speed).toBeLessThanOrEqual(610);
+
+  // A hard fling at the edge still leaves every shape on screen: the window edge is a wall.
+  const again = (await bodies(page)).find((b) => b.id === target.id);
+  if (!again) throw new Error('shape gone');
+  await page.mouse.move(again.x, again.y);
+  await page.mouse.down();
+  await page.mouse.move(0, again.y, { steps: 2 });
+  await page.mouse.up();
+  await page.waitForTimeout(1500);
+  const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  for (const b of await bodies(page)) {
+    expect(b.x).toBeGreaterThanOrEqual(0);
+    expect(b.x).toBeLessThanOrEqual(size.w);
+    expect(b.y).toBeGreaterThanOrEqual(0);
+    expect(b.y).toBeLessThanOrEqual(size.h);
+  }
 });
 
 test('Settings: floating shapes off, and shape movement', async () => {

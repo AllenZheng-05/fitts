@@ -626,3 +626,20 @@ the physics scene only while the main button is held down after pressing on the 
 buttons and panels, never touches the shapes. They keep drifting and reacting (speaking
 pulse, finding drops, end-of-run burst) on every screen, and the Shape movement setting
 stays.
+
+**Shapes float instead of jumping, and stay on screen.**
+- Every shape now drifts on its own slowly turning heading and spins gently, easing back to
+  that float after a bump or throw. This replaces the old timer, which kicked every shape
+  at once every 4–8 s and made the whole field "shift".
+- The frame clock now runs at a fixed 1/30 s per frame. Before, it was passed in
+  milliseconds where seconds were expected, which inflated each physics step. It also
+  means the field never catches up on paused time.
+- The window edge is a wall:
+  - walls rebuild on resize
+  - fast bodies use continuous collision detection
+  - speed is capped at 700 px/s
+  - a dragged shape stops 40 px inside the window
+  - a last-resort check bounces any shape that still gets past an edge back inside
+- A throw uses the pointer's average velocity over the last 80 ms, halved and capped at
+  600 px/s.
+- New finding drops spawn inside the top edge, and the end-of-run burst is gentler.

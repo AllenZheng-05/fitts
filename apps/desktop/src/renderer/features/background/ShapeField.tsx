@@ -18,6 +18,17 @@ import { useFieldRunning } from './useFieldRunning';
 
 /** Frame cap (§6.12). */
 const FPS = 30;
+/** Fastest a shape may move, in px/s, so nothing outruns the walls. */
+const MAX_SPEED = 700;
+/** Throws: release velocity is the last ~80ms of pointer motion, scaled and capped. */
+const THROW_WINDOW_MS = 80;
+const THROW_SCALE = 0.5;
+const THROW_MAX = 600;
+/** Wandering (px/s and rad/s, scaled by the mode's speed). */
+const CRUISE = [16, 36] as const;
+const SPIN = [0.15, 0.45] as const;
+/** How quickly a shape eases back to its wander after a bump or throw (per second). */
+const SETTLE = 0.6;
 /** Cursor collider radius in px (§6.12). */
 const CURSOR_RADIUS = 40;
 /** Rapier body types. */
@@ -72,10 +83,17 @@ export function ShapeField({ mode }: { mode: FieldMode }) {
 function Ticker({ running }: { running: boolean }) {
   const advance = useThree((s) => s.advance);
   const size = useThree((s) => s.size);
+  // r3f's clock is in seconds. It moves exactly 1/30 s per frame, so physics never catches
+  // up on paused time with one giant step (which made every shape jump).
+  const clock = useRef(0);
   useEffect(() => {
-    advance(performance.now());
+    const tick = () => {
+      clock.current += 1 / FPS;
+      advance(clock.current);
+    };
+    tick();
     if (!running) return;
-    const timer = setInterval(() => advance(performance.now()), 1000 / FPS);
+    const timer = setInterval(tick, 1000 / FPS);
     return () => clearInterval(timer);
   }, [running, advance, size]);
   return null;
@@ -174,7 +192,7 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
           color: SEVERITY_COLOR[newest.severity] ?? 'coral',
           size: 16 + newest.severity * 4,
           x: (Math.random() * 2 - 1) * (width / 2 - 80),
-          y: height / 2 + 40,
+          y: height / 2 - 40,
         };
         setDrops((d) => (d.length >= MAX_DROPS ? d : [...d, drop]));
       }
@@ -183,7 +201,7 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
           const t = body.translation();
           const len = Math.hypot(t.x, t.y) || 1;
           body.applyImpulse(
-            { x: (t.x / len) * 900 * body.mass(), y: (t.y / len) * 900 * body.mass(), z: 0 },
+            { x: (t.x / len) * 260 * body.mass(), y: (t.y / len) * 260 * body.mass(), z: 0 },
             true,
           );
         }
@@ -192,40 +210,76 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
     });
   }, [width, height]);
 
-  // Slow random drift impulses every 4–8 s (§6.12).
-  useEffect(() => {
-    if (!running) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const nudge = () => {
-      for (const body of liveBodies(bodies.current)) {
-        if (!body.isDynamic()) continue;
-        const angle = Math.random() * Math.PI * 2;
-        const strength = (40 + Math.random() * 60) * speed * body.mass();
-        body.applyImpulse(
-          { x: Math.cos(angle) * strength, y: Math.sin(angle) * strength, z: 0 },
-          true,
-        );
-        body.applyTorqueImpulse({ x: 0, y: 0, z: (Math.random() - 0.5) * strength * 20 }, true);
-      }
-      timer = setTimeout(nudge, 4000 + Math.random() * 4000);
-    };
-    timer = setTimeout(nudge, 600);
-    return () => clearTimeout(timer);
-  }, [running, speed]);
+  const sizes = useMemo(
+    () => new Map([...specs, ...drops].map((d) => [d.id, d.size])),
+    [specs, drops],
+  );
+  const wander = useRef(new Map<string, Wander>());
 
-  // Fitts speaking: every shape pulses to 1.04 (§6.12).
+  // Each frame: the speaking pulse (§6.12), then every free shape eases toward its own
+  // slowly wandering heading and spin, and is kept inside the window.
   useFrame((_, delta) => {
     const g = group.current;
-    if (!g) return;
-    const target = useSpeech.getState().speaking ? 1.04 : 1;
-    const k = Math.min(1, delta / 0.3);
-    const next = g.scale.x + (target - g.scale.x) * k;
-    g.scale.setScalar(next);
+    if (g) {
+      const target = useSpeech.getState().speaking ? 1.04 : 1;
+      g.scale.setScalar(g.scale.x + (target - g.scale.x) * Math.min(1, delta / 0.3));
+    }
+    if (!running) return;
+    const dt = Math.min(delta, 0.1);
+    const hw = width / 2;
+    const hh = height / 2;
+    for (const [id, body] of bodies.current) {
+      if (!isLive(body) || !body.isDynamic()) continue;
+      let w = wander.current.get(id);
+      if (!w) {
+        w = newWander(speed);
+        wander.current.set(id, w);
+      }
+      const size = sizes.get(id) ?? 20;
+      const t = body.translation();
+
+      // Drift the heading a little; near an edge, turn back toward the middle.
+      w.heading += (Math.random() - 0.5) * 1.4 * dt;
+      const near = size + 40;
+      if (Math.abs(t.x) > hw - near || Math.abs(t.y) > hh - near) {
+        w.heading = Math.atan2(-t.y, -t.x) + (Math.random() - 0.5) * 0.8;
+      }
+
+      const k = Math.min(1, dt * SETTLE);
+      const v = body.linvel();
+      let vx = v.x + (Math.cos(w.heading) * w.cruise - v.x) * k;
+      let vy = v.y + (Math.sin(w.heading) * w.cruise - v.y) * k;
+      const sp = Math.hypot(vx, vy);
+      if (sp > MAX_SPEED) {
+        vx *= MAX_SPEED / sp;
+        vy *= MAX_SPEED / sp;
+      }
+
+      // Last resort: the window edge is a wall. Anything past it comes back, bouncing.
+      const mx = Math.min(size, hw / 2);
+      const my = Math.min(size, hh / 2);
+      const x = Math.max(-hw + mx, Math.min(hw - mx, t.x));
+      const y = Math.max(-hh + my, Math.min(hh - my, t.y));
+      if (x !== t.x) vx = -vx * 0.6;
+      if (y !== t.y) vy = -vy * 0.6;
+      if (x !== t.x || y !== t.y) body.setTranslation({ x, y, z: 0 }, true);
+      body.setLinvel({ x: vx, y: vy, z: 0 }, true);
+
+      const a = body.angvel();
+      body.setAngvel(
+        {
+          x: a.x + (w.spin.x - a.x) * k,
+          y: a.y + (w.spin.y - a.y) * k,
+          z: a.z + (w.spin.z - a.z) * k,
+        },
+        true,
+      );
+    }
   });
 
   return (
     <Physics gravity={[0, 0, 0]} timeStep="vary" paused={!running}>
-      <Walls width={width} height={height} />
+      <Walls key={`${width}x${height}`} width={width} height={height} />
       <Cursor width={width} height={height} />
       <Dragger bodies={bodies} meshes={meshes} width={width} height={height} />
       <group ref={group}>
@@ -241,6 +295,7 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
             restitution={0.6}
             linearDamping={0.3}
             angularDamping={0.4}
+            ccd
             enabledTranslations={[true, true, false]}
             linearVelocity={spec.id.startsWith('drop-') ? [0, -260, 0] : [0, 0, 0]}
           >
@@ -257,15 +312,39 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
   );
 }
 
-/** Bodies Rapier still knows about (a body freed by an unmount must never be touched). */
+/** A body Rapier still knows about (one freed by an unmount must never be touched). */
+function isLive(b: RapierRigidBody): boolean {
+  try {
+    return b.isValid();
+  } catch {
+    return false;
+  }
+}
+
 function liveBodies(map: Map<string, RapierRigidBody>): RapierRigidBody[] {
-  return [...map.values()].filter((b) => {
-    try {
-      return b.isValid();
-    } catch {
-      return false;
-    }
-  });
+  return [...map.values()].filter(isLive);
+}
+
+/** A shape's aimless float: a heading that drifts, a cruising speed and a slow spin. */
+interface Wander {
+  heading: number;
+  cruise: number;
+  spin: { x: number; y: number; z: number };
+}
+
+const between = ([lo, hi]: readonly [number, number]) => lo + Math.random() * (hi - lo);
+
+function newWander(speed: number): Wander {
+  const sign = () => (Math.random() < 0.5 ? -1 : 1);
+  return {
+    heading: Math.random() * Math.PI * 2,
+    cruise: between(CRUISE) * speed,
+    spin: {
+      x: between(SPIN) * speed * sign(),
+      y: between(SPIN) * speed * sign(),
+      z: between(SPIN) * speed * 0.5 * sign(),
+    },
+  };
 }
 
 /** Invisible walls at the window edges; shapes bounce off them and each other. */
@@ -298,7 +377,14 @@ function isBackdrop(target: EventTarget | null): boolean {
  * `pressed` is true while the main button is held after pressing on the backdrop.
  */
 function usePointer(width: number, height: number) {
-  const pointer = useRef({ x: 99999, y: 99999, vx: 0, vy: 0, t: 0, inside: false, pressed: false });
+  const pointer = useRef({
+    x: 99999,
+    y: 99999,
+    inside: false,
+    pressed: false,
+    /** Recent positions, for a smooth throw velocity. */
+    samples: [] as { x: number; y: number; t: number }[],
+  });
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       if (e.button === 0 && isBackdrop(e.target)) pointer.current.pressed = true;
@@ -308,16 +394,14 @@ function usePointer(width: number, height: number) {
     };
     const onMove = (e: PointerEvent) => {
       const now = performance.now();
-      const x = e.clientX - width / 2;
-      const y = height / 2 - e.clientY;
       const p = pointer.current;
-      const dt = Math.max(1, now - p.t) / 1000;
-      p.vx = p.inside ? (x - p.x) / dt : 0;
-      p.vy = p.inside ? (y - p.y) / dt : 0;
-      p.x = x;
-      p.y = y;
-      p.t = now;
+      p.x = e.clientX - width / 2;
+      p.y = height / 2 - e.clientY;
       p.inside = true;
+      p.samples.push({ x: p.x, y: p.y, t: now });
+      while (p.samples.length > 2 && now - (p.samples[0]?.t ?? now) > THROW_WINDOW_MS * 2) {
+        p.samples.shift();
+      }
     };
     const onLeave = () => {
       pointer.current.inside = false;
@@ -411,9 +495,24 @@ function Dragger({
       held.current = null;
       dragging = false;
       body.setBodyType(DYNAMIC, true);
-      const p = pointer.current;
-      const clamp = (v: number) => Math.max(-1500, Math.min(1500, v));
-      body.setLinvel({ x: clamp(p.vx), y: clamp(p.vy), z: 0 }, true);
+      // Throw with the pointer's velocity over the last ~80ms: gentle, and capped.
+      const now = performance.now();
+      const recent = pointer.current.samples.filter((q) => now - q.t <= THROW_WINDOW_MS);
+      const first = recent[0];
+      const last = recent.at(-1);
+      let vx = 0;
+      let vy = 0;
+      if (first && last && last.t > first.t) {
+        const dt = (last.t - first.t) / 1000;
+        vx = ((last.x - first.x) / dt) * THROW_SCALE;
+        vy = ((last.y - first.y) / dt) * THROW_SCALE;
+        const sp = Math.hypot(vx, vy);
+        if (sp > THROW_MAX) {
+          vx *= THROW_MAX / sp;
+          vy *= THROW_MAX / sp;
+        }
+      }
+      body.setLinvel({ x: vx, y: vy, z: 0 }, true);
     };
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('pointerup', onUp);
@@ -426,8 +525,11 @@ function Dragger({
   useFrame(() => {
     const body = held.current;
     if (!body) return;
+    // A dragged shape can't leave the window either.
     const p = pointer.current;
-    body.setNextKinematicTranslation({ x: p.x, y: p.y, z: 0 });
+    const x = Math.max(-width / 2 + 40, Math.min(width / 2 - 40, p.x));
+    const y = Math.max(-height / 2 + 40, Math.min(height / 2 - 40, p.y));
+    body.setNextKinematicTranslation({ x, y, z: 0 });
   });
   return null;
 }
