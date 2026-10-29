@@ -100,6 +100,8 @@ function blankRun(projectId: string, runNumber: number, mode: Mode, brief: Brief
 export interface MockRunEngineOptions {
   /** Script and fixtures for a project; unknown projects get a generic profile. */
   profileFor: (projectId: string) => MockProfile;
+  /** The project's saved brief, used when it has no run yet. */
+  briefFor?: (projectId: string) => Brief;
 }
 
 /**
@@ -143,9 +145,13 @@ export class MockRunEngine implements RunEngine {
   startInterview(projectId: string): void {
     const previous = this.runs.get(projectId);
     const ctrl = previous ?? this.create(projectId);
-    const brief = previous?.state.brief ?? {};
-    const returning = previous !== undefined && previous.state.phase === 'done';
-    if (returning) ctrl.runNumber += 1;
+    const saved = this.options.briefFor?.(projectId) ?? {};
+    const brief = previous?.state.brief ?? saved;
+    // A finished run, or a project with a saved brief, starts with "Anything changed?".
+    const returning =
+      (previous !== undefined && previous.state.phase === 'done') ||
+      (previous === undefined && Object.values(saved).some(Boolean));
+    if (returning && previous) ctrl.runNumber += 1;
     this.resetController(ctrl);
     ctrl.state = blankRun(projectId, ctrl.runNumber, ctrl.state.mode, returning ? brief : {});
     ctrl.interviewStep = returning ? ctrl.profile.interview.length : 0;

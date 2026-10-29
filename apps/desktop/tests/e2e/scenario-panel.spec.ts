@@ -17,6 +17,9 @@ async function openPanel(page: Page) {
 test.beforeEach(async () => {
   launched = await launchApp();
   await launched.page.setViewportSize({ width: 1440, height: 900 });
+  await launched.page.evaluate(() => {
+    window.location.hash = '#/debug';
+  });
   await expect(launched.page.getByRole('heading', { name: 'Run state' })).toBeVisible();
 });
 
@@ -60,15 +63,6 @@ test('switches scenarios', async () => {
 
   await panel(page).getByRole('button', { name: 'Done', exact: true }).click();
   await expect(runTitle(page)).toContainText('done · idle');
-});
-
-test('screens that arrive later are disabled', async () => {
-  const { page } = launched;
-  await openPanel(page);
-  await expect(
-    panel(page).getByRole('button', { name: /Welcome \(first launch\)/ }),
-  ).toBeDisabled();
-  await expect(panel(page).getByRole('button', { name: /^Settings/ })).toBeDisabled();
 });
 
 test('speed, restart and jump to beat', async () => {

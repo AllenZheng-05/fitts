@@ -3,10 +3,26 @@
 
 export type Platform = 'darwin' | 'win32' | 'linux';
 
-/** The typed API the preload exposes as `window.fitts`. */
+/** The typed API the preload exposes as `window.fitts` (SPEC §3, §13). */
 export interface FittsBridge {
   platform: Platform;
+  /** Native folder picker. Resolves to the chosen path, or null when cancelled. */
+  pickFolder(): Promise<string | null>;
+  /** Native save dialog that writes `content` to the chosen file. Resolves to the path. */
+  saveTextFile(suggestedName: string, content: string): Promise<string | null>;
+  /** A real OS notification. Clicking it focuses the window and calls the click handler. */
+  notify(notification: { id: string; title: string; body: string }): void;
+  /** Called with the notification id when the user clicks one. Returns an unsubscribe. */
+  onNotificationClick(handler: (id: string) => void): () => void;
 }
+
+/** IPC channel names shared by main and preload. */
+export const IPC = {
+  pickFolder: 'fitts:pick-folder',
+  saveTextFile: 'fitts:save-text-file',
+  notify: 'fitts:notify',
+  notificationClick: 'fitts:notification-click',
+} as const;
 
 export type Mode = 'plan' | 'ask-every' | 'ask-unsure' | 'autonomous' | 'dangerous';
 /** Nielsen severity: 0 not a problem … 4 catastrophic. */

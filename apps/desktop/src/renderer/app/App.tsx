@@ -1,6 +1,12 @@
 import { lazy, Suspense, useSyncExternalStore } from 'react';
 import { ToastHost } from '../components/overlay/ToastHost';
-import { copy } from '../copy';
+import { AddProjectDialog } from '../features/projects/AddProjectDialog';
+import { PauseConfirm } from '../features/projects/PauseConfirm';
+import { Settings } from '../features/settings/Settings';
+import { Welcome } from '../features/welcome/Welcome';
+import { Workspace } from '../features/workspace/Workspace';
+import { useUi } from '../state/ui';
+import { useShortcuts } from './useShortcuts';
 
 // Dev tools are removed from production builds: __FITTS_DEV_TOOLS__ is false there.
 const Gallery = __FITTS_DEV_TOOLS__
@@ -23,32 +29,30 @@ const subscribeHash = (cb: () => void) => {
 };
 const useHash = () => useSyncExternalStore(subscribeHash, () => window.location.hash);
 
-/**
- * M2: dev builds open the run debug view (`#/gallery` for components); production shows
- * the scaffold page. The real router (Welcome / Workspace / Settings) arrives in M3.
- */
+/** Routes between Welcome, Workspace and Settings (SPEC §4). Dev builds add #/gallery and #/debug. */
 export function App() {
+  useShortcuts();
   const hash = useHash();
-  const page =
-    Gallery && hash === '#/gallery' ? (
-      <Gallery />
-    ) : RunDebug ? (
-      <RunDebug />
-    ) : (
-      <main className="flex h-full flex-col items-center justify-center gap-2 bg-paper">
-        <h1 className="font-display text-[68px] leading-[0.98] font-extrabold tracking-[-0.035em] text-ink">
-          {copy.app.name}
-        </h1>
-        <p className="text-[13px] text-muted">{copy.app.scaffoldCaption}</p>
-      </main>
-    );
+  const screen = useUi((s) => s.screen);
+
+  let page;
+  if (Gallery && hash === '#/gallery') page = <Gallery />;
+  else if (RunDebug && hash === '#/debug') page = <RunDebug />;
+  else if (screen === 'settings') page = <Settings />;
+  else if (screen === 'workspace') page = <Workspace />;
+  else page = <Welcome />;
 
   return (
     <>
-      <Suspense fallback={null}>
-        {page}
-        {ScenarioPanel && <ScenarioPanel />}
-      </Suspense>
+      {/* Separate boundaries: the page never waits for the dev panel's code to load. */}
+      <Suspense fallback={null}>{page}</Suspense>
+      {ScenarioPanel && (
+        <Suspense fallback={null}>
+          <ScenarioPanel />
+        </Suspense>
+      )}
+      <AddProjectDialog />
+      <PauseConfirm />
       <ToastHost />
     </>
   );

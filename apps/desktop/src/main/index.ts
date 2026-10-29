@@ -1,4 +1,5 @@
 import { app, BrowserWindow, session } from 'electron';
+import { registerBridge } from './bridge';
 import { buildAppMenu } from './menu';
 import { createMainWindow } from './window';
 
@@ -14,6 +15,7 @@ void app.whenReady().then(() => {
     callback(false),
   );
 
+  registerBridge();
   buildAppMenu();
   createMainWindow();
 

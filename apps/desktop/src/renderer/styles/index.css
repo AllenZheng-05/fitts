@@ -52,6 +52,7 @@
 
   --radius-*: initial;
   --radius-tag: var(--radius-tag);
+  --radius-label: var(--radius-label);
   --radius-row: var(--radius-row);
   --radius-control: var(--radius-control);
   --radius-card: var(--radius-card);

@@ -48,6 +48,7 @@
 
   /* Radius · §5.3 */
   --radius-tag: 6px; /* tiny tags: NOW / WITH FIX, pointing-at chip */
+  --radius-label: 8px; /* emblem layer tag and formula label */
   --radius-row: 10px; /* list rows, toolbar buttons, URL field, inline cards */
   --radius-control: 12px;
   --radius-card: 14px; /* chat cards, Welcome CTA */

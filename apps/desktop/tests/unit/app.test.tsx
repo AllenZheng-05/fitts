@@ -10,9 +10,10 @@ function allStrings(value: unknown): string[] {
 }
 
 describe('App', () => {
-  it('opens the run view in dev builds', async () => {
+  it('opens Welcome on first launch', () => {
     render(<App />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Run state' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: copy.welcome.title })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: copy.welcome.open })).toBeDisabled();
   });
 });
 

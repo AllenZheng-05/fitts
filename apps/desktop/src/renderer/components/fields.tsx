@@ -1,5 +1,11 @@
 import { ChevronDown } from 'lucide-react';
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
+import {
+  useId,
+  type ComponentProps,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+} from 'react';
 import { cx } from '../lib/cx';
 
 const LABEL = 'text-[14px] font-semibold text-ink';
@@ -62,7 +68,7 @@ export function Select({
   );
 }
 
-interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+interface TextFieldProps extends Omit<ComponentProps<'input'>, 'size'> {
   label: string;
   hideLabel?: boolean;
   hint?: ReactNode;

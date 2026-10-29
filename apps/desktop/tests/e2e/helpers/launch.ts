@@ -6,15 +6,34 @@ import { join, resolve } from 'node:path';
 export interface LaunchedApp {
   app: ElectronApplication;
   page: Page;
-  close: () => Promise<void>;
+  /** The user-data folder; pass it to the next launch to test persistence. */
+  userData: string;
+  close: (opts?: { keepUserData?: boolean }) => Promise<void>;
+}
+
+/** Where the e2e folder picker "chooses" by default. */
+export const E2E_FOLDER = '/Users/allen/code/fitts/demo/chat';
+
+interface LaunchOptions {
+  /** Reuse a user-data folder from an earlier launch. */
+  userData?: string;
+  env?: Record<string, string>;
 }
 
 /** Launches the built app with a throwaway user-data folder. */
-export async function launchApp(): Promise<LaunchedApp> {
-  const userData = mkdtempSync(join(tmpdir(), 'fitts-e2e-'));
+export async function launchApp({
+  userData,
+  env: extra = {},
+}: LaunchOptions = {}): Promise<LaunchedApp> {
+  const dir = userData ?? mkdtempSync(join(tmpdir(), 'fitts-e2e-'));
   // Shells spawned by VS Code inherit ELECTRON_RUN_AS_NODE=1, which turns Electron into
   // plain Node and makes the launch fail.
-  const env: Record<string, string> = { FITTS_USER_DATA: userData };
+  const env: Record<string, string> = {
+    FITTS_USER_DATA: dir,
+    FITTS_E2E_PICK_FOLDER: E2E_FOLDER,
+    FITTS_E2E_SAVE_PATH: join(dir, 'report.md'),
+    ...extra,
+  };
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] ??= value;
   }
@@ -28,9 +47,10 @@ export async function launchApp(): Promise<LaunchedApp> {
   return {
     app,
     page,
-    close: async () => {
+    userData: dir,
+    close: async ({ keepUserData = false } = {}) => {
       await app.close();
-      rmSync(userData, { recursive: true, force: true });
+      if (!keepUserData) rmSync(dir, { recursive: true, force: true });
     },
   };
 }

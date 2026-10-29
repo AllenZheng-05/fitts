@@ -81,6 +81,7 @@ export function Popover({
     initialFocusRef,
     closeOnOutsidePointer: true,
     ignoreRefs: [anchorRef],
+    fallbackFocusRef: anchorRef,
   });
 
   if (!open || !pos) return null;

@@ -26,6 +26,11 @@ interface OverlayOptions {
   closeOnOutsidePointer?: boolean;
   /** Elements that count as "inside" for outside clicks, such as the trigger. */
   ignoreRefs?: RefObject<HTMLElement | null>[];
+  /**
+   * Where focus goes on close when nothing was focused at open, e.g. the project button
+   * when ⌘P opened the menu.
+   */
+  fallbackFocusRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -39,6 +44,7 @@ export function useOverlay({
   initialFocusRef,
   closeOnOutsidePointer = false,
   ignoreRefs = [],
+  fallbackFocusRef,
 }: OverlayOptions): string {
   const id = useId();
   const onCloseRef = useRef(onClose);
@@ -51,7 +57,8 @@ export function useOverlay({
   useEffect(() => {
     if (!open) return;
     const { push, remove } = useOverlayStack.getState();
-    const returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const active = document.activeElement;
+    const returnTo = active instanceof HTMLElement && active !== document.body ? active : null;
     push(id);
 
     const container = containerRef.current;
@@ -83,6 +90,7 @@ export function useOverlay({
       window.removeEventListener('pointerdown', onPointerDown, true);
       remove(id);
       if (returnTo?.isConnected) returnTo.focus();
+      else fallbackFocusRef?.current?.focus();
     };
     // Re-run only when the overlay opens or closes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

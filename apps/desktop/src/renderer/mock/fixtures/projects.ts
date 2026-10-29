@@ -26,7 +26,7 @@ export const DEMO_PROJECTS: Project[] = [
     name: 'hartwell-site',
     kind: 'local',
     folder: '~/code/hartwell-site',
-    url: 'localhost:4321',
+    url: 'localhost:3000',
     framework: 'Astro 5',
     devCommand: 'npm run dev',
     repo: 'hartwell-funeral/site',
@@ -41,12 +41,15 @@ export const DEMO_PROJECTS: Project[] = [
   {
     id: PORTFOLIO,
     name: 'portfolio',
-    kind: 'local',
-    folder: '~/code/portfolio',
-    url: 'localhost:3000',
-    framework: 'Next.js 16',
-    devCommand: 'pnpm dev',
+    kind: 'live',
+    url: 'allenzheng.dev',
     brief: {},
     createdAt: '2026-10-27T18:00:00.000Z',
   },
 ];
+
+/** "Welcome back" captions for the demo projects' earlier runs (States.html). */
+export const LAST_RUN_CAPTIONS: Record<string, string> = {
+  [DEMO_CHAT]: 'Last run yesterday · 24 fixes · 9 PRs',
+  [HARTWELL]: 'Last run Oct 26 · redesign PR open',
+};

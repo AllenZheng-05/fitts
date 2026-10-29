@@ -212,3 +212,70 @@ RunEngine method.
 
 **Dev builds open the run debug view.** Until the M3 router exists, `pnpm dev` and e2e builds
 show `RunState` as JSON with buttons that drive the engine. Production shows the scaffold page.
+
+## M3 — App navigation, Welcome, Settings, projects
+
+**Navigation is a small store, not a URL router.** `state/ui.ts` holds the screen (Welcome /
+Workspace / Settings), the Settings tab, where Settings returns to, and which overlay is
+open. Launch shows Welcome when there are no projects, otherwise the last opened project's
+workspace (§4). Dev builds keep `#/gallery` and `#/debug` as hash routes.
+
+**The bridge is finished in one go.** `window.fitts` now has `pickFolder`, `saveTextFile`
+and `notify` / `onNotificationClick` (§3), implemented in `main/bridge.ts` with real native
+dialogs and Electron notifications. E2E runs answer the dialogs through
+`FITTS_E2E_PICK_FOLDER` and `FITTS_E2E_SAVE_PATH`, because tests can't click OS dialogs.
+
+**API keys are never stored.** Settings only remembers *that* a key was added (a boolean per
+provider). Mock validation is "8+ characters works", 600ms after typing stops (§6.1). Phase 2
+stores keys in the OS keychain.
+
+**Mock detection decides which demo a folder is.** A folder ending in `demo/chat` becomes the
+scripted demo/chat project; `hartwell` and `portfolio` match their demos; anything else gets
+a generic profile named after the folder. Ids are made unique when a different folder
+detects to the same name.
+
+**Demo fixtures follow Projects.html.** hartwell-site runs on localhost:3000, and portfolio
+is the verified live site `allenzheng.dev` ("never audited"). The Add-project reference's
+`~/code/portfolio` folder detects as Next.js 15 on localhost:3001 without the plugin.
+
+**Brief round-trip.** The engine takes the project's saved brief when a project has no run
+yet (`briefFor`). A project with a saved brief starts with "Anything changed since last
+time?". Whatever the run learns is saved back to the project.
+
+**Opening a project with no run starts its interview** in the default mode from Welcome or
+Settings. This covers relaunch, where runs don't survive restarts (§4).
+
+**Settings' permission rows set the default mode and the current run's mode.** The header
+select (M4) changes only the run. Dangerous mode remembers the run's previous mode and
+restores it when turned off; it is never persisted (it "ends with this run").
+
+**Settings returns to Welcome** when it was opened from Welcome (the "Add ElevenLabs or
+Baseten" link), with a "Back" button instead of "Back to workspace".
+
+**Esc on Settings** goes back only when no overlay is open, so Esc still closes the topmost
+overlay first (§7.2).
+
+**Overlay focus falls back to the trigger.** When ⌘P opens the project menu nothing is
+focused, so closing it returns focus to the project button.
+
+**Pause-the-other-run confirm** is implemented as `requestStartAudit`, used by every "Start
+the audit" button from M4 on (§6.9).
+
+**Remove project** confirms in a modal with a red "Remove from Fitts" button. It is
+destructive for Fitts's own data, so red is allowed. The copy says the folder stays.
+
+**Welcome "Allow microphone / notifications"** are sun-tint pill buttons (as in the
+reference) that turn into mint chips with a check.
+
+**Add project:** the two big tabs are a `segmented` variant of `Tabs`. "Change" next to the
+dev command edits it inline. The live-site token has a copy button that confirms with a
+toast. "Check now" verifies after 1s (§6.11).
+
+**New tokens:** `--radius-label` 8px (emblem tag and formula label), plus a `dashed` button
+variant (ink dashed border) for "+ Add a project".
+
+**The Scenario panel portals to `<body>`.** A modal makes `#root` inert, which made the dev
+panel unclickable while a dialog was open.
+
+**The page and the Scenario panel have separate Suspense boundaries**, so the page never
+waits for the dev panel's lazy chunk to load.

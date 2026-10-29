@@ -2,6 +2,7 @@
 // that puts the mock engine into that state.
 import type { EdgeStateKind, Mode } from '@fitts/schema';
 import type { MockRunEngine } from '../../state/mock-engine';
+import { LIVE_FINDINGS } from '../fixtures/demo-chat';
 import { DEMO_CHAT, HARTWELL, PORTFOLIO } from '../fixtures/projects';
 import { demoChatAudit } from './demo-chat';
 import { hartwellAudit } from './hartwell';
@@ -25,6 +26,8 @@ export interface ScenarioEntry {
   screen: ScenarioScreen;
   /** The milestone that builds this entry's screen; the entry is disabled until then. */
   arrives?: 'M3' | 'M4' | 'M5' | 'M6' | 'M7';
+  /** For `finding`: which finding the Finding panel opens on. */
+  findingId?: string;
   setup: (engine: MockRunEngine) => void;
 }
 
@@ -114,6 +117,7 @@ export const SCENARIOS: ScenarioEntry[] = [
     projectId: DEMO_CHAT,
     screen: 'finding',
     arrives: 'M6',
+    findingId: LIVE_FINDINGS.names.id,
     setup: (engine) => demoAt(engine, 'first-findings'),
   },
   {
@@ -123,7 +127,8 @@ export const SCENARIOS: ScenarioEntry[] = [
     projectId: DEMO_CHAT,
     screen: 'finding',
     arrives: 'M6',
-    setup: (engine) => demoAt(engine, 'finding-target', 'autonomous'),
+    findingId: LIVE_FINDINGS.names.id,
+    setup: (engine) => demoAt(engine, 'rolled-back', 'autonomous'),
   },
   {
     id: 'gate',
@@ -169,7 +174,11 @@ export const SCENARIOS: ScenarioEntry[] = [
     projectId: DEMO_CHAT,
     screen: 'project-menu',
     arrives: 'M3',
-    setup: (engine) => demoAt(engine, 'first-findings'),
+    // Projects.html: demo/chat finished, hartwell-site running in the background.
+    setup: (engine) => {
+      demoAt(engine, 'done');
+      engine.loadAudit(HARTWELL, 'autonomous');
+    },
   },
   {
     id: 'add-project',

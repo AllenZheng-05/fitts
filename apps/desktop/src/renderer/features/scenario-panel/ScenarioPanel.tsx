@@ -1,6 +1,7 @@
 // Dev-only Scenario panel (SPEC §9.6): jump to any screen or edge state.
 import { X } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../../components/Button';
 import { Select, Switch } from '../../components/fields';
 import { IconButton } from '../../components/IconButton';
@@ -10,10 +11,20 @@ import { SCENARIOS, type ScenarioEntry, type ScenarioScreen } from '../../mock/s
 import { getMockEngine } from '../../state/engine';
 import type { Speed } from '../../state/mock-engine';
 import { useRunStore } from '../../state/run-store';
+import { loadScenario } from '../../state/scenario-loader';
 import { useSettings } from '../../state/settings';
 
 /** Screens the app can show so far; other entries stay disabled until their milestone. */
-const AVAILABLE_SCREENS: ScenarioScreen[] = ['workspace', 'finding', 'brief'];
+const AVAILABLE_SCREENS: ScenarioScreen[] = [
+  'welcome',
+  'welcome-back',
+  'workspace',
+  'settings',
+  'project-menu',
+  'add-project',
+  'brief',
+  'finding',
+];
 
 const GROUPS: ScenarioEntry['group'][] = ['Runs', 'Screens', 'Edge states'];
 
@@ -24,7 +35,6 @@ export function ScenarioPanel() {
   const [open, setOpen] = useState(false);
   const [speed, setSpeed] = useState<Speed>(getMockEngine().getSpeed());
   const scenarioId = useRunStore((s) => s.scenarioId);
-  const loadScenario = useRunStore((s) => s.loadScenario);
   const activeProjectId = useRunStore((s) => s.activeProjectId);
   // Re-read the script whenever the active run changes.
   useRunStore((s) => s.runs[s.activeProjectId]);
@@ -47,7 +57,8 @@ export function ScenarioPanel() {
   const engine = getMockEngine();
   const script = engine.getScript(activeProjectId);
 
-  return (
+  // Portalled outside #root so it stays usable while a modal makes the app inert.
+  return createPortal(
     <aside
       aria-labelledby={headingId}
       className="fixed bottom-5 left-5 z-[70] flex max-h-[min(640px,calc(100vh-40px))] w-[320px] flex-col overflow-hidden rounded-sheet border-[1.5px] border-ink bg-card shadow-hero"
@@ -133,6 +144,7 @@ export function ScenarioPanel() {
         />
         <Switch label="Fitts speaks out loud" checked={speaksAloud} onChange={setSpeaksAloud} />
       </div>
-    </aside>
+    </aside>,
+    document.body,
   );
 }
