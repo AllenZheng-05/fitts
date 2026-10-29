@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Chip } from '../../components/Chip';
 import { Button } from '../../components/Button';
 import { copy } from '../../copy';
+import { format } from '../../lib/format';
 import { useProject } from '../../state/projects';
 import { useActiveRun, useRunStore } from '../../state/run-store';
 import { useUi } from '../../state/ui';
@@ -37,12 +38,14 @@ export function Workspace() {
     <div data-backdrop className="flex h-full flex-col">
       <DangerBanner />
       <Header run={run} projectId={projectId} name={name} />
-      <div data-backdrop className="flex min-h-0 flex-1 gap-3.5 px-5 pt-1 pb-5">
+      <main data-backdrop className="flex min-h-0 flex-1 gap-3.5 px-5 pt-1 pb-5">
+        {/* The page's one h1, for screen readers; the header shows the same thing visually. */}
+        <h1 className="sr-only">{format(copy.workspace.heading, { name })}</h1>
         {run?.phase === 'interview' && <InterviewLayout run={run} />}
         {run?.phase === 'audit' &&
           (isRedesigning(run) ? <RedesignLayout run={run} /> : <AuditLayout run={run} />)}
         {run?.phase === 'done' && <DoneLayout run={run} />}
-      </div>
+      </main>
       {run && <GateModal run={run} />}
     </div>
   );
@@ -59,9 +62,8 @@ function InterviewLayout({ run }: { run: RunState }) {
         interactive
         toolbarEnd={
           <>
-            <Chip tone="sun" className="px-2.5 py-1.5">
-              {copy.site.driving}
-            </Chip>
+            {/* Not "You're driving": that means you took the wheel from Fitts mid-run. */}
+            <Chip className="px-2.5 py-1.5">{copy.site.yoursToClick}</Chip>
             <Button
               size="sm"
               className="px-3.5 text-[14px]"

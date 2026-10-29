@@ -6,6 +6,7 @@ import { IconButton } from '../../components/IconButton';
 import { copy } from '../../copy';
 import { cx } from '../../lib/cx';
 import { useSettings } from '../../state/settings';
+import { useUi } from '../../state/ui';
 import { useSpeech } from '../../state/speech';
 import { ChatList } from './ChatList';
 import { Composer } from './Composer';
@@ -24,7 +25,8 @@ export function ChatPanel({
 }) {
   const speaksAloud = useSettings((s) => s.speaksAloud);
   const speaking = useSpeech((s) => s.speaking);
-  const status = chatStatus(run, speaking);
+  const micLive = useUi((s) => s.micListening);
+  const status = chatStatus(run, speaking, micLive);
   const style = STATUS_STYLE[status];
   const titleId = useId();
 

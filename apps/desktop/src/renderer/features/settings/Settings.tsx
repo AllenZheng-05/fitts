@@ -34,7 +34,7 @@ export function Settings() {
   const backToWorkspace = returnTo === 'workspace' && hasProject;
 
   return (
-    <div data-backdrop className="relative flex h-full flex-col">
+    <main data-backdrop className="relative flex h-full flex-col">
       <div className="flex flex-none items-center gap-3 px-7 py-[18px]">
         <h1 className="mr-auto font-display text-[32px] font-extrabold tracking-[-0.02em]">
           {copy.settings.title}
@@ -68,7 +68,7 @@ export function Settings() {
         {tab === 'keys' && <KeysTab />}
         {tab === 'projects' && <ProjectsTab />}
       </div>
-    </div>
+    </main>
   );
 }
 

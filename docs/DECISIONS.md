@@ -751,3 +751,39 @@ SPEC §7.7's "Finish on Economy").**
 - A live site still needs a working API key. Until the key works the link is disabled, with
   "Add a key that works first."
 - Clicking it saves the key and the chosen mode, just as "Open my project" does.
+
+**Frontend audit fixes (first group).**
+- **Finding panel in short windows:** while a finding is open in a window under 860px tall,
+  the findings tray hides, so the panel gets the height and its preview stays visible. The
+  footer buttons fit on one row.
+- **"Now:" row:** shows only while Fitts is acting.
+  - Paused: "Paused · up next: …" (neutral).
+  - Waiting on you: "Waiting on you · then: …" (sun).
+  - Rewound: "Looking back at step N".
+  - None of these offer the ⌘. stop hint, because nothing is running.
+- **Site down copy:** now says "I'm holding here until it's back", not "I've paused", so it
+  doesn't contradict the header's Pause button.
+- **Status line:** "Listening" now means the mic is live. While the interview waits for an
+  answer, the status reads "Your turn" (it reads "Working" while Fitts types).
+- **Interview chip:** the site-view chip during the interview reads "Yours to click · I
+  haven't touched anything". "You're driving" is kept for Take the wheel.
+- **Live sites are audit-only in the UI:** no Before / after toggle. The Finding panel offers
+  "Copy the fix" and "Not a problem" with a one-line explanation, instead of Fix it / Change
+  the fix.
+- **Nothing found:** the run's counters match the card. All routes are done, steps and
+  controls are full, and there's a plausible elapsed time. A "Finish the run" button goes to
+  Done, which says "Nothing to change this time…" and labels the preview "Your site as it is
+  now". The tray says "No findings. I tried every control…" once the run is complete.
+- **Site view route:** with nothing pointed at, the site view follows the route the site map
+  is testing, so the URL bar and the site map agree (for example, Uncommitted changes at the
+  start of a run).
+- **Background project needs you:** the project button gets a sun dot and an accessible
+  "1 other project needs you". The project menu row says "Needs you" instead of "Running".
+- **Rewind:** shown as a "Rewound · step N" chip next to "Back to live", not as text
+  appended to the address. Taking the wheel leaves the rewound moment first.
+- **Quick wins:**
+  - shorter run placeholder ("Interject, or say 'Fitts, stop'")
+  - the Brief has Cancel and example placeholders
+  - "1 issue" singular
+  - timeline dots have 24px targets
+  - Workspace and Settings have a `<main>` landmark, and the workspace has an sr-only h1

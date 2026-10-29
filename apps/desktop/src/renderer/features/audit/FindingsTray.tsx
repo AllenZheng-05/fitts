@@ -43,7 +43,11 @@ export function FindingsTray({ run }: { run: RunState }) {
   return (
     <section
       aria-labelledby="tray-title"
-      className="flex flex-none flex-col gap-2.5 rounded-panel border-[1.5px] border-ink bg-card px-3.5 py-3 shadow-panel"
+      className={cx(
+        'flex flex-none flex-col gap-2.5 rounded-panel border-[1.5px] border-ink bg-card px-3.5 py-3 shadow-panel',
+        // In a short window an open Finding panel needs the height more than the tray does.
+        selectedId !== null && '[@media(max-height:859px)]:hidden',
+      )}
     >
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="tray-title" className="mr-auto font-display text-[16px] font-bold">
@@ -85,7 +89,11 @@ export function FindingsTray({ run }: { run: RunState }) {
         })}
         {shown.length === 0 && (
           <li className="self-center text-[14px] text-muted">
-            {run.findings.length === 0 ? copy.audit.noFindings : copy.audit.noMatches}
+            {run.findings.length > 0
+              ? copy.audit.noMatches
+              : run.controlsTried.done >= run.controlsTried.total
+                ? copy.audit.noFindingsDone
+                : copy.audit.noFindings}
           </li>
         )}
       </ul>
@@ -123,13 +131,19 @@ function Timeline({ run }: { run: RunState }) {
             aria-label={format(copy.audit.rewindTo, { title: f.title })}
             aria-pressed={run.rewindStep === f.stepIndex}
             onClick={() => getEngine().rewindTo(run.projectId, f.stepIndex)}
-            className={cx(
-              'absolute top-0.5 size-[18px] -translate-x-1/2 rounded-full border-[1.5px] border-ink hover:scale-110',
-              DOT_TONE[f.severity],
-              run.rewindStep === f.stepIndex && 'ring-2 ring-cobalt ring-offset-1',
-            )}
+            // A 24px target (WCAG 2.5.8) around the 18px dot.
+            className="group absolute -top-px flex size-6 -translate-x-1/2 items-center justify-center rounded-full"
             style={{ left: pct(f.stepIndex / total) }}
-          />
+          >
+            <span
+              aria-hidden="true"
+              className={cx(
+                'size-[18px] rounded-full border-[1.5px] border-ink group-hover:scale-110',
+                DOT_TONE[f.severity],
+                run.rewindStep === f.stepIndex && 'ring-2 ring-cobalt ring-offset-1',
+              )}
+            />
+          </button>
         ))}
         <span
           aria-hidden="true"

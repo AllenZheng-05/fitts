@@ -58,12 +58,20 @@ function BriefForm({ projectId, onDone }: { projectId: string; onDone: () => voi
           label={copy.brief.fields[key]}
           size="md"
           value={brief[key] ?? ''}
+          placeholder={
+            key === 'flows' || key === 'outOfScope' ? copy.brief.placeholders[key] : undefined
+          }
           onChange={(e) => setBrief((b) => ({ ...b, [key]: e.target.value || undefined }))}
         />
       ))}
-      <Button type="submit" variant="primary" size="sm" className="self-end">
-        {copy.brief.save}
-      </Button>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" onClick={onDone}>
+          {copy.overlay.cancel}
+        </Button>
+        <Button type="submit" variant="primary" size="sm">
+          {copy.brief.save}
+        </Button>
+      </div>
     </form>
   );
 }

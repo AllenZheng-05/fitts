@@ -35,17 +35,7 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
   return (
     <div className="flex flex-none flex-col gap-2 border-t border-ink px-3.5 py-2.5">
       {above}
-      {auditing && run.nowText && (
-        <div className="flex items-center gap-2 rounded-row bg-cobalt-tint px-2.5 py-[7px] text-[13px]">
-          <span aria-hidden="true" className="size-2 flex-none rounded-full bg-cobalt" />
-          <span className="min-w-0 flex-1">
-            {copy.composer.now} {run.nowText}
-          </span>
-          <span className="font-mono text-[12px] text-cobalt-deep">
-            <Kbd keys={['mod', '.']} /> {copy.composer.stopsIt}
-          </span>
-        </div>
-      )}
+      {auditing && <NowRow run={run} acting={acting} />}
       {auditing &&
         run.queued.map((text, i) => (
           <div
@@ -132,6 +122,54 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
           : talkMode === 'wake'
             ? copy.composer.hintWake
             : copy.composer.hint}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * What Fitts is doing (SPEC §6.4). "Now: … · ⌘. stops it" only while Fitts is actually
+ * acting; paused, waiting on you or rewound, it says so and names what comes next instead.
+ */
+function NowRow({ run, acting }: { run: RunState; acting: boolean }) {
+  const row = 'flex items-center gap-2 rounded-row px-2.5 py-[7px] text-[13px]';
+  if (run.rewindStep !== undefined) {
+    return (
+      <div className={cx(row, 'bg-neutral-tint text-neutral-ink')}>
+        <span aria-hidden="true" className="size-2 flex-none rounded-full bg-ink-faint" />
+        <span className="min-w-0 flex-1">
+          {format(copy.composer.rewoundAt, { step: run.rewindStep })}
+        </span>
+      </div>
+    );
+  }
+  if (!run.nowText || run.activity === 'user-driving') return null;
+  if (acting) {
+    return (
+      <div className={cx(row, 'bg-cobalt-tint')}>
+        <span aria-hidden="true" className="size-2 flex-none rounded-full bg-cobalt" />
+        <span className="min-w-0 flex-1">
+          {copy.composer.now} {run.nowText}
+        </span>
+        <span className="font-mono text-[12px] text-cobalt-deep">
+          <Kbd keys={['mod', '.']} /> {copy.composer.stopsIt}
+        </span>
+      </div>
+    );
+  }
+  const waiting = run.activity === 'waiting-on-user';
+  return (
+    <div
+      className={cx(row, waiting ? 'bg-sun-tint text-sun-ink' : 'bg-neutral-tint text-neutral-ink')}
+    >
+      <span
+        aria-hidden="true"
+        className={cx('size-2 flex-none rounded-full', waiting ? 'bg-sun' : 'bg-ink-faint')}
+      />
+      <span className="min-w-0 flex-1">
+        {format(waiting ? copy.composer.waitingNext : copy.composer.pausedNext, {
+          action: run.nowText,
+        })}
       </span>
     </div>
   );

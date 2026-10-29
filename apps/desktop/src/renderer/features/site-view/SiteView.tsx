@@ -16,8 +16,6 @@ interface SiteViewProps {
   projectId: string;
   /** Items after the address field: chips and toggles that differ by workspace state. */
   toolbarEnd?: ReactNode;
-  /** Text after the address, e.g. " · rewound to step 42". */
-  addressSuffix?: string;
   /** Host shown in the address instead of the project's (the Done preview server). */
   addressHost?: string | undefined;
   /** Can the user click inside the site? (Interview, or after "Take the wheel".) */
@@ -43,7 +41,6 @@ interface SiteViewProps {
 export function SiteView({
   projectId,
   toolbarEnd,
-  addressSuffix = '',
   addressHost,
   interactive,
   variant = 'now',
@@ -101,7 +98,7 @@ export function SiteView({
           <input
             readOnly
             aria-label={copy.site.url}
-            value={`${addressHost ?? project?.url ?? 'localhost'}${route}${addressSuffix}`}
+            value={`${addressHost ?? project?.url ?? 'localhost'}${route}`}
             className="min-w-0 flex-[1_1_180px] truncate rounded-row bg-surface-2 px-3 py-[9px] font-mono text-[12px]"
           />
           {toolbarEnd}

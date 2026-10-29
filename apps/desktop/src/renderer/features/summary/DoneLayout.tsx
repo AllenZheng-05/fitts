@@ -47,12 +47,17 @@ export function DoneLayout({ run }: { run: RunState }) {
         addressHost={previewUrl}
         header={
           <span className="text-[12px] text-muted">
-            <RichText
-              text={format(copy.done.previewCaption, {
-                branch: `**fitts/preview-run-${runNumber}**`,
-                n: stats.fixed,
-              })}
-            />
+            {stats.fixed === 0 ? (
+              // No fixes (or an audit-only live site): there is no preview branch to show.
+              copy.done.previewAsIs
+            ) : (
+              <RichText
+                text={format(copy.done.previewCaption, {
+                  branch: `**fitts/preview-run-${runNumber}**`,
+                  n: stats.fixed,
+                })}
+              />
+            )}
           </span>
         }
       />
@@ -70,10 +75,13 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
   const pastRuns = run.projectId === DEMO_CHAT ? DEMO_PAST_RUNS : [];
   const past = pastRuns.find((r) => r.runId === pastRunId);
   const closing =
-    [...run.chat]
-      .reverse()
-      .find((c): c is Extract<ChatItem, { type: 'fitts.message' }> => c.type === 'fitts.message')
-      ?.text ?? copy.fitts.done;
+    stats.found === 0
+      ? copy.fitts.doneNothing
+      : ([...run.chat]
+          .reverse()
+          .find(
+            (c): c is Extract<ChatItem, { type: 'fitts.message' }> => c.type === 'fitts.message',
+          )?.text ?? copy.fitts.done);
 
   const shown: RunStats = past
     ? { ...stats, found: past.found, fixed: past.fixed, prs: past.prs, spentUsd: past.spentUsd }

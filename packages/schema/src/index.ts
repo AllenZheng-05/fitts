@@ -245,7 +245,7 @@ export const EDGE_STATE_ANSWERS = {
   budget: ['add-10', 'stop'],
   'api-trouble': ['retry-now', 'pause'],
   reopen: ['resume', 'summary'],
-  'nothing-found': ['see-checks'],
+  'nothing-found': ['see-checks', 'finish'],
 } as const satisfies Record<EdgeStateKind, readonly string[]>;
 
 export type EdgeStateAnswer<K extends EdgeStateKind = EdgeStateKind> =

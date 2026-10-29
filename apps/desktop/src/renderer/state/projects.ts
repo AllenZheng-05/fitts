@@ -50,3 +50,7 @@ export const useProjects = create<ProjectsState>()(
 
 export const useProject = (id: string | null) =>
   useProjects((s) => s.projects.find((p) => p.id === id));
+
+/** A live-site project: Fitts audits it but can't change its code (SPEC §6.11). */
+export const useAuditOnly = (id: string | null) =>
+  useProjects((s) => s.projects.find((p) => p.id === id)?.kind === 'live');

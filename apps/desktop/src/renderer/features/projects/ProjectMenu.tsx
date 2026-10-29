@@ -11,6 +11,7 @@ import { shortcutLabel } from '../../lib/platform';
 import { useProjects } from '../../state/projects';
 import { useRunStore } from '../../state/run-store';
 import { useUi } from '../../state/ui';
+import { needsYou } from './needsYou';
 
 const RUNNING = new Set(['acting', 'redesigning', 'waiting-on-user']);
 
@@ -103,6 +104,11 @@ export function ProjectMenu({ anchorRef }: { anchorRef: RefObject<HTMLElement | 
                 {current ? (
                   <span className="text-[12px] font-bold text-cobalt-deep">
                     {copy.projects.current}
+                  </span>
+                ) : needsYou(runs[project.id]) ? (
+                  <span className="flex items-center gap-1.5 text-[12px] font-bold text-sun-ink">
+                    <span aria-hidden="true" className="size-2 rounded-full bg-sun" />
+                    {copy.projects.needsYou}
                   </span>
                 ) : running ? (
                   <span className="text-[12px] font-bold text-cobalt-ink">

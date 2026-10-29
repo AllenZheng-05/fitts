@@ -11,8 +11,10 @@ import { copy } from '../../copy';
 import { cx } from '../../lib/cx';
 import { format } from '../../lib/format';
 import { getEngine } from '../../state/engine';
+import { useRunStore } from '../../state/run-store';
 import { useSettings } from '../../state/settings';
 import { useUi } from '../../state/ui';
+import { needsYou } from '../projects/needsYou';
 import { ProjectMenu } from '../projects/ProjectMenu';
 import { BriefPopover } from './BriefPopover';
 
@@ -38,6 +40,10 @@ export function Header({
   const auditing = run?.phase === 'audit';
   const paused = run?.activity === 'paused';
   const driving = run?.activity === 'user-driving';
+  const waitingElsewhere = useRunStore(
+    (s) =>
+      Object.entries(s.runs).filter(([id, r]) => id !== s.activeProjectId && needsYou(r)).length,
+  );
 
   const counter =
     run?.activity === 'redesigning'
@@ -54,7 +60,17 @@ export function Header({
         type="button"
         aria-haspopup="dialog"
         aria-expanded={menuOpen}
-        aria-label={format(copy.workspace.projectButton, { name })}
+        aria-label={
+          format(copy.workspace.projectButton, { name }) +
+          (waitingElsewhere > 0
+            ? `, ${format(
+                waitingElsewhere === 1
+                  ? copy.workspace.projectNeedsYou
+                  : copy.workspace.projectsNeedYou,
+                { n: waitingElsewhere },
+              )}`
+            : '')
+        }
         onClick={() => useUi.getState().set({ projectMenuOpen: !menuOpen })}
         className={cx(
           'app-no-drag inline-flex min-h-10 items-center gap-1.5 rounded-pill px-3 font-mono text-[12px] transition-tint',
@@ -64,6 +80,10 @@ export function Header({
         )}
       >
         {name}
+        {waitingElsewhere > 0 && (
+          // Another project is held waiting on you (the OS notification is easy to miss).
+          <span aria-hidden="true" className="size-2 rounded-full bg-sun ring-1 ring-ink" />
+        )}
         {menuOpen ? (
           <ChevronUp size={12} strokeWidth={2.5} aria-hidden="true" />
         ) : (

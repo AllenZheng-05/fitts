@@ -120,9 +120,10 @@ test('filters, rewind and back to live', async () => {
   await tray.getByRole('button', { name: 'All' }).click();
 
   await page.getByRole('button', { name: 'Rewind to "(null)" shown as a name' }).click();
-  await expect(address(page)).toHaveValue(/· rewound to step 19$/);
+  await expect(page.getByText('Rewound · step 19')).toBeVisible();
+  await expect(page.getByText('Looking back at step 19.')).toBeVisible();
   await page.getByRole('button', { name: 'Back to live' }).click();
-  await expect(address(page)).not.toHaveValue(/rewound/);
+  await expect(page.getByText('Rewound · step 19')).toBeHidden();
 });
 
 test('Stop run asks first, then ends at Done', async () => {

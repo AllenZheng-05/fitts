@@ -755,8 +755,20 @@ export class MockRunEngine implements RunEngine {
         // showing; Stop run takes it to Done.
         s.nowText = undefined;
         s.overlays.attention = undefined;
+        // "I checked every page" has to match the counters around it.
+        for (const path of ['/', '/about', '/contact']) {
+          if (!s.routes.some((r) => r.path === path)) {
+            s.routes.push({ path, depth: 0, status: 'done', issues: 0 });
+          }
+        }
+        for (const route of s.routes) route.status = 'done';
+        s.elapsedMs = Math.max(s.elapsedMs, 3 * 60_000 + 12_000);
+        s.stepEstimate = Math.max(s.step, 46);
+        s.step = s.stepEstimate;
+        s.controlsTried.done = s.controlsTried.total;
         ctx.pause();
-        ctx.onAnswer(id, (_answer, _s2, c) => {
+        ctx.onAnswer(id, (answer, _s2, c) => {
+          if (answer === 'finish') return c.finish();
           c.post({
             type: 'steps',
             steps: ctrl.profile.checks.map((label) => ({ label, costUsd: 0 })),
@@ -943,6 +955,8 @@ export class MockRunEngine implements RunEngine {
         if (s.phase !== 'audit' || s.activity === 'user-driving') return;
         if (s.activity === 'acting' || s.activity === 'redesigning') ctrl.resumeTo = s.activity;
         s.activity = 'user-driving';
+        // Driving happens in the live site, never in a rewound moment.
+        s.rewindStep = undefined;
         s.nowText = undefined;
         s.overlays.attention = undefined;
         s.driverClicks = [];

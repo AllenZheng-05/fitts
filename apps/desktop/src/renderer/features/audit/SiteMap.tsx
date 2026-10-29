@@ -43,7 +43,9 @@ export function SiteMap({ run }: { run: RunState }) {
                     <>
                       <span aria-hidden="true">{route.issues}</span>
                       <span className="sr-only">
-                        {format(copy.audit.issues, { n: route.issues })}
+                        {route.issues === 1
+                          ? copy.audit.issue
+                          : format(copy.audit.issues, { n: route.issues })}
                       </span>
                     </>
                   ) : (

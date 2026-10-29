@@ -7,6 +7,7 @@ import { copy } from '../../copy';
 import { format, formatClock } from '../../lib/format';
 import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine, getMockEngine } from '../../state/engine';
+import { useAuditOnly } from '../../state/projects';
 import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
 import { ChatPanel } from '../chat/ChatPanel';
@@ -41,13 +42,21 @@ function AuditSiteView({ run }: { run: RunState }) {
     ? run.findings.find((f) => f.stepIndex === run.rewindStep)
     : undefined;
   const attentionRef = run.overlays.attention?.ref;
+  // Live sites are audit-only: there's no fix to compare against.
+  const auditOnly = useAuditOnly(run.projectId);
 
-  // The site follows Fitts (or the rewound moment) unless the user has the wheel.
+  // The site follows Fitts (or the rewound moment) unless the user has the wheel. With
+  // nothing pointed at, it shows the route the site map says is being tested, so the URL
+  // bar and the site map never disagree.
+  const testingRoute = run.routes.find((r) => r.status === 'testing')?.path;
   useEffect(() => {
     if (driving) return;
-    const target = rewindFinding?.route ?? (attentionRef ? ROUTE_FOR_REF[attentionRef] : undefined);
+    const target =
+      rewindFinding?.route ??
+      (attentionRef ? ROUTE_FOR_REF[attentionRef] : undefined) ??
+      testingRoute;
     if (target) useSite.getState().navigate(run.projectId, target);
-  }, [driving, rewindFinding?.route, attentionRef, run.projectId]);
+  }, [driving, rewindFinding?.route, attentionRef, testingRoute, run.projectId]);
 
   const problems = rewindFinding
     ? run.overlays.problems.filter((p) => p.ref === rewindFinding.elementRef)
@@ -61,7 +70,6 @@ function AuditSiteView({ run }: { run: RunState }) {
       projectId={run.projectId}
       className="flex-1"
       interactive={driving}
-      addressSuffix={rewound ? format(copy.site.rewound, { step: run.rewindStep ?? 0 }) : ''}
       onElementClick={(_ref, label) => {
         if (driving) getMockEngine().recordUserClick(run.projectId, label.trim());
       }}
@@ -73,9 +81,14 @@ function AuditSiteView({ run }: { run: RunState }) {
             </Chip>
           )}
           {rewound ? (
-            <Button size="sm" onClick={() => getEngine().rewindTo(run.projectId, null)}>
-              {copy.site.backToLive}
-            </Button>
+            <>
+              <Chip className="px-2.5 py-1.5">
+                {format(copy.site.rewound, { step: run.rewindStep ?? 0 })}
+              </Chip>
+              <Button size="sm" onClick={() => getEngine().rewindTo(run.projectId, null)}>
+                {copy.site.backToLive}
+              </Button>
+            </>
           ) : (
             <>
               <Button
@@ -87,15 +100,17 @@ function AuditSiteView({ run }: { run: RunState }) {
               >
                 {copy.site.highlights}
               </Button>
-              <Button
-                size="sm"
-                variant={beforeAfter ? 'dark' : 'secondary'}
-                aria-pressed={beforeAfter}
-                className="font-semibold"
-                onClick={() => ui.set({ beforeAfter: !beforeAfter })}
-              >
-                {copy.site.beforeAfter}
-              </Button>
+              {!auditOnly && (
+                <Button
+                  size="sm"
+                  variant={beforeAfter ? 'dark' : 'secondary'}
+                  aria-pressed={beforeAfter}
+                  className="font-semibold"
+                  onClick={() => ui.set({ beforeAfter: !beforeAfter })}
+                >
+                  {copy.site.beforeAfter}
+                </Button>
+              )}
             </>
           )}
           <Button size="sm" aria-pressed={pointing} onClick={() => ui.set({ pointing: !pointing })}>
@@ -104,7 +119,7 @@ function AuditSiteView({ run }: { run: RunState }) {
         </>
       }
       overlay={(surface) =>
-        beforeAfter ? (
+        beforeAfter && !auditOnly ? (
           <BeforeAfterSlider
             fill
             before={renderSite(run.projectId, { route, navigate: () => undefined, variant: 'now' })}

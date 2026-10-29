@@ -13,6 +13,7 @@ import { format } from '../../lib/format';
 import { LIVE_FINDINGS } from '../../mock/fixtures/demo-chat';
 import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine } from '../../state/engine';
+import { useAuditOnly } from '../../state/projects';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { MESSAGE_BOX_ID } from '../site-view/SiteView';
@@ -267,6 +268,7 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
   const engine = getEngine();
   const toast = useToasts((s) => s.show);
   const change = run.changes.find((c) => c.findingIds.includes(finding.id));
+  const auditOnly = useAuditOnly(run.projectId);
   const bar = 'flex flex-none flex-wrap items-center gap-2 border-t border-ink px-4 py-3';
 
   if (finding.status === 'fixing') {
@@ -334,6 +336,39 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
       </div>
     );
   }
+  if (auditOnly) {
+    // A live site: Fitts can't change its code, so the fix is something to hand on.
+    return (
+      <div className={bar}>
+        <span className="basis-full text-[13px] text-ink-2">{copy.finding.auditOnly}</span>
+        <Button
+          variant="primary"
+          size="md"
+          className="min-h-11 flex-[2_1_100px]"
+          onClick={() => {
+            void navigator.clipboard
+              ?.writeText(
+                `${finding.title}
+${copy.finding.fixPrefix} ${finding.fix}`,
+              )
+              .then(() => toast(copy.finding.fixCopied));
+          }}
+        >
+          {copy.finding.copyFix}
+        </Button>
+        <Button
+          size="md"
+          className="min-h-11 flex-[1_1_100px]"
+          onClick={() => {
+            engine.dismissFinding(run.projectId, finding.id);
+            useUi.getState().set({ openFindingId: null });
+          }}
+        >
+          {copy.finding.notProblem}
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className={bar}>
       {batch ? (
@@ -341,14 +376,14 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
           <Button
             variant="primary"
             size="md"
-            className="min-h-[46px] flex-[2_1_140px]"
+            className="min-h-11 flex-[2_1_100px]"
             onClick={() => decide(run, batch, finding.id, 'fix')}
           >
             {copy.finding.approveFix}
           </Button>
           <Button
             size="md"
-            className="min-h-[46px] flex-[1_1_90px]"
+            className="min-h-11 flex-[1_1_70px]"
             onClick={() => decide(run, batch, finding.id, 'skip')}
           >
             {copy.finding.skipFix}
@@ -358,7 +393,7 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
         <Button
           variant="primary"
           size="md"
-          className="min-h-[46px] flex-[2_1_140px]"
+          className="min-h-11 flex-[2_1_100px]"
           onClick={() => engine.approveFixes(run.projectId, [finding.id])}
         >
           {copy.finding.fixIt}
@@ -366,7 +401,7 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
       )}
       <Button
         size="md"
-        className="min-h-[46px] flex-[1_1_110px]"
+        className="min-h-11 flex-[1_1_100px]"
         onClick={() => {
           useUi.getState().set({
             draft:
@@ -381,7 +416,7 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
       </Button>
       <Button
         size="md"
-        className="min-h-[46px] flex-[1_1_110px]"
+        className="min-h-11 flex-[1_1_100px]"
         onClick={() => {
           engine.dismissFinding(run.projectId, finding.id);
           // In a batch review, "not a problem" also counts as skipping its fix.
