@@ -942,3 +942,59 @@ screencast fallback is needed.
   `sendInputEvent` (mouse plus `char`).
 - Paint images come out 2px wider and taller than the content size requested with
   `useContentSize`. This doesn't matter, because the canvas scales by each frame's real size.
+
+## Phase 2 — P0: demo targets and the source plugin
+
+- **`@fitts/vite-plugin` uses `@babel/parser` plus `magic-string`, not `@babel/core`.** It
+  parses `.jsx`/`.tsx` modules and inserts `data-fitts-src="path:line:col"` right after each
+  host tag name (lowercase tags only; `col` is 1-based), with a hires source map.
+  - It's `apply: 'serve'` and `enforce: 'pre'`. A production build has no stamps (checked).
+  - It skips `node_modules` and keeps any stamp that's already there.
+- **Demo configs load through `vite --configLoader runner`.** Vite's default loader imports
+  the workspace plugin's raw `.ts` source through Node, which fails
+  (`ERR_UNKNOWN_FILE_EXTENSION`). The runner loader transforms it, so the plugin needs no build
+  step.
+- **Ports:** the app's own renderer dev server (electron-vite) moved from 5173 to **5199**, so
+  demo/chat owns 5173 as in the spec and the Phase 1 fixture. Previews use 5180, worktrees
+  5181+, and Hartwell 3000.
+- **demo/chat** is a real Vite + React 19 app with the mock's routes and `data-ref`s.
+  - **Routing:** a tiny History API router, so browser back and forward are real (needed for
+    #4).
+  - **Styling:** plain CSS, no Tailwind, to keep the demo dependency-light and make the
+    spacing, font and contrast flaws easy to see in one file.
+  - **Backend:** a Vite middleware (`server/api.ts`) with in-memory seed data.
+    Conversation 12 is Grandma. `POST /api/__reset` reseeds it (`pnpm --filter demo-chat
+    reset`). `GET /help` returns a real 404.
+  - **Planted issues:** all 25 come from realistic bugs, not flags. For example, step 2 reads
+    `draft.recipient` while step 1 writes `draft.to`, which gives "(null)". Code comments
+    don't point at them; `PLANTED.md` is the answer key, with file, ref and detector per row,
+    plus the bench scoring rules.
+  - **Copy changes from the mock:**
+    - The thread's button reads "Initialize thread" (#22), not "Send Text".
+    - Settings has 14 toggles (#21), up from 2.
+    - Contacts gained a filter (#25) and an add-contact form (#15).
+    - The thread gained unnamed call and video icon buttons (#17).
+  - **Check:** `scripts/check-demo-chat.cjs` (`pnpm check:demo-chat`) drives the app in an
+    offscreen Electron window, the way the CDP driver will, and reproduces **25/25**.
+- **demo/hartwell:** six pages on :3000. The routes and refs match the mock (`/services/packages`
+  is the "Party packages" page that a redesign renames "Arrange a service" / "Service
+  options").
+  - **Theme:** every theme value is a CSS variable in `src/theme.css`, including the confetti
+    display, the CTA tilt and its wiggle animation, so a redesign is one focused diff.
+  - **Two ordinary issues:** footer contrast (#F7A8CC on #FFF1F7) and a contact submit button
+    labeled "Go".
+  - **Answer key:** `THEME.md`, which also describes the three target directions.
+- **Mirrors: `pnpm demo:mirror`** exports each demo as a standalone repo in
+  `.fitts-dev/mirror/<repo>` instead of a `git subtree split`.
+  - **Why not a split:** a split would carry the `workspace:*` plugin dependency and the
+    monorepo tsconfig `extends`, and neither resolves outside the monorepo.
+  - **What the export does:** vendors the plugin as `fitts-plugin/` (a `file:` dependency),
+    inlines the tsconfig, and commits.
+  - **Checked:** the export installs with `--ignore-workspace`, typechecks and builds on its
+    own.
+  - **Not done yet:** creating the GitHub repos and pushing (`--push`) are deferred
+    (NEEDS-ALLEN).
+- **Root scripts:**
+  - `pnpm test` now also runs the plugin's unit tests.
+  - `pnpm typecheck` also covers `scripts/` and both demos.
+  - ESLint and Prettier ignore `.fitts-dev/` and `.fitts-worktrees/`.

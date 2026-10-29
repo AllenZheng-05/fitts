@@ -1,0 +1,33 @@
+/* Every theme value for the site lives here, so a redesign is one focused diff. */
+:root {
+  --bg: #fff1f7;
+  --ink: #e0187a;
+  --body: #4a2440;
+  --muted: #f7a8cc;
+  --accent: #ffd60a;
+  --accent-text: #4a2440;
+  --block: #ffc9e4;
+  --line: #ffc9e4;
+
+  --font-body: ui-rounded, 'Arial Rounded MT Bold', 'Comic Sans MS', system-ui, sans-serif;
+  --font-heading: ui-rounded, 'Arial Rounded MT Bold', 'Comic Sans MS', system-ui, sans-serif;
+  --heading-weight: 800;
+
+  --radius: 22px;
+  --cta-radius: 999px;
+  --cta-weight: 800;
+  --cta-tilt: -3deg;
+  --cta-motion: wiggle 1.6s ease-in-out infinite;
+
+  --confetti-display: block;
+}
+
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(var(--cta-tilt));
+  }
+  50% {
+    transform: rotate(calc(var(--cta-tilt) * -1));
+  }
+}

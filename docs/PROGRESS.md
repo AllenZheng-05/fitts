@@ -5,15 +5,17 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P0 — demo targets (`demo/chat`, `demo/hartwell`) and `@fitts/vite-plugin`.
-- **Next concrete step:** scaffold `demo/chat` as a Vite + React 19 app ported from
-  `renderer/mock/sites/DemoChatSite.tsx`, with the 25 planted issues and `PLANTED.md`.
+- **Current:** P1 — events, shared reducer, IpcRunEngine, utility process, secrets bridge,
+  file-based project store.
+- **Next concrete step:** design `packages/schema/src/events.ts` (event union per §12.1) and a
+  pure `reduce(state, event)`, then a stub agent that replays Scenario A as events.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P0: demo targets + vite plugin | see `git log --grep "P0:"` | demo/chat 25/25 planted issues reproduce (`pnpm check:demo-chat`); hartwell runs on :3000; the plugin stamps in dev only (unit tests, and a build has no stamps). Mirror repos are exported locally; creating and pushing them is NEEDS-ALLEN 3. |
 | V1–V9 verification (`scripts/verify/`) | 290cf81 | V1, V2, V3, V4, V5, V7 and V9 pass live. V6 passes offline (`pnpm verify:v6:echo`); the real-model run waits on `muse login` (NEEDS-ALLEN 1). V8: the flag is confirmed, and the live upload is deferred. |
 
 ## Deferred to Allen

@@ -21,6 +21,9 @@ export default defineConfig(({ command }) => {
     renderer: {
       root: resolve(__dirname, 'src/renderer'),
       define: { __FITTS_DEV_TOOLS__: JSON.stringify(devTools) },
+      // 5173 belongs to demo/chat (and 5180+ to previews and worktrees), so the app's own
+      // renderer dev server lives elsewhere.
+      server: { port: 5199 },
       resolve: {
         // geist's package exports hide its font files, so point at them directly.
         alias: { '@geist-fonts': resolve(__dirname, 'node_modules/geist/dist/fonts') },

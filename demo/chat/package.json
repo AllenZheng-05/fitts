@@ -1,0 +1,25 @@
+{
+  "name": "demo-chat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fitts demo target: a family messaging app with 25 planted usability issues",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --configLoader runner --port 5173 --strictPort",
+    "build": "vite build --configLoader runner",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "reset": "node scripts/reset.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@fitts/vite-plugin": "workspace:*",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.5"
+  }
+}

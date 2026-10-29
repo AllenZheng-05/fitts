@@ -1,0 +1,163 @@
+@import './theme.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--body);
+  font: 16px/1.5 var(--font-body);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.confetti {
+  display: var(--confetti-display);
+  position: absolute;
+  pointer-events: none;
+}
+
+.confetti.a {
+  top: 8%;
+  left: 12%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff4fa3;
+}
+
+.confetti.b {
+  top: 14%;
+  left: 70%;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: #ffd60a;
+  transform: rotate(30deg);
+}
+
+.confetti.c {
+  top: 62%;
+  left: 40%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2ec4ff;
+}
+
+.nav {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 48px 26px 0;
+  font-size: 13px;
+}
+
+.nav a {
+  color: inherit;
+}
+
+.nav a.current {
+  font-weight: 700;
+}
+
+.main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+  padding: 36px 26px;
+}
+
+.hero-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-heading);
+  font-size: 32px;
+  font-weight: var(--heading-weight);
+  line-height: 1.05;
+}
+
+.cta {
+  align-self: flex-start;
+  padding: 13px 20px;
+  border: 0;
+  border-radius: var(--cta-radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: var(--cta-weight);
+  cursor: pointer;
+  transform: rotate(var(--cta-tilt));
+  animation: var(--cta-motion);
+}
+
+.block {
+  height: 120px;
+  border-radius: var(--radius);
+  background: var(--block);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  padding: 16px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-family: var(--font-heading);
+  font-size: 18px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.form input,
+.form textarea {
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.footer {
+  position: relative;
+  padding: 24px 26px 40px;
+  color: var(--muted);
+  font-size: 13px;
+}

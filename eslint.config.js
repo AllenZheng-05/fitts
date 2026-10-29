@@ -26,7 +26,13 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['eslint.config.js', 'scripts/verify/*.cjs'],
+          allowDefaultProject: [
+            'eslint.config.js',
+            'scripts/*.cjs',
+            'scripts/*.mjs',
+            'scripts/verify/*.cjs',
+            'demo/*/scripts/*.mjs',
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -37,8 +43,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['eslint.config.js', '**/*.cjs'],
+    files: ['eslint.config.js', '**/*.cjs', '**/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    files: ['**/*.mjs', 'demo/*/server/**', 'demo/*/vite.config.ts'],
+    languageOptions: { globals: globals.node },
   },
   {
     files: ['**/*.cjs'],

@@ -1,0 +1,25 @@
+{
+  "name": "@fitts/vite-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dev-only Vite plugin that stamps data-fitts-src on host JSX elements",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@babel/parser": "8.0.10",
+    "magic-string": "1.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
