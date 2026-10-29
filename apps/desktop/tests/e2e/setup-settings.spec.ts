@@ -47,6 +47,40 @@ test('first launch: setup creates a project and opens its workspace', async () =
   );
 });
 
+test('first launch: no code here, audit a live site instead', async () => {
+  const { page } = launched;
+  const live = page.getByRole('button', { name: 'Audit a live site instead' });
+  // A live site still needs a working key.
+  await expect(live).toBeDisabled();
+  await expect(page.getByText('Add a key that works first.')).toBeVisible();
+  await page.getByLabel('Meta Model API key').fill('meta-key-12345');
+  await expect(live).toBeEnabled();
+  await page.getByLabel('How much should I ask you?').selectOption('plan');
+
+  await live.click();
+  const dialog = page.getByRole('dialog', { name: 'Add a project' });
+  await expect(dialog.getByRole('tab', { name: /Live site only/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await dialog.getByRole('button', { name: 'Connect Netlify' }).click();
+  await dialog.getByRole('radio', { name: /tide-tables/ }).check();
+  await dialog.getByRole('button', { name: 'Add and open' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Switch project, current: tidetables.app' }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Permission mode')).toHaveValue('plan');
+
+  // The next time Add a project opens, it starts on the code tab again.
+  await page.keyboard.press('ControlOrMeta+p');
+  await page.getByRole('button', { name: '+ Add a project' }).click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Add a project' })
+      .getByRole('tab', { name: /Code on this computer/ }),
+  ).toHaveAttribute('aria-selected', 'true');
+});
+
 test('relaunch opens the last project instead of Welcome', async () => {
   await completeSetup(launched.page);
   const { userData } = launched;

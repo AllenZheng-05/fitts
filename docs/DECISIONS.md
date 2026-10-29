@@ -741,3 +741,13 @@ SPEC §7.7's "Finish on Economy").**
 - Verification is tied to the domain. Changing the URL or the method undoes it, and
   "Add and open" stays disabled until the current URL is verified.
 - Host names are plain text buttons, with no brand logos.
+
+**First launch can start with a live site.**
+- The setup card ends with a quiet link: "Don't have the code here? Audit a live site
+  instead". It sits below the main button, so the code path (the one that fixes things)
+  stays the default.
+- The link opens the same Add a project dialog on its Live tab (`ui.addProjectKind`), not a
+  second copy of the hosting flow. The dialog resets to the code tab whenever it closes.
+- A live site still needs a working API key. Until the key works the link is disabled, with
+  "Add a key that works first."
+- Clicking it saves the key and the chosen mode, just as "Open my project" does.

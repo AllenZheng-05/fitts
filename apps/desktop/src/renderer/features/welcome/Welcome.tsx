@@ -47,6 +47,7 @@ function SetupCard() {
   const [mode, setMode] = useState<UserMode>(settings.defaultMode);
   const headingId = useId();
   const hintId = useId();
+  const liveHintId = useId();
 
   // Mock validation: 600ms after typing stops, "Works" if the key is 8+ characters (§6.1).
   useEffect(() => {
@@ -63,6 +64,13 @@ function SetupCard() {
     settings.setKey('meta', true);
     settings.set({ defaultMode: mode });
     addAndOpenProject(projectFromFolder(folder.trim(), detection.name, detection));
+  };
+
+  // A live site is audit-only: the same Add a project dialog, opened on its Live tab.
+  const openLive = () => {
+    settings.setKey('meta', true);
+    settings.set({ defaultMode: mode });
+    useUi.getState().set({ addProjectOpen: true, addProjectKind: 'live' });
   };
 
   return (
@@ -179,6 +187,25 @@ function SetupCard() {
           {copy.welcome.openHint}
         </span>
       )}
+
+      <p className="border-t border-ink-faint pt-3 text-[13px] text-ink-2">
+        {copy.welcome.liveLead}{' '}
+        <button
+          type="button"
+          disabled={!keyWorks}
+          aria-describedby={keyWorks ? undefined : liveHintId}
+          onClick={openLive}
+          className="font-semibold text-cobalt-ink underline hover:text-cobalt-deep disabled:cursor-not-allowed disabled:text-muted disabled:no-underline"
+        >
+          {copy.welcome.liveLink}
+        </button>
+        {!keyWorks && (
+          <span id={liveHintId} className="text-muted">
+            {' '}
+            {copy.welcome.liveNeedsKey}
+          </span>
+        )}
+      </p>
     </section>
   );
 }

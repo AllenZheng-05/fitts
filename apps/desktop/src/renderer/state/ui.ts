@@ -14,6 +14,8 @@ interface UiState {
   settingsReturnTo: 'welcome' | 'workspace';
   projectMenuOpen: boolean;
   addProjectOpen: boolean;
+  /** Which tab Add a project opens on ("Audit a live site instead" opens it on Live). */
+  addProjectKind: 'code' | 'live';
   briefOpen: boolean;
   /** The finding open in the Finding panel (M6). */
   openFindingId: string | null;
@@ -79,6 +81,7 @@ export const useUi = create<UiState>((set, get) => ({
   settingsReturnTo: 'workspace',
   projectMenuOpen: false,
   addProjectOpen: false,
+  addProjectKind: 'code',
   briefOpen: false,
   openFindingId: null,
   review: null,

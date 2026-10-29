@@ -1,5 +1,5 @@
 import { FolderOpen, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '../../components/Button';
 import { Checkbox, TextField } from '../../components/fields';
 import { IconButton } from '../../components/IconButton';
@@ -23,7 +23,9 @@ export function AddProjectDialog() {
 }
 
 function AddProjectForm({ onClose }: { onClose: () => void }) {
-  const [kind, setKind] = useState<Kind>('code');
+  const [kind, setKind] = useState<Kind>(() => useUi.getState().addProjectKind);
+  // However the dialog closes (Cancel, Esc, adding a project), it next opens on code.
+  useEffect(() => () => useUi.getState().set({ addProjectKind: 'code' }), []);
   const [folder, setFolder] = useState('');
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
