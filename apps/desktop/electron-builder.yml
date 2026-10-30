@@ -26,18 +26,21 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: Fitts-Setup-${version}.${ext}
+  # Fixed names, so the site's .../releases/latest/download/<name> links never change.
+  artifactName: Fitts-Setup.${ext}
 mac:
   target:
     - target: dmg
       arch: [arm64, x64]
   category: public.app-category.developer-tools
   icon: resources/icon.png
+  artifactName: Fitts-${arch}.${ext}
   identity: null
 linux:
   target: [AppImage]
   category: Development
   icon: resources/icon.png
+  artifactName: Fitts.${ext}
 publish:
   provider: github
   owner: AllenZheng-05

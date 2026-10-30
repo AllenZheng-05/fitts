@@ -447,6 +447,8 @@ export class SiteWindow {
   rendered(): Promise<boolean> {
     return this.evaluate<boolean>(
       `
+      // A file the page links to (a PDF in Chrome's viewer) has no page text but isn't broken.
+      if (document.contentType && document.contentType !== 'text/html') return true;
       if (document.querySelector('vite-error-overlay, nextjs-portal, #webpack-dev-server-client-overlay')) return false;
       const text = (document.body && document.body.innerText || '').trim();
       return text.length > 0 || document.querySelectorAll('img, svg, canvas').length > 0;`,

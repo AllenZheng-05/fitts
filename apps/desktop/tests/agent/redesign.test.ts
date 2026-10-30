@@ -16,7 +16,7 @@ import {
   redesignPrBody,
   redesignTask,
 } from '../../src/agent/fix/redesign';
-import type { FixCall, VerifyPagesResult } from '../../src/agent/protocol';
+import type { FixCall, TestRun, VerifyPagesResult } from '../../src/agent/protocol';
 import type { Check } from '../../src/agent/review/aggregate';
 import type { Direction } from '../../src/agent/review/themefit';
 import type { Site } from '../../src/agent/site-client';
@@ -160,7 +160,7 @@ describe('redesign checks (§8.3)', () => {
 });
 
 /** A fake main for the pipeline: jobs, page verification by pass, and a PR registry. */
-function harness(passes: VerifyPagesResult[]) {
+function harness(passes: VerifyPagesResult[], testRuns: TestRun[] = []) {
   let state = {
     runId: 'run-1',
     mode: 'ask-unsure',
@@ -182,6 +182,8 @@ function harness(passes: VerifyPagesResult[]) {
           return Promise.resolve({ job: `run-1/${call.findingId}`, branch: call.branch });
         case 'verifyPages':
           return Promise.resolve(passes.shift() ?? stillOnAbout());
+        case 'tests':
+          return Promise.resolve(testRuns.shift() ?? { ran: false, ok: true, summary: '' });
         case 'verify':
           return Promise.resolve({ ok: true, results: [], focus: [], viewport: [], links: {} });
         case 'patch':
@@ -382,5 +384,30 @@ describe('the redesign job (§8.3, §9.2)', () => {
     h.pipeline.start(['f2']);
     for (let i = 0; i < 100 && h.pipeline.busy; i++) await new Promise((r) => setTimeout(r, 2));
     expect(h.calls.filter((c) => c.fn === 'prepare').at(-1)).not.toHaveProperty('base');
+  });
+});
+
+describe('the project’s own tests (§9.2)', () => {
+  const pass = { ran: true, ok: true, summary: '' };
+  const fail = {
+    ran: true,
+    ok: false,
+    summary: 'FAIL theme contract: Sharp Slate > shows every logo',
+  };
+
+  it('a redesign that breaks the project’s tests gets a second pass with what failed', async () => {
+    const h = harness([], [pass, fail, pass]);
+    expect(await h.pipeline.redesign(h.request)).toBe('verified');
+    expect(h.redesigns[1]).toContain(
+      'your tests fail with this change: FAIL theme contract: Sharp Slate > shows every logo',
+    );
+    const body = h.calls.find((c) => c.fn === 'prOpen');
+    expect(body?.fn === 'prOpen' && body.body).toContain('Your test suite still passes');
+  });
+
+  it('tests that already failed before the change don’t block it (nothing to compare)', async () => {
+    const h = harness([], [fail, fail]);
+    expect(await h.pipeline.redesign(h.request)).toBe('verified');
+    expect(h.redesigns).toHaveLength(1);
   });
 });

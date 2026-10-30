@@ -15,7 +15,7 @@ import type {
   RunState,
 } from '@fitts/schema';
 import { PAGE_PROBES } from '@fitts/probes';
-import type { VerifyPagesResult, VerifyResult } from '../protocol';
+import type { TestRun, VerifyPagesResult, VerifyResult } from '../protocol';
 import { problems, type Check } from '../review/aggregate';
 import type { Direction } from '../review/themefit';
 import type { Site } from '../site-client';
@@ -120,7 +120,12 @@ export function judge(check: Check, after: VerifyResult, baseline: ProbeResult[]
 }
 
 /** The PR body (§9.3): heuristic and severity, finding, fix, evidence, verification, repro. */
-export function prBody(f: Finding, check: Check | undefined, summary: string): string {
+export function prBody(
+  f: Finding,
+  check: Check | undefined,
+  summary: string,
+  tested = false,
+): string {
   return [
     `**${f.heuristic ?? f.lens}** · severity ${f.severity}`,
     '',
@@ -135,7 +140,7 @@ export function prBody(f: Finding, check: Check | undefined, summary: string): s
     '',
     `## Verification`,
     check
-      ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).`
+      ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).${tested ? ' Your test suite still passes on this branch.' : ''}`
       : 'Re-checked by the reviewer panel.',
     '',
     `## Repro`,
@@ -172,6 +177,10 @@ export class FixPipeline {
   private redesignJob: { changeId: string; job: string; request: RedesignRequest } | undefined;
   /** Each wording card's change, so "Undo this" can revert just that line. */
   private readonly wording = new Map<string, WordingChange & { changeId: string }>();
+  /** The project's own tests on an untouched worktree, once per starting point (HEAD, redesign). */
+  private readonly testBaselines = new Map<string, Promise<TestRun>>();
+  /** Jobs whose change kept the project's tests passing (the PR says so). */
+  private readonly testedJobs = new Set<string>();
 
   constructor(
     private readonly host: PipelineHost,
@@ -188,6 +197,37 @@ export class FixPipeline {
       // A phone-only problem would "pass" at desktop size without a real fix.
       return check !== undefined && VERIFIABLE.has(check.probe) && !check.device;
     });
+  }
+
+  /**
+   * The project's tests before any change, on this fresh worktree: once per starting point, so
+   * later jobs reuse it. Tests that can't run count as "nothing to compare against".
+   */
+  private baselineTests(job: string): Promise<TestRun> {
+    const key = this.base ?? 'HEAD';
+    let baseline = this.testBaselines.get(key);
+    if (!baseline) {
+      baseline = (this.site.fix({ fn: 'tests', job }) as Promise<TestRun>).catch(() => ({
+        ran: false,
+        ok: true,
+        summary: '',
+      }));
+      this.testBaselines.set(key, baseline);
+    }
+    return baseline;
+  }
+
+  /** After a change that passed its checks: does the project's own test suite still pass? */
+  private async testsAfter(job: string, baseline: TestRun): Promise<string | null> {
+    // Tests that already failed (or never ran) before the change can't tell us anything.
+    if (!baseline?.ran || !baseline.ok) return null;
+    this.host.emit([{ type: 'now.changed', nowText: 'Running your tests' }]);
+    const after = (await this.site.fix({ fn: 'tests', job })) as TestRun;
+    if (after.ok) {
+      this.testedJobs.add(job);
+      return null;
+    }
+    return `your tests fail with this change: ${after.summary.split('\n')[0] ?? 'see the test output'}`;
   }
 
   get busy(): boolean {
@@ -271,6 +311,7 @@ export class FixPipeline {
         ...(this.base ? { base: this.base } : {}),
       })) as { job: string; branch: string };
       job = prepared.job;
+      const baseline = await this.baselineTests(prepared.job);
       const tools: FixTools = {
         read: async (path) =>
           (await this.site.fix({ fn: 'read', job: prepared.job, path })) as string,
@@ -302,6 +343,7 @@ export class FixPipeline {
           hrefs: check.hrefs,
         })) as VerifyResult;
         reason = judge(check, after, this.host.baseline(route));
+        if (reason === null) reason = await this.testsAfter(prepared.job, baseline);
       }
       if (reason === null) await this.pass(p, f, check, prepared.job, prepared.branch, summary);
     } catch (e) {
@@ -371,7 +413,7 @@ export class FixPipeline {
         fn: 'prOpen',
         job,
         title: f.title,
-        body: prBody(f, check, summary),
+        body: prBody(f, check, summary, this.testedJobs.has(job)),
         ...(this.base ? { base: this.base } : {}),
       })) as { number: number; url: string };
       this.change({ ...change, prNumber: pr.number, prUrl: pr.url });
@@ -481,6 +523,7 @@ export class FixPipeline {
         branch: `fitts/redesign-${slug(name)}`,
       })) as { job: string; branch: string };
       job = prepared.job;
+      const baseline = await this.baselineTests(prepared.job);
       const tools = this.redesignTools(prepared.job);
       let summary = '';
       const wording: WordingChange[] = [];
@@ -511,6 +554,8 @@ export class FixPipeline {
           ...(r.size ? { size: r.size } : {}),
         })) as VerifyPagesResult;
         reason = judgeRedesign(after, (route) => this.host.baseline(route));
+        // The second pass hears about failing tests too, with what failed.
+        if (reason === null) reason = await this.testsAfter(prepared.job, baseline);
         if (reason === null) break;
         if (pass === 0) {
           this.host.say(`The first pass broke something (${reason}). Fixing that now.`);
@@ -651,7 +696,13 @@ export class FixPipeline {
         fn: 'prOpen',
         job: prepared.job,
         title: `Redesign: ${r.direction.name}`,
-        body: redesignPrBody({ ...r, summary, wording, fixed }),
+        body: redesignPrBody({
+          ...r,
+          summary,
+          wording,
+          fixed,
+          tested: this.testedJobs.has(prepared.job),
+        }),
       })) as { number: number; url: string };
       this.change({ ...change, prNumber: pr.number, prUrl: pr.url });
       for (const id of fixedIds)
@@ -731,7 +782,10 @@ export class FixPipeline {
         routes: r.routes,
         ...(r.size ? { size: r.size } : {}),
       })) as VerifyPagesResult;
-      const reason = judgeRedesign(after, (route) => this.host.baseline(route));
+      let reason = judgeRedesign(after, (route) => this.host.baseline(route));
+      const baseline = await (this.testBaselines.get('HEAD') ??
+        Promise.resolve({ ran: false, ok: true, summary: '' }));
+      if (reason === null) reason = await this.testsAfter(rj.job, baseline);
       if (reason !== null) {
         await this.site.fix({ fn: 'reset', job: rj.job });
         this.host.say(`I undid that adjustment: ${reason}. The redesign is as it was.`);

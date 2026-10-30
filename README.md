@@ -24,7 +24,7 @@ Download the installer for your system from
   anyway**.
 - **macOS:** open the app once, then go to System Settings › Privacy & Security and choose
   **Open Anyway**.
-- **Linux:** make the AppImage executable (`chmod +x Fitts-*.AppImage`) and run it.
+- **Linux:** make the AppImage executable (`chmod +x Fitts.AppImage`) and run it.
 
 Fitts needs **Node.js** and **git** for local projects, and the **GitHub CLI** (`gh auth
 login`) to open pull requests.

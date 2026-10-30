@@ -182,7 +182,7 @@ export async function runToolLoop(
       } catch {
         // Bad arguments: reported back as an error below.
       }
-      if (name === 'done') return { patched, summary: (args['summary'] ?? '').slice(0, 300) };
+      if (name === 'done') return { patched, summary: (args['summary'] ?? '').slice(0, 600) };
       let output: string;
       try {
         const handler = opts.handlers[name];

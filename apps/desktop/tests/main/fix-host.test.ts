@@ -260,6 +260,34 @@ describe('FixHost', () => {
     expect(git(join(tmp, 'origin.git'), 'log', '-1', '--format=%s', fix.branch)).toBe('f3 again');
   });
 
+  it('runs the project’s own tests in a worktree (none: nothing ran)', async () => {
+    const r = (await host.call('app', {
+      fn: 'prepare',
+      runId: 'run-1',
+      findingId: 'tests',
+      branch: 'fitts/tests',
+    })) as { job: string };
+    expect(await host.call('app', { fn: 'tests', job: r.job })).toEqual({
+      ran: false,
+      ok: true,
+      summary: '',
+    });
+    const dir = join(root, '.fitts-worktrees', 'run-1', 'tests');
+    const pkg = (test: string) =>
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'app', scripts: { test } }));
+    pkg('node -e "process.exit(0)"');
+    expect(await host.call('app', { fn: 'tests', job: r.job })).toMatchObject({
+      ran: true,
+      ok: true,
+    });
+    pkg('node -e "console.log(\'FAIL contract\');process.exit(1)"');
+    expect(await host.call('app', { fn: 'tests', job: r.job })).toMatchObject({
+      ran: true,
+      ok: false,
+      summary: expect.stringContaining('FAIL contract') as string,
+    });
+  });
+
   it('verification runs the dev script on its own port', () => {
     // No lockfile here, so npx; a pnpm project gets `pnpm exec`.
     expect(verifyCommand(root, 5181)).toBe(

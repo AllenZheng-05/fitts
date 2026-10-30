@@ -19,7 +19,7 @@ test('a recorded run plays without keys, and Stop jumps to its end', async () =>
   const { page } = launched;
   await expect(page.getByRole('heading', { name: "Hi, I'm Fitts." })).toBeVisible();
   await page.getByRole('button', { name: 'Watch a recorded run' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Replay · 4× speed' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Replay · 4×' })).toBeVisible();
   // The recorded interview, then the audit with real step shots as the site.
   await expect(page.getByRole('log', { name: 'Conversation with Fitts' })).toContainText(
     'A messaging app so my grandparents can text the family.',

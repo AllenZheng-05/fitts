@@ -69,6 +69,8 @@ const THEME_ROUTES = 3;
 const MAX_REDESIGN_PAGES = 10;
 /** The phone pass looks at this many pages. */
 const MAX_PHONE_PAGES = 8;
+/** A route that's a file (a resume PDF, an image), not a page. */
+const FILE_ROUTE = /\.(pdf|png|jpe?g|gif|svg|webp|zip|txt|json|xml)$/i;
 
 /** Routes reviewed at once (§8.1: at most 2 in flight, 5 reviewers each). */
 const ROUTES_IN_FLIGHT = 2;
@@ -767,7 +769,10 @@ export class RealRun {
     const pipeline = this.pipeline;
     if (!pipeline) return;
     this.redesignStarted = true;
-    const routes = [...this.pages.keys()].slice(0, MAX_REDESIGN_PAGES);
+    // Pages, not files: a linked PDF or image isn't the site's look to restyle.
+    const routes = [...this.pages.keys()]
+      .filter((r) => !FILE_ROUTE.test(r))
+      .slice(0, MAX_REDESIGN_PAGES);
     const before: Record<string, string> = {};
     for (const route of routes) {
       const shot = await this.routeShot(route);
@@ -819,7 +824,9 @@ export class RealRun {
   private async phonePass(): Promise<void> {
     const site = this.deps.site;
     const phone = DEVICES.find((d) => d.id === 'phone');
-    const routes = [...this.pages.keys()].slice(0, MAX_PHONE_PAGES);
+    const routes = [...this.pages.keys()]
+      .filter((r) => !FILE_ROUTE.test(r))
+      .slice(0, MAX_PHONE_PAGES);
     if (!site.device || !phone || routes.length === 0) return;
     let previous: string | null;
     try {

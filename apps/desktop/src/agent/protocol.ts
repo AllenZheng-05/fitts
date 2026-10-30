@@ -86,6 +86,8 @@ export type FixCall =
   | { fn: 'commit'; job: string; message: string }
   /** Drops a job's uncommitted edits, back to its last commit (a failed adjustment). */
   | { fn: 'reset'; job: string }
+  /** Runs the project's own test script in the job's worktree (TestRun). */
+  | { fn: 'tests'; job: string }
   | { fn: 'discard'; job: string }
   /** `base`: open it against that branch instead of the default (a stacked PR). */
   | { fn: 'prOpen'; job: string; title: string; body: string; base?: string }
@@ -104,6 +106,14 @@ export interface VerifyResult {
   focus: ProbeItem[];
   viewport: ProbeItem[];
   links: Record<string, number>;
+}
+
+/** The project's own tests in a worktree: `ran` is false when it has no test script. */
+export interface TestRun {
+  ran: boolean;
+  ok: boolean;
+  /** The end of the output, plain text (what failed). */
+  summary: string;
 }
 
 /** Every page on a redesign's worktree server: its probes and an after shot (§8.3). */

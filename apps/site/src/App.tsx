@@ -28,8 +28,8 @@ import {
   type Os,
 } from './content';
 
-/** The real before and after (the redesign run's shots); empty until that run has its PR. */
-const SHOTS = { before: '/media/portfolio-before.png', after: '' };
+/** The real before and after: allenzheng.com's 2007 edition, and Fitts's verified redesign of it. */
+const SHOTS = { before: '/media/portfolio-before.png', after: '/media/portfolio-after.png' };
 
 /** The visitor's platform, for the main download button. */
 function detectOs(): Os {
@@ -267,7 +267,9 @@ function Science() {
           ))}
         </div>
         <figure className={`${CARD} self-start bg-cobalt-tint`}>
-          <p className="font-mono text-2xl font-semibold sm:text-3xl">{science.formula}</p>
+          <p className="font-mono text-lg font-semibold whitespace-nowrap sm:text-xl">
+            {science.formula}
+          </p>
           <figcaption className="mt-3 text-ink-2">{science.formulaNote}</figcaption>
         </figure>
       </div>

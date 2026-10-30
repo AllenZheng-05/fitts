@@ -154,7 +154,7 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
           severity: 3,
         };
       return {
-        title: `${m.split('"')[1] ?? 'A button'} does nothing visible`,
+        title: `${m.split('"')[1] || 'A control'} does nothing visible`,
         finding: 'Pressing it changes nothing on screen.',
         fix: 'Give visible feedback, or remove the control.',
         heuristic: 'H1',
@@ -455,7 +455,12 @@ function toFinding(
   const routes = [...c.routes];
   const at = stepOf(c.route);
   const evidence = [
-    ...c.items.slice(0, 3).map((i) => `${i.measured} (expected ${i.expected})`),
+    ...c.items
+      .slice(0, 3)
+      .map(
+        (i) =>
+          `${i.measured}${c.device ? ` on ${DEVICES.find((d) => d.id === c.device)?.label ?? c.device}` : ''} (expected ${i.expected})`,
+      ),
     ...c.drafts.flatMap((d) => d.draft.evidence).slice(0, 3),
   ];
   const heuristic = c.template?.heuristic ?? lead?.heuristic ?? undefined;

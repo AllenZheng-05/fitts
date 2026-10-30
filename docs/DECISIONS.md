@@ -1849,3 +1849,31 @@ Running Fitts on Allen's real portfolio (a copy) turned up three bugs, now fixed
   on a phone", evidence "… on iPhone · 390×844"). They aren't fixed automatically, and a
   redesign doesn't claim them, because verification runs at desktop size; verifying on a
   device is a follow-up.
+## Phase 2 — after P12: what the real portfolio redesign run taught
+
+Two real autonomous runs on a copy of Allen's 2007 portfolio (dry-run PRs to a local bare repo):
+
+- **Files aren't pages.** The first redesign was rolled back because `/resume.pdf` "didn't
+  render" (Chrome's PDF viewer has no page text). Routes that are files (`.pdf`, images and the
+  like) are left out of the redesign's pages and the phone pass, and a non-HTML document
+  counts as rendered.
+- **The phone pass repeated desktop problems** and leaked its device label into titles quoting
+  `measured`. Phone results are matched against the desktop pass by probe and measurement
+  (refs are re-issued on reload), `measured` is never changed, and the aggregator adds "on
+  iPhone · 390×844" to the evidence instead. A nameless control is "A control does nothing
+  visible", not " does nothing visible".
+- **"Verified" now includes the project's own tests.** The second run's redesign passed every
+  probe but broke the portfolio's theme contract test (its theme-picker preview repeated the
+  job logos, so each logo appeared twice), and several fix branches failed it too. The
+  pipeline now runs the project's `test` script (CI=1, 4 min limit) once on an untouched
+  worktree per starting point (HEAD, then the redesign), and again after a change that passed
+  its checks. A test suite that passed before and fails after rolls the change back with the
+  failing lines as the reason (a redesign's second pass gets them). If the tests already fail
+  or can't run before the change, they can't judge it, and the PR doesn't claim them; when
+  they pass, the PR says so. The redesign prompt asks it to read a project's contract tests.
+- **Nested projects.** A worktree's `pnpm install` gets `--ignore-workspace` unless the
+  project is a pnpm workspace itself, so a project inside another workspace's folder isn't
+  adopted by it.
+- Long paths: a clone deep in a temp folder put vitest's files past Windows' 260-character
+  limit inside worktrees; the real run uses a short path (`.fitts-dev/p`). A real project in a
+  normal folder doesn't hit this.

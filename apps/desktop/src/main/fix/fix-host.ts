@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import type { FixCall, VerifyPagesResult, VerifyResult } from '../../agent/protocol';
+import type { FixCall, TestRun, VerifyPagesResult, VerifyResult } from '../../agent/protocol';
 import { devCommandOnPort } from '../projects/detect';
 import { DevServer, responds } from '../site/dev-server';
 import { SiteWindow } from '../site/site-window';
@@ -81,6 +81,8 @@ export class FixHost {
       }
       case 'commit':
         return this.commit(call.job, call.message);
+      case 'tests':
+        return this.tests(call.job);
       case 'reset': {
         // Ignored files (node_modules) stay: `clean` without -x only removes untracked ones.
         const job = this.job(call.job);
@@ -183,7 +185,9 @@ export class FixHost {
   /** `pnpm install --offline --frozen-lockfile`; if that fails, link the project's node_modules. */
   private async dependencies(root: string, dir: string): Promise<void> {
     if (existsSync(join(dir, 'pnpm-lock.yaml'))) {
-      const res = await run('pnpm', ['install', '--offline', '--frozen-lockfile'], {
+      // A project that isn't a workspace itself mustn't be adopted by one around its folder.
+      const own = existsSync(join(dir, 'pnpm-workspace.yaml')) ? [] : ['--ignore-workspace'];
+      const res = await run('pnpm', ['install', '--offline', '--frozen-lockfile', ...own], {
         cwd: dir,
         timeoutMs: 180_000,
       });
@@ -388,6 +392,43 @@ export class FixHost {
       server.stop();
       this.ports.delete(port);
     }
+  }
+
+  /**
+   * The project's own test script, in the worktree (CI=1, so watch modes exit). The pipeline
+   * runs it before a change and after; a test that passed before and fails after is a regression.
+   */
+  async tests(id: string): Promise<TestRun> {
+    const job = this.job(id);
+    let script = '';
+    try {
+      const pkg = JSON.parse(readFileSync(join(job.dir, 'package.json'), 'utf8')) as {
+        scripts?: Record<string, string>;
+      };
+      script = pkg.scripts?.['test'] ?? '';
+    } catch {
+      // No package.json: nothing to run.
+    }
+    if (!script || /no test specified/i.test(script)) return { ran: false, ok: true, summary: '' };
+    const pm = existsSync(join(job.root, 'pnpm-lock.yaml'))
+      ? 'pnpm'
+      : existsSync(join(job.root, 'yarn.lock'))
+        ? 'yarn'
+        : 'npm';
+    const res = await run(pm, ['test'], {
+      cwd: job.dir,
+      timeoutMs: 240_000,
+      env: { CI: '1' },
+    });
+    // eslint-disable-next-line no-control-regex
+    const plain = `${res.stdout}\n${res.stderr}`.replace(/\u001b\[[0-9;]*m/g, '');
+    const lines = plain.split(/\r?\n/).filter((l) => l.trim());
+    const failing = lines.filter((l) => /\b(FAIL|✗|×|failed|Error)\b/.test(l)).slice(0, 6);
+    return {
+      ran: true,
+      ok: res.code === 0,
+      summary: (failing.length ? failing : lines.slice(-6)).join('\n').slice(0, 1200),
+    };
   }
 
   private async freePort(): Promise<number> {

@@ -282,7 +282,7 @@ describe('the phone pass (device sizes)', () => {
           evidenceId: 'e2',
           probe: 'target-size',
           device: 'phone',
-          items: [small('20×20px on iPhone · 390×844')],
+          items: [small('20×20px')],
         }),
       ],
       reviews: [],

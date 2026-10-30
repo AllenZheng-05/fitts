@@ -62,7 +62,7 @@ export const hero = {
 
 export const beforeAfter = {
   title: 'It redesigned my own portfolio',
-  lead: 'I rebuilt allenzheng.com the way I’d have made it in 2007, five fonts and all, and pointed Fitts at it. It found the problems, picked a look that fits who the site is for, rebuilt every page and checked each one before opening the pull request.',
+  lead: 'I rebuilt allenzheng.com the way I’d have made it in 2007, five fonts and all, and pointed Fitts at it. It found 9 problems, said the look “reads as chaotic” for recruiters, and restyled the site as “Quiet Confidence”. The new look fixed all 9, every page passed its checks, and my own test suite still passed, so it opened one pull request.',
   before: 'BEFORE',
   after: 'AFTER',
   caption: 'Drag the handle, or use the arrow keys, to compare.',

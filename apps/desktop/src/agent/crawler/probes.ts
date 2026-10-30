@@ -59,10 +59,9 @@ export class ProbeRunner {
       probe,
       route,
       pass: items.length === 0,
-      // Evidence says where it was measured: "28×20px on iPhone · 390×844".
-      items: device
-        ? items.map((i) => ({ ...i, measured: `${i.measured} on ${device.label}` }))
-        : items,
+      // The device goes on the result (the aggregator puts it in the evidence), never into
+      // `measured`, which some finding titles quote.
+      items,
       ...(summary ? { summary } : {}),
       ...(device ? { device: device.id } : {}),
     };
@@ -109,10 +108,11 @@ export class ProbeRunner {
     const seen = new Set(
       this.results
         .filter((r) => r.route === route && !r.device)
-        .flatMap((r) => r.items.map((i) => `${r.probe}|${i.ref}|${i.selector}`)),
+        .flatMap((r) => r.items.map((i) => `${r.probe}|${i.measured}`)),
     );
+    // Matched on what was measured: element refs are re-issued when the page reloads as a phone.
     const fresh = (probe: ProbeName, items: ProbeItem[]) =>
-      items.filter((i) => !seen.has(`${probe}|${i.ref}|${i.selector}`));
+      items.filter((i) => !seen.has(`${probe}|${i.measured}`));
     try {
       for (const r of await this.site.probes(PAGE_PROBES))
         if (r.probe !== 'font-inventory' && r.probe !== 'web-vitals')

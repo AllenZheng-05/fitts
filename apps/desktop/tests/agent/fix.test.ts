@@ -224,8 +224,10 @@ describe('the fix pipeline (§9)', () => {
       prUrl: 'dry-run://pr/1',
     });
     expect(s.findings[0]?.diff?.files).toEqual(['src/styles.css']);
+    // The project's tests run first on the untouched worktree (here it has none to run).
     expect(h.calls.map((c) => c.fn)).toEqual([
       'prepare',
+      'tests',
       'patch',
       'verify',
       'diff',

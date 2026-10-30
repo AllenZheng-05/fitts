@@ -206,6 +206,8 @@ export function redesignPrBody(input: {
   routes: string[];
   wording: WordingChange[];
   fixed: Finding[];
+  /** The project's own test suite passed on the branch. */
+  tested?: boolean;
 }): string {
   const d = input.direction;
   return [
@@ -227,6 +229,6 @@ export function redesignPrBody(input: {
       : []),
     '',
     '## Verification',
-    `Loaded every page on this branch's dev server (${input.routes.join(', ')}): each one renders, and no new problems at severity 2 or higher appeared (all page probes, focus, and 360, 768 and 1280px).`,
+    `Loaded every page on this branch's dev server (${input.routes.join(', ')}): each one renders, and no new problems at severity 2 or higher appeared (all page probes, focus, and 360, 768 and 1280px).${input.tested ? ' Your test suite still passes on this branch.' : ''}`,
   ].join('\n');
 }

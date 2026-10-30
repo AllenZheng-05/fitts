@@ -28,7 +28,7 @@ export const copy = {
   replay: {
     projectName: 'demo/chat · recorded run',
     url: 'Recorded run',
-    chip: 'Replay · {n}× speed',
+    chip: 'Replay · {n}×',
   },
   status: {
     micOn: 'Mic on',
