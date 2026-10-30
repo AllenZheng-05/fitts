@@ -83,9 +83,26 @@ test('demo/chat streams live, the user drives it in the interview, and point ret
   await expect(page.getByText('pointing at #compose-to')).toBeVisible();
 });
 
-test('overlays line up with the real elements during the audit', async () => {
-  test.setTimeout(120_000);
-  const { page } = launched;
+/** The run as main holds it (the same reducer the UI uses). */
+async function runState(page: Page) {
+  return page.evaluate(async () => {
+    const engine = (
+      window as unknown as { fitts: { engine: { states(): Promise<Record<string, unknown>> } } }
+    ).fitts.engine;
+    return (await engine.states())['demo-chat'] as {
+      phase: string;
+      activity: string;
+      routes: { path: string; status: string }[];
+      controlsTried: { done: number; total: number };
+      overlays: { attention?: { ref: string } };
+      chat: { type: string; stateKind?: string; text?: string }[];
+      step: number;
+    };
+  });
+}
+
+/** Welcome → interview answer → Start the audit, on the live demo. */
+async function startAudit(page: Page) {
   await page.getByLabel('Meta Model API key').fill('meta-key-12345');
   await page.getByRole('button', { name: 'Browse' }).click();
   await expect(page.getByText(/Vite \+ React 19/)).toBeVisible();
@@ -96,53 +113,95 @@ test('overlays line up with the real elements during the audit', async () => {
     .fill('A messaging app so my grandparents can text the family.');
   await page.getByLabel('Message Fitts').press('Enter');
   await page.getByRole('button', { name: 'Start the audit' }).click();
+}
 
-  // The scripted run flags the "(null)" To field; its outline sits on the real element.
-  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose/recipient`, {
-    timeout: 40_000,
-  });
-  const pin = page.getByRole('region', { name: 'Your site' }).getByText('1', { exact: true });
-  await expect(pin.first()).toBeVisible({ timeout: 40_000 });
-  const to = await siteRect(page, 'compose-to');
-  const box = await canvas(page).boundingBox();
-  const pinBox = await pin.first().boundingBox();
-  if (!to || !box || !pinBox) throw new Error('missing boxes');
-  // The pin sits at the outline's top-right corner (6px outset).
-  expect(Math.abs(pinBox.x + pinBox.width / 2 - (box.x + to.left + to.width + 6))).toBeLessThan(16);
-  expect(Math.abs(pinBox.y + pinBox.height / 2 - (box.y + to.top - 6))).toBeLessThan(16);
+test('the real crawl reaches every route and tries every primary control (coverage gate)', async () => {
+  test.setTimeout(240_000);
+  const { page } = launched;
+  await startAudit(page);
+
+  // While Fitts acts, the cobalt attention box sits on the real element it's acting on.
+  await expect
+    .poll(async () => (await runState(page)).overlays.attention?.ref ?? null, { timeout: 30_000 })
+    .not.toBeNull();
+
+  await expect
+    .poll(
+      async () =>
+        (await runState(page)).chat.some(
+          (c) =>
+            c.stateKind === 'nothing-found' ||
+            (c.type === 'fitts.message' && /All done/.test(c.text ?? '')),
+        ),
+      {
+        timeout: 200_000,
+        intervals: [2000],
+      },
+    )
+    .toBe(true);
+  const s = await runState(page);
+  const paths = s.routes.map((r) => r.path);
+  for (const p of [
+    '/',
+    '/compose',
+    '/compose/recipient',
+    '/compose/confirm',
+    '/search',
+    '/contacts',
+    '/contacts/grandma',
+    '/settings',
+  ])
+    expect(paths).toContain(p);
+  expect(s.routes.every((r) => r.status === 'done')).toBe(true);
+  expect(s.controlsTried.total).toBeGreaterThan(30);
+  expect(s.controlsTried.done).toBe(s.controlsTried.total);
+  await expect(
+    page.getByText('Controls tried · ' + s.controlsTried.done + ' of ' + s.controlsTried.total),
+  ).toBeVisible();
 });
 
-test('take the wheel on the live site logs clicks by name, and rewind shows a stored step shot', async () => {
+test('take the wheel on the live site pauses the crawl and logs clicks by name; rewind shows a stored step shot', async () => {
   test.setTimeout(120_000);
   const { page } = launched;
-  await page.getByLabel('Meta Model API key').fill('meta-key-12345');
-  await page.getByRole('button', { name: 'Browse' }).click();
-  await expect(page.getByText(/Vite \+ React 19/)).toBeVisible();
-  await page.getByRole('button', { name: 'Open my project' }).click();
-  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose`, { timeout: 60_000 });
-  await page
-    .getByLabel('Message Fitts')
-    .fill('A messaging app so my grandparents can text the family.');
-  await page.getByLabel('Message Fitts').press('Enter');
-  await page.getByRole('button', { name: 'Start the audit' }).click();
-  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose/recipient`, {
-    timeout: 40_000,
-  });
+  await startAudit(page);
+  await expect
+    .poll(async () => (await runState(page)).step, { timeout: 30_000 })
+    .toBeGreaterThan(3);
 
   const controls = page.getByRole('group', { name: 'Run controls' });
   await controls.getByRole('button', { name: 'Take the wheel' }).click();
+  await expect.poll(async () => (await runState(page)).activity).toBe('user-driving');
+  await page.waitForTimeout(800);
+  const step = (await runState(page)).step;
+  await page.evaluate(() => {
+    const site = (
+      window as unknown as {
+        fitts: { site: { nav(p: string, n: { kind: 'path'; path: string }): void } };
+      }
+    ).fitts.site;
+    site.nav('demo-chat', { kind: 'path', path: '/compose/recipient' });
+  });
+  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose/recipient`);
   await expect.poll(() => siteRect(page, 'compose-create')).not.toBeNull();
   await clickInSite(page, 'compose-create');
   await expect(address(page)).toHaveValue(`localhost:${PORT}/compose/confirm`);
+  // Fitts didn't act while the user drove.
+  expect((await runState(page)).step).toBe(step);
   await controls.getByRole('button', { name: 'Hand back to Fitts' }).click();
   await expect(page.getByRole('log', { name: 'Conversation with Fitts' })).toContainText(
     'Create Message',
   );
+  await expect
+    .poll(async () => (await runState(page)).step, { timeout: 20_000 })
+    .toBeGreaterThan(step);
 
-  // Rewind to the first finding: the stored shot of that step replaces the live canvas.
-  const dot = page.getByRole('button', { name: /^Rewind to/ }).first();
-  await expect(dot).toBeVisible({ timeout: 40_000 });
-  await dot.click();
+  // Rewind to step 2: its stored shot replaces the live canvas.
+  await controls.getByRole('button', { name: 'Pause' }).click();
+  await page.evaluate(() => {
+    const engine = (window as unknown as { fitts: { engine: { call(c: unknown): void } } }).fitts
+      .engine;
+    engine.call({ projectId: 'demo-chat', method: 'rewindTo', args: [2] });
+  });
   const shot = page.locator('img[src^="fitts-asset://"]');
   await expect(shot).toBeVisible();
   await expect

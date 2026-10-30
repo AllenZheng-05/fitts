@@ -6,17 +6,21 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectProject } from '../projects/detect';
 import { runDir, SAFE_ID } from '../store/run-log';
-import { DevServer } from './dev-server';
+import type { SiteOp, SiteOpResult } from '../../agent/protocol';
+import { DevServer, responds } from './dev-server';
 import { SiteWindow } from './site-window';
 
 interface Live {
   server: DevServer;
   window?: SiteWindow;
   status: SiteStatus;
+  health?: ReturnType<typeof setInterval>;
 }
 
 export class SiteManager {
   private readonly live = new Map<string, Live>();
+  /** Status changes also go to the agent (site-down, live projects). */
+  onStatus: ((status: SiteStatus) => void) | undefined;
 
   constructor(
     private readonly root: string,
@@ -36,6 +40,7 @@ export class SiteManager {
     const status: SiteStatus = { ...(live?.status ?? { projectId, status: 'starting' }), ...patch };
     if (live) live.status = status;
     this.broadcast(IPC.siteStatus, status);
+    this.onStatus?.(status);
   }
 
   async open(projectId: string): Promise<void> {
@@ -77,11 +82,74 @@ export class SiteManager {
     live.window = win;
     await win.load(project.startPath ?? detection?.startPath ?? '/').catch(() => undefined);
     this.status(projectId, { status: 'running' });
+    this.watch(projectId, live);
+  }
+
+  /** Health check every 3s; three misses in a row is "site down" (§4.1, §6.3). */
+  private watch(projectId: string, live: Live): void {
+    let misses = 0;
+    live.health = setInterval(() => {
+      void responds(live.server.url).then((up) => {
+        if (this.live.get(projectId) !== live) return;
+        misses = up ? 0 : misses + 1;
+        if (misses === 3) this.status(projectId, { status: 'failed', log: live.server.log });
+        if (up && live.status.status === 'failed') this.status(projectId, { status: 'running' });
+      });
+    }, 3000);
+  }
+
+  /** Restart (the site-down card's "Restart server"). */
+  async restart(projectId: string): Promise<boolean> {
+    const live = this.live.get(projectId);
+    if (!live) return false;
+    const ok = await live.server.restart();
+    if (ok) {
+      live.window?.wc.reload();
+      this.status(projectId, { status: 'running' });
+    } else this.status(projectId, { status: 'failed', log: live.server.log });
+    return ok;
+  }
+
+  /** A crawler operation for the agent (§6.1); every one is gated in P8. */
+  async run(projectId: string, request: SiteOp): Promise<SiteOpResult> {
+    const live = this.live.get(projectId);
+    if (request.op === 'restart') return { op: 'restart', up: await this.restart(projectId) };
+    if (request.op === 'health') {
+      const up = live ? await responds(live.server.url) : false;
+      return { op: 'health', up, log: live?.server.log ?? [] };
+    }
+    const win = live?.window;
+    if (!win) throw new Error('The site is not running');
+    switch (request.op) {
+      case 'snapshot':
+        return { op: 'snapshot', snapshot: await win.snapshot() };
+      case 'screenshot': {
+        const jpeg = await win.capture();
+        const [width, height] = win.win.getContentSize();
+        return {
+          op: 'screenshot',
+          jpegBase64: jpeg.toString('base64'),
+          width: width ?? 0,
+          height: height ?? 0,
+        };
+      }
+      case 'navigate':
+        return win.goto(request.path);
+      case 'click':
+        return win.click(request.ref);
+      case 'type':
+        return win.type(request.ref, request.text);
+      case 'press':
+        return win.press(request.key);
+      case 'back':
+        return win.back();
+    }
   }
 
   close(projectId: string): void {
     const live = this.live.get(projectId);
     if (!live) return;
+    if (live.health) clearInterval(live.health);
     live.window?.destroy();
     live.server.stop();
     this.live.delete(projectId);

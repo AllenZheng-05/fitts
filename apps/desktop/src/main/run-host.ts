@@ -10,10 +10,11 @@ import {
   type EngineEvents,
   type KeyName,
   type RunState,
+  type SiteStatus,
 } from '@fitts/schema';
 import { app, BrowserWindow, ipcMain, utilityProcess, type UtilityProcess } from 'electron';
 import { join } from 'node:path';
-import type { AgentMessage, MainMessage } from '../agent/protocol';
+import type { AgentMessage, MainMessage, SiteOp, SiteOpResult } from '../agent/protocol';
 import { devRepoRoot } from './dev-root';
 import type { Secrets } from './secrets';
 import { RunLog, runDir, SAFE_ID } from './store/run-log';
@@ -40,6 +41,14 @@ export class RunHost {
   private readonly logs = new Map<string, RunLog>();
   private quitting = false;
   private nextRequest = 1;
+  /** Runs a crawler operation on a project's site window (SiteManager.run). */
+  siteOps: ((projectId: string, op: SiteOp) => Promise<SiteOpResult>) | undefined;
+
+  /** Tells the agent a project's live site changed (running, failed, …). */
+  siteStatus(status: SiteStatus): void {
+    this.send({ kind: 'siteStatus', status });
+  }
+
   /** Called when a run starts a new step (main saves a step shot for rewind). */
   onStep: ((projectId: string, runId: string, step: number) => void) | undefined;
   private readonly pending = new Map<number, (r: { ok: boolean; message: string }) => void>();
@@ -117,6 +126,25 @@ export class RunHost {
       case 'events':
         this.onEvents(m.batch);
         return;
+      case 'site': {
+        const { id, projectId, request } = m;
+        const run = this.siteOps;
+        if (!run || !SAFE_ID.test(projectId)) {
+          this.send({ kind: 'siteResult', id, ok: false, error: 'No site' });
+          return;
+        }
+        run(projectId, request).then(
+          (result) => this.send({ kind: 'siteResult', id, ok: true, result }),
+          (e: unknown) =>
+            this.send({
+              kind: 'siteResult',
+              id,
+              ok: false,
+              error: e instanceof Error ? e.message : String(e),
+            }),
+        );
+        return;
+      }
       case 'keyResult':
         this.pending.get(m.id)?.({ ok: m.ok, message: m.message });
         this.pending.delete(m.id);

@@ -36,6 +36,8 @@ void app.whenReady().then(() => {
   const projects = new ProjectStore(userData);
   const sites = new SiteManager(userData, (id) => projects.get(id));
   host.onStep = (projectId, runId, step) => void sites.shot(projectId, runId, step);
+  host.siteOps = (projectId, op) => sites.run(projectId, op);
+  sites.onStatus = (status) => host.siteStatus(status);
   host.start();
   registerKeys(secrets, host);
   projects.register();

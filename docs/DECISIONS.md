@@ -1202,3 +1202,48 @@ screencast fallback is needed.
   (`.fitts-dev/agent-spend.ndjson`) find the repo root by walking up to
   `pnpm-workspace.yaml`. `pnpm dev` and the e2e harness start Electron from different
   folders.
+
+## Phase 2 — P4: crawler, coverage gate, run controls, edge-state triggers
+
+- **When the real engine takes over.** `startAudit` starts a `RealRun` (agent
+  `orchestrator/run.ts`) only when main reports the project's live site as `running`. Without
+  one, the stub engine plays the scripted audit as before, so every Phase 1 flow keeps working.
+  The interview stays on the stub until P7. The real run starts from the interview's state.
+- **Brains.** The coverage gate decides when a route and the run are done. A brain only picks the
+  next action. `SparkBrain` makes one tool call per step and may only pick a control that is
+  still untried on the current page. Anything else (no tool call, an unknown ref, a parse error)
+  falls back to `ExplorerBrain`, which is deterministic: fields first, then buttons, then the
+  next route. Offline, keyless and `FITTS_CRAWL_BRAIN=explorer` runs use the explorer only, and
+  so do e2e tests. Page content goes inside `<untrusted_page_content>`.
+- **What counts as a control.** Links in nav, header and footer only discover routes, because
+  they repeat on every page. Buttons in those regions are real controls: demo/chat's Search,
+  Contacts and Settings are nav buttons, and treating them as chrome left three routes
+  undiscovered. Query strings and trailing slashes don't make new routes.
+- **Destructive names are never clicked in P4.** Names matching delete, remove, pay, purchase,
+  buy, checkout, transfer, unsubscribe, cancel plan or close account are marked skipped ("needs
+  your OK first"). The permission gate (P8) will ask instead.
+- **Typed text is always marked.** It is `fitts-test` in search fields, `555-0199` in phone
+  fields and `fitts-test message` elsewhere. If the model's text lacks the prefix, it is added.
+- **Step shape.** Each step emits `step.started` (main captures the step shot), sets the
+  attention ring on the target, waits 350ms so the user sees what's about to happen, then acts.
+  If the user pauses or takes the wheel during that wait, the action is dropped. Runs stop at
+  200 steps.
+- **Pause, wheel and stop happen at step boundaries.** The loop sleeps while paused,
+  user-driving or waiting on the user, and is woken by resume, hand-back or a card answer. ⌘.
+  aborts the model call in flight through the run's AbortController (the next call gets a fresh
+  one) and posts the `stopped` card. Queued messages are delivered after the step finishes.
+- **Edge states come from real conditions.**
+  - **site-down:** a snapshot fails and a health check says the server is down, or 3 actions
+    fail in a row, or main's health watch reports `failed`. *Restart server* goes through main's
+    spawner.
+  - **login-wall:** a password field on a route or title that looks like a login page.
+  - **api-trouble:** `LlmCaller`'s `onTrouble` after retries are used up. It retries on its own
+    after 12s.
+  - **budget:** the 80% and 100% cards come from the ledger, as in P3.
+- **When the crawl completes with no findings,** the run posts the `nothing-found` card (P4 has
+  no reviewers yet). *Show what you checked* lists the pages, the control count and the last
+  steps.
+- **Test-only fix.** In the e2e test, `getByRole('button', { name: 'Back' })` also matched
+  "Hand back to Fitts", because names match by case-insensitive substring. The test was handing
+  the wheel back itself, which looked like the crawl kept going while the user drove. The
+  unit test (`tests/agent/run.test.ts`) confirmed the run itself was correct.

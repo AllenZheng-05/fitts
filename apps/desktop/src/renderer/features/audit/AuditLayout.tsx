@@ -7,6 +7,7 @@ import { copy } from '../../copy';
 import { format, formatClock } from '../../lib/format';
 import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine, recordUserClick } from '../../state/engine';
+import { useLiveSite } from '../../state/live-site';
 import { useAuditOnly } from '../../state/projects';
 import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
@@ -49,14 +50,16 @@ function AuditSiteView({ run }: { run: RunState }) {
   // nothing pointed at, it shows the route the site map says is being tested, so the URL
   // bar and the site map never disagree.
   const testingRoute = run.routes.find((r) => r.status === 'testing')?.path;
+  // On the live site the real crawler drives navigation itself (SPEC-phase2 §6.1).
+  const live = Boolean(useLiveSite(run.projectId));
   useEffect(() => {
-    if (driving) return;
+    if (driving || live) return;
     const target =
       rewindFinding?.route ??
       (attentionRef ? ROUTE_FOR_REF[attentionRef] : undefined) ??
       testingRoute;
     if (target) useSite.getState().navigate(run.projectId, target);
-  }, [driving, rewindFinding?.route, attentionRef, testingRoute, run.projectId]);
+  }, [driving, live, rewindFinding?.route, attentionRef, testingRoute, run.projectId]);
 
   const problems = rewindFinding
     ? run.overlays.problems.filter((p) => p.ref === rewindFinding.elementRef)

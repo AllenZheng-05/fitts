@@ -2,6 +2,7 @@
 // JPEG frames. No preload; sandboxed; a session per project; every permission denied. Fitts's
 // own queries (element boxes, refs) run in an isolated world, never the page's.
 import type { SiteInput, SiteNav, SiteRect, SiteStatus } from '@fitts/schema';
+import type { AxSnapshot } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 
 /** Isolated world for Fitts's scripts (refs, rects); the page can't see them. */
@@ -184,6 +185,143 @@ export class SiteWindow {
   async capture(): Promise<Buffer> {
     const image = await this.wc.capturePage();
     return image.toJPEG(80);
+  }
+
+  // ── Crawler operations (SPEC-phase2 §5.2, §6.1), asked for by the agent over RPC ─────────
+
+  private path(): string {
+    try {
+      const u = new URL(this.wc.getURL());
+      return u.pathname + u.search;
+    } catch {
+      return '/';
+    }
+  }
+
+  /** Interactive elements with refs and accessible names (an AX-style snapshot). */
+  snapshot(): Promise<AxSnapshot> {
+    return this.evaluate<AxSnapshot>(`
+      const visible = (el) => {
+        const r = el.getBoundingClientRect();
+        const s = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+      };
+      const text = (el) => (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ');
+      const nameOf = (el) => {
+        const aria = el.getAttribute('aria-label');
+        if (aria) return aria.trim();
+        const by = el.getAttribute('aria-labelledby');
+        if (by) return by.split(' ').map((id) => text(document.getElementById(id) || document.createElement('i'))).join(' ').trim();
+        if (el.id) {
+          const label = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+          if (label) return text(label);
+        }
+        const wrapping = el.closest('label');
+        if (wrapping && wrapping !== el) return text(wrapping);
+        return text(el) || el.getAttribute('placeholder') || el.getAttribute('title') || el.getAttribute('alt') || '';
+      };
+      const roleOf = (el) => {
+        const role = el.getAttribute('role');
+        if (role) return role;
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'a') return 'link';
+        if (tag === 'button' || (tag === 'input' && ['submit', 'button', 'reset'].includes(el.type))) return 'button';
+        if (tag === 'select') return 'combobox';
+        if (tag === 'textarea') return 'textbox';
+        if (tag === 'input') return el.type === 'checkbox' ? 'checkbox' : el.type === 'radio' ? 'radio' : 'textbox';
+        return tag;
+      };
+      const sel = 'a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=link],[role=tab],[role=switch],[role=checkbox],[role=menuitem],[tabindex]:not([tabindex="-1"])';
+      const nodes = [];
+      for (const el of document.querySelectorAll(sel)) {
+        if (!visible(el)) continue;
+        const href = el.tagName === 'A' ? el.getAttribute('href') : null;
+        const region = el.closest('dialog,[role=dialog],form,nav,header,footer');
+        nodes.push({
+          ref: F.refOf(el),
+          role: roleOf(el),
+          name: nameOf(el).slice(0, 80),
+          ...(el.type ? { type: el.type } : {}),
+          ...(el.value !== undefined && el.type !== 'password' && typeof el.value === 'string' && el.value ? { value: el.value.slice(0, 60) } : {}),
+          ...(el.disabled ? { disabled: true } : {}),
+          ...(href ? { href } : {}),
+          ...(region ? { region: region.tagName.toLowerCase() } : {}),
+        });
+        if (nodes.length >= 120) break;
+      }
+      return {
+        url: location.href,
+        path: location.pathname + location.search,
+        title: document.title,
+        headings: [...document.querySelectorAll('h1,h2,h3')].map(text).filter(Boolean).slice(0, 10),
+        nodes,
+        hasPassword: !!document.querySelector('input[type=password]'),
+      };`);
+  }
+
+  private async settle(
+    before: string,
+  ): Promise<{ op: 'action'; path: string; navigated: boolean }> {
+    await new Promise((r) => setTimeout(r, 450));
+    const path = this.path();
+    return { op: 'action', path, navigated: path !== before };
+  }
+
+  /** A real click at the element's center, after scrolling it into view. */
+  async click(ref: string) {
+    const before = this.path();
+    const rect = await this.evaluate<SiteRect | null>(`
+      const el = F.find(${JSON.stringify(ref)});
+      if (!el) return null;
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };`);
+    if (!rect) throw new Error(`No element ${ref} on ${before}`);
+    const x = Math.round(rect.left + rect.width / 2);
+    const y = Math.round(rect.top + rect.height / 2);
+    this.wc.sendInputEvent({ type: 'mouseMove', x, y });
+    this.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+    this.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    return this.settle(before);
+  }
+
+  /** Focuses the field, clears it, and types like a person (char events). */
+  async type(ref: string, text: string) {
+    const before = this.path();
+    const ok = await this.evaluate<boolean>(`
+      const el = F.find(${JSON.stringify(ref)});
+      if (!el) return false;
+      el.scrollIntoView({ block: 'center' });
+      el.focus();
+      if ('select' in el) el.select();
+      return true;`);
+    if (!ok) throw new Error(`No field ${ref} on ${before}`);
+    this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
+    this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+    for (const ch of text) this.wc.sendInputEvent({ type: 'char', keyCode: ch });
+    return this.settle(before);
+  }
+
+  async press(key: string) {
+    const before = this.path();
+    this.wc.sendInputEvent({ type: 'keyDown', keyCode: key });
+    if (key.length === 1) this.wc.sendInputEvent({ type: 'char', keyCode: key });
+    this.wc.sendInputEvent({ type: 'keyUp', keyCode: key });
+    return this.settle(before);
+  }
+
+  async back() {
+    const before = this.path();
+    if (this.wc.navigationHistory.canGoBack()) this.wc.navigationHistory.goBack();
+    return this.settle(before);
+  }
+
+  async goto(path: string) {
+    const before = this.path();
+    const url = new URL(path, this.baseUrl);
+    if (url.origin !== this.origin) throw new Error('Off-origin navigation is not allowed');
+    await this.load(url.pathname + url.search).catch(() => undefined);
+    return this.settle(before);
   }
 
   destroy(): void {

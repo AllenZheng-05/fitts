@@ -24,7 +24,10 @@ import { CostLedger, withLedger } from './ledger/ledger';
 import { basetenClient, LlmCaller, metaClient, type Provider } from './llm/call';
 import { contributorFor, modelFor, SPARK_OPEN, type Profile } from './llm/router';
 import { testKey } from './llm/test-key';
+import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
+import { RealRun } from './orchestrator/run';
 import type { AgentMessage, MainMessage } from './protocol';
+import { SiteRpc } from './site-client';
 
 const port = process.parentPort;
 const send = (message: AgentMessage) => port.postMessage(message);
@@ -45,12 +48,19 @@ const caller = new LlmCaller((provider: Provider) => {
   return undefined;
 }, ledger);
 
+/** Live sites main reported (url when running), and the real runs on them (P4). */
+const liveSites = new Map<string, { status: string; url?: string }>();
+const realRuns = new Map<string, RealRun>();
+const siteRpc = new SiteRpc(send);
+
 /** The engine's own states, and what was last sent (with ledger cost), per project. */
 const raw = new Map<string, RunState>();
 const sent = new Map<string, RunState>();
 const seqs = new Map<string, number>();
 
 function emit(projectId: string, extra: RunEvent[] = []): void {
+  // A project on the real engine sends its own events (RealRun).
+  if (realRuns.has(projectId)) return;
   const state = raw.get(projectId);
   if (!state) return;
   const shown: RunState = { ...state, cost: withLedger(state.cost, ledger.totals(state.runId)) };
@@ -126,6 +136,127 @@ async function llmPing(projectId: string): Promise<void> {
   }
 }
 
+/** Starts the real audit on a live project, carrying the interview's state over (§6.1). */
+function startRealAudit(projectId: string, set: EngineCall['settings']): boolean {
+  const site = liveSites.get(projectId);
+  const from = raw.get(projectId);
+  if (site?.status !== 'running' || !site.url || !from) return false;
+  realRuns.get(projectId)?.dispose();
+  const origin = new URL(site.url).origin;
+  const runRef: { current?: RealRun } = {};
+  const contributor = contributorFor(projectId, set?.contributorMode ?? false);
+  const runCaller = new LlmCaller(
+    (provider: Provider) => {
+      if (provider === 'meta' && keys.meta) return metaClient(keys.meta);
+      if (provider === 'baseten' && keys.baseten) return basetenClient(keys.baseten);
+      return undefined;
+    },
+    ledger,
+    { onTrouble: () => runRef.current?.apiTrouble() },
+  );
+  const useModel =
+    Boolean(keys.meta) &&
+    process.env['FITTS_OFFLINE'] !== '1' &&
+    process.env['FITTS_CRAWL_BRAIN'] !== 'explorer';
+  const brain: Brain = useModel
+    ? new SparkBrain(
+        runCaller,
+        () => ({
+          runId: from.runId,
+          projectId,
+          contributor,
+          allowed: () => runRef.current?.allowed() ?? true,
+        }),
+        () =>
+          modelFor('crawl', profiles.get(projectId) ?? set?.modelProfile ?? 'quality', {
+            contributor,
+            baseten: Boolean(keys.baseten),
+          }).model,
+      )
+    : new ExplorerBrain();
+  let seq = seqs.get(projectId) ?? 0;
+  const capUsd = set?.capUsd ?? from.cost.capUsd;
+  const run = new RealRun(
+    { ...from, cost: { ...from.cost, capUsd } },
+    {
+      site: siteRpc.for(projectId),
+      brain,
+      ledger,
+      budget,
+      origin,
+      emit: (events) => {
+        seq += 1;
+        seqs.set(projectId, seq);
+        send({ kind: 'events', batch: { projectId, runId: from.runId, seq, events } });
+      },
+      onEconomy: () => profiles.set(projectId, 'economy'),
+    },
+  );
+  runRef.current = run;
+  realRuns.set(projectId, run);
+  run.start();
+  return true;
+}
+
+/** RunEngine calls for a project on the real engine. Returns false for the stub to handle. */
+function callReal(projectId: string, method: string, args: unknown[]): boolean {
+  const run = realRuns.get(projectId);
+  if (!run) return false;
+  switch (method) {
+    case 'pause':
+      run.pause();
+      return true;
+    case 'resume':
+      run.resume();
+      return true;
+    case 'stopAction':
+      run.stopAction();
+      return true;
+    case 'stopRun':
+      run.stopRun();
+      return true;
+    case 'takeWheel':
+      run.takeWheel();
+      return true;
+    case 'handBack':
+      run.handBack();
+      return true;
+    case 'recordUserClick':
+      run.recordUserClick(typeof args[0] === 'string' ? args[0] : '');
+      return true;
+    case 'sendMessage':
+      run.sendMessage(
+        typeof args[0] === 'string' ? args[0] : '',
+        args[1] as { pointingAt?: string; spoken?: boolean },
+      );
+      return true;
+    case 'interruptNow':
+      run.interruptNow();
+      return true;
+    case 'answerQuestion':
+      run.answer(String(args[0]), String(args[1]));
+      return true;
+    case 'setMode':
+      run.setMode(args[0] as Parameters<RealRun['setMode']>[0]);
+      return true;
+    case 'rewindTo':
+      run.rewindTo(typeof args[0] === 'number' ? args[0] : null);
+      return true;
+    case 'updateBrief':
+      run.updateBrief(args[0] as Brief);
+      return true;
+    case 'startInterview':
+    case 'startAudit':
+      // A new interview (New run) leaves the real run; the stub plays the interview again.
+      run.dispose();
+      realRuns.delete(projectId);
+      return false;
+    default:
+      // Findings, fixes and redesign arrive in later milestones.
+      return true;
+  }
+}
+
 const allowed = new Set<string>([...ENGINE_METHODS, ...STUB_ENGINE_METHODS]);
 
 function call({ projectId, method, args, brief, settings: set }: EngineCall): void {
@@ -143,6 +274,8 @@ function call({ projectId, method, args, brief, settings: set }: EngineCall): vo
     );
     return;
   }
+  if (callReal(projectId, method, args)) return;
+  if (method === 'startAudit' && startRealAudit(projectId, set)) return;
   if (method === 'answerQuestion') {
     const item = raw.get(projectId)?.chat.find((c) => c.id === args[0]);
     if (item?.type === 'state' && item.stateKind === 'budget-warning' && args[1] === 'economy')
@@ -162,6 +295,17 @@ port.on('message', (e: { data: MainMessage }) => {
     else if (message.kind === 'keys') {
       for (const k of Object.keys(keys) as KeyName[]) delete keys[k];
       Object.assign(keys, message.keys);
+    } else if (message.kind === 'siteStatus') {
+      const { projectId, status, url } = message.status;
+      liveSites.set(projectId, { status, ...(url ? { url } : {}) });
+      if (status === 'failed') realRuns.get(projectId)?.siteDown();
+    } else if (message.kind === 'siteResult') {
+      siteRpc.resolve(
+        message.id,
+        message.ok,
+        message.ok ? message.result : undefined,
+        message.ok ? undefined : message.error,
+      );
     } else if (message.kind === 'testKey') {
       void testKey(message.name, message.value).then((r) =>
         send({ kind: 'keyResult', id: message.id, ...r }),
