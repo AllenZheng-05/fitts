@@ -138,6 +138,11 @@ function AuditSiteView({ run }: { run: RunState }) {
         ) : null
       }
       panel={<FindingPanel run={run} />}
+      shot={
+        rewound
+          ? `fitts-asset://${run.projectId}/${run.runId}/shots/${run.rewindStep ?? 0}.jpg`
+          : undefined
+      }
       contentInsetRight={findingOpen ? FINDING_PANEL_INSET : undefined}
       footer={
         <div className="flex flex-none justify-between gap-3 border-t border-ink px-3.5 py-2 font-mono text-[12px] text-muted">

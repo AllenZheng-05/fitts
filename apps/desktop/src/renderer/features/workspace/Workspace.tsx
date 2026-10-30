@@ -6,6 +6,7 @@ import { copy } from '../../copy';
 import { format } from '../../lib/format';
 import { useProject } from '../../state/projects';
 import { useActiveRun, useRunStore } from '../../state/run-store';
+import { openLiveSite } from '../../state/live-site';
 import { useUi } from '../../state/ui';
 import { AuditLayout } from '../audit/AuditLayout';
 import { GateModal } from '../gate/GateModal';
@@ -32,6 +33,11 @@ export function Workspace() {
   useEffect(() => {
     if (!run && project) useUi.getState().openProject(project.id);
   }, [run, project]);
+
+  // The project's real site (SPEC-phase2 §5): main starts its dev server and site window.
+  useEffect(() => {
+    if (project?.kind === 'local') openLiveSite(project.id);
+  }, [project?.id, project?.kind]);
 
   const name = project?.name ?? projectId;
   return (

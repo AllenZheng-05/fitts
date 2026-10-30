@@ -5,7 +5,7 @@
   "description": "Fitts demo target: a funeral home site whose look reads as a party",
   "type": "module",
   "scripts": {
-    "dev": "vite --configLoader runner --port 3000 --strictPort",
+    "dev": "vite --configLoader runner",
     "build": "vite build --configLoader runner",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

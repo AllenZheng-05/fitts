@@ -24,6 +24,87 @@ export interface FittsBridge {
   store?: StoreBridge;
   /** API keys in safeStorage. The renderer only ever learns whether a key exists. */
   keys?: KeysBridge;
+  /** The user's site: dev server, offscreen window, frames, input, CDP queries (§5). */
+  site?: SiteBridge;
+}
+
+/** What Fitts finds in a project folder (SPEC-phase2 §4.1; the Phase 1 mock's shape). */
+export interface Detection {
+  id: string;
+  name: string;
+  framework: string;
+  devCommand: string;
+  url: string;
+  repo?: string;
+  hasPlugin: boolean;
+  /** Real detection only. */
+  port?: number;
+  startPath?: string;
+  ghReady?: boolean;
+}
+
+export interface SiteRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** The live site's state, pushed by main. */
+export interface SiteStatus {
+  projectId: string;
+  status: 'starting' | 'running' | 'failed' | 'unavailable';
+  url?: string;
+  canBack?: boolean;
+  canForward?: boolean;
+  cursor?: string;
+  /** The dev server's last lines, for the site-down card. */
+  log?: string[];
+}
+
+export type SiteInput =
+  | {
+      kind: 'mouse';
+      type: 'mouseDown' | 'mouseUp' | 'mouseMove';
+      x: number;
+      y: number;
+      button?: 'left' | 'right' | 'middle';
+      clickCount?: number;
+    }
+  | { kind: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
+  | {
+      kind: 'key';
+      type: 'keyDown' | 'keyUp' | 'char';
+      keyCode: string;
+      modifiers?: ('shift' | 'control' | 'alt' | 'meta')[];
+    };
+
+export type SiteNav =
+  { kind: 'path'; path: string } | { kind: 'back' } | { kind: 'forward' } | { kind: 'reload' };
+
+export interface SiteBridge {
+  /** Real detection, or null when the folder doesn't exist. */
+  detect(folder: string): Promise<Detection | null>;
+  /** Starts (or reuses) the project's dev server and opens its site window. */
+  open(projectId: string): void;
+  close(projectId: string): void;
+  resize(projectId: string, width: number, height: number): void;
+  input(projectId: string, input: SiteInput): void;
+  nav(projectId: string, nav: SiteNav): void;
+  /** Element boxes by ref, in site CSS px. */
+  rects(projectId: string, refs: string[]): Promise<Record<string, SiteRect>>;
+  refAt(projectId: string, x: number, y: number): Promise<string | null>;
+  /** The element at a point with its accessible name ("You clicked …" while driving). */
+  elementAt(
+    projectId: string,
+    x: number,
+    y: number,
+  ): Promise<{ ref: string; label: string } | null>;
+  onFrame(
+    projectId: string,
+    handler: (jpeg: Uint8Array, width: number, height: number) => void,
+  ): () => void;
+  onStatus(handler: (status: SiteStatus) => void): () => void;
 }
 
 /** RunEngine methods the renderer may call over IPC (everything but getState/subscribe). */
@@ -111,6 +192,17 @@ export const IPC = {
   keysClear: 'fitts:keys-clear',
   keysTest: 'fitts:keys-test',
   keysHas: 'fitts:keys-has',
+  siteDetect: 'fitts:site-detect',
+  siteOpen: 'fitts:site-open',
+  siteClose: 'fitts:site-close',
+  siteResize: 'fitts:site-resize',
+  siteInput: 'fitts:site-input',
+  siteNav: 'fitts:site-nav',
+  siteRects: 'fitts:site-rects',
+  siteRefAt: 'fitts:site-ref-at',
+  siteElementAt: 'fitts:site-element-at',
+  siteFrame: 'fitts:site-frame',
+  siteStatus: 'fitts:site-status',
 } as const;
 
 export type Mode = 'plan' | 'ask-every' | 'ask-unsure' | 'autonomous' | 'dangerous';
@@ -135,6 +227,10 @@ export interface Project {
   brief: Brief;
   lastRunId?: string;
   createdAt: string;
+  /** SPEC-phase2 §12.2: how a live site proved ownership. */
+  verification?: { method: 'host' | 'dns' | 'file'; host?: string; verifiedAt: string };
+  /** SPEC-phase2 §12.2: where the site view opens (demo/chat uses /compose). */
+  startPath?: string;
 }
 
 export interface Brief {
@@ -165,6 +261,22 @@ export interface Finding {
   status: 'open' | 'dismissed' | 'fixing' | 'verified' | 'pr-opened' | 'rolled-back' | 'undone';
   prNumber?: number;
   costUsd?: number;
+
+  // SPEC-phase2 §12.2 additions (all optional).
+  /** `suggestion`: not enough evidence to show; counted on Done and listed in the report. */
+  lane?: 'shown' | 'suggestion';
+  /** Same issue on several screens. */
+  locations?: { route: string; elementRef?: string; stepIndex: number }[];
+  /** Where the element is rendered, and how sure Fitts is (§9.1). */
+  source?: {
+    file: string;
+    line: number;
+    col?: number;
+    confidence: 'plugin' | 'source-map' | 'search';
+  };
+  /** Asset ids (fitts-asset://) for the step shot, the after shot, the SAM mask, the mockup. */
+  assets?: { shot?: string; after?: string; mask?: string; mockup?: string };
+  prUrl?: string;
 }
 
 export interface Change {
@@ -178,6 +290,9 @@ export interface Change {
   status: 'verified' | 'rolled-back' | 'undone' | 'retrying';
   merged?: boolean;
   reason?: string;
+  /** SPEC-phase2 §12.2: the `fitts/…` branch and the PR's URL. */
+  branch?: string;
+  prUrl?: string;
 }
 
 export interface GateRequest {

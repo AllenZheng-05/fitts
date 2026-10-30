@@ -1071,3 +1071,80 @@ screencast fallback is needed.
   That list goes away when the real orchestrator replaces the stub.
 - **Main-process tests:** unit tests for main-process code live in `tests/main/` (Node
   environment, node tsconfig).
+
+## Phase 2 — P2: the live site view, CDP queries, detection and the dev-server spawner
+
+- **The site is an offscreen BrowserWindow, as V9 showed it could be.**
+  - Setup: one window per open project. It's sandboxed, has no preload, uses a
+    `persist:fitts-site-<id>` session and denies every permission.
+  - Frames: each `paint` frame is encoded with `toJPEG(80)`. The renderer draws it on
+    `<SiteCanvas>` at the frame's own CSS-px size, so canvas and site coordinates are
+    identical.
+  - Sizing: main resizes the window to the panel, debounced 150ms.
+- **Transport difference from the spec:** frames go over ordinary IPC (`webContents.send`,
+  and through contextBridge as a `Uint8Array`), not a dedicated MessagePort. It's simpler,
+  and at 30 fps × about 50 KB it's fine. A MessagePort can replace it without touching the
+  canvas if profiling ever shows a cost.
+- **Element boxes and refs** come from Fitts's own isolated world (world 1001), using
+  `executeJavaScriptInIsolatedWorld`, not raw CDP DOM calls.
+  - **Refs:** the element's `data-ref` or `data-testid`, otherwise a stable `e<n>`.
+  - **Difference from the spec:** that `e<n>` is stored as a `data-fitts-ref` attribute on the
+    element (DOM attributes are shared across worlds), instead of a main-side
+    `backendNodeId` map. P4's crawler can add the CDP map if it needs one.
+  - **Synchronous boxes:** the renderer's `liveSurface` caches boxes, so `getElementRect`
+    stays synchronous for the Phase 1 overlays. It re-measures the refs asked for in the
+    last 2s every 120ms.
+  - **Point mode:** `refAtAsync` added to `SiteSurface` makes point mode await `refAt` over
+    IPC.
+- **Navigation:**
+  - `will-navigate` and `setWindowOpenHandler` allow only the project's origin.
+  - The address bar, Back, Forward and Reload come from the window's own history
+    (`navigationHistory`).
+  - When the scripted run (or a site map row) changes the route, the live site follows it.
+- **Driving:**
+  - The canvas forwards pointer, wheel and key events only while the user may drive (the
+    interview, or after Take the wheel). It uses `sendInputEvent`, with `char` events for
+    typing. IME composition is out of scope.
+  - Input is queued strictly in order. A press first asks main what's under the pointer
+    (`site.elementAt`: its ref and accessible name, or `[password entered]`), so "You
+    clicked …" names the element, not the page the click led to.
+  - The cursor shape follows `cursor-changed`.
+- **Rewind:** main saves `runs/<runId>/shots/<step>.jpg` on every `step.started`. While rewound,
+  the site view shows that shot (`fitts-asset://<project>/<run>/shots/<step>.jpg`) over the
+  canvas. The read-only, path-checked asset protocol is allowed in the CSP's `img-src`.
+- **Real detection (`main/projects/detect.ts`), behind the mock's result shape (now
+  `Detection` in `@fitts/schema`):**
+  - What it reads:
+    - the framework and default port from `package.json`
+    - the dev command from the scripts, plus a `--port` flag or a Vite config's `port`
+    - the package manager from the lockfile, searching up to 4 parent folders, since
+      workspace packages keep it at the root
+    - `git remote get-url origin`, and `gh auth status`
+    - whether `@fitts/vite-plugin` is installed
+  - **Start path:** a project may declare `"fitts": { "startPath": "/compose" }` in its
+    `package.json` (demo/chat does), which becomes `Project.startPath`.
+  - **Fallback:** the folder field uses real detection when the folder exists and the Phase 1
+    mock otherwise, which keeps the e2e and Scenario fixtures (fake paths) working.
+- **Dev servers (`main/site/dev-server.ts`, `main/spawn`):**
+  - **Spawning:** argument arrays only. On Windows, npm-style `.cmd` shims go through
+    `cmd.exe /d /s /c`, with every token checked against a strict whitelist, since Node can
+    only start `.cmd` files that way.
+  - **Environment:** `ELECTRON_RUN_AS_NODE` is stripped, and `PORT` is passed (both demos
+    read it).
+  - **Reuse:** a server already answering on the port is reused and never stopped.
+  - **Logs:** the last 20 lines are kept for the site-down card.
+  - **Quitting:** servers Fitts started are killed synchronously (`taskkill /T`) on quit.
+    The async version left orphans when the app exited first.
+  - **Port override:** `FITTS_SITE_PORT` overrides the port (the e2e tests use 5191).
+- **When the live view is used:** for local projects whose folder exists, on the IPC engine.
+  Otherwise the Phase 1 mock render stays (Scenario panel, fake e2e folders, unit tests).
+- **Tests:**
+  - E2E (`site-live.spec.ts`, real demo/chat):
+    - live frames
+    - driving the site in the interview through the canvas
+    - point mode returning `compose-to`
+    - the problem pin sitting on the real element (within 16px)
+    - take the wheel logging "Create Message"
+    - rewind showing a real stored shot
+  - Unit tests: detection, the spawner's command handling and token guard, and asset-path
+    traversal checks.

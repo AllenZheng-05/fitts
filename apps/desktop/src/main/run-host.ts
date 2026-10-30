@@ -39,6 +39,8 @@ export class RunHost {
   private readonly logs = new Map<string, RunLog>();
   private quitting = false;
   private nextRequest = 1;
+  /** Called when a run starts a new step (main saves a step shot for rewind). */
+  onStep: ((projectId: string, runId: string, step: number) => void) | undefined;
   private readonly pending = new Map<number, (r: { ok: boolean; message: string }) => void>();
 
   constructor(
@@ -131,6 +133,7 @@ export class RunHost {
       this.logs.set(key, log);
     }
     log.append(events, state);
+    for (const e of events) if (e.type === 'step.started') this.onStep?.(projectId, runId, e.step);
 
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.webContents.isDestroyed()) win.webContents.send(IPC.engineEvents, batch);

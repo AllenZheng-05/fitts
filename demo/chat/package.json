@@ -5,7 +5,7 @@
   "description": "Fitts demo target: a family messaging app with 25 planted usability issues",
   "type": "module",
   "scripts": {
-    "dev": "vite --configLoader runner --port 5173 --strictPort",
+    "dev": "vite --configLoader runner",
     "build": "vite build --configLoader runner",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "reset": "node scripts/reset.mjs"
@@ -21,5 +21,8 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "vite": "8.3.5"
+  },
+  "fitts": {
+    "startPath": "/compose"
   }
 }

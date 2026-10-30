@@ -9,7 +9,8 @@ import { copy } from '../../copy';
 import { bridge } from '../../lib/bridge';
 import { format } from '../../lib/format';
 import { checkKey, storeKey } from '../../lib/keys';
-import { detectFolder, KEY_CHECK_MS, projectFromFolder } from '../../mock/detect';
+import { useDetection } from '../../lib/use-detection';
+import { KEY_CHECK_MS, projectFromFolder } from '../../mock/detect';
 import { LAST_RUN_CAPTIONS, MOCK_USER } from '../../mock/fixtures/projects';
 import { addAndOpenProject } from '../../state/actions';
 import { useProjects } from '../../state/projects';
@@ -72,7 +73,7 @@ function SetupCard() {
     };
   }, [key]);
 
-  const detection = detectFolder(folder);
+  const detection = useDetection(folder);
   const ready = keyWorks && detection !== null;
 
   const open = () => {

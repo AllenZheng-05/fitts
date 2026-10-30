@@ -30,6 +30,13 @@ export class ProjectStore {
     return join(this.dir, 'index.json');
   }
 
+  /** One project by id (the site manager needs its folder and dev command). */
+  get(id: string): Project | undefined {
+    if (!SAFE_ID.test(id)) return undefined;
+    const file = join(this.dir, id, 'project.json');
+    return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as Project) : undefined;
+  }
+
   /** The blob for the renderer, or null before anything was saved. */
   load(): string | null {
     if (!existsSync(this.indexFile())) return null;

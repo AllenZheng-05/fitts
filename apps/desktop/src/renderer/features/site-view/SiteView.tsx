@@ -8,7 +8,10 @@ import { useProject } from '../../state/projects';
 import { isTopOverlay, useOverlayStack } from '../../state/overlays';
 import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
-import { domSurface, type Rect, type SiteSurface } from './surface';
+import { bridge } from '../../lib/bridge';
+import { livePath, useLiveSite } from '../../state/live-site';
+import { SiteCanvas } from './SiteCanvas';
+import { domSurface, liveSurface, type Rect, type SiteSurface } from './surface';
 
 export const MESSAGE_BOX_ID = 'message-box';
 
@@ -35,6 +38,8 @@ interface SiteViewProps {
   label?: string;
   className?: string;
   header?: ReactNode;
+  /** A stored step shot (fitts-asset://…) shown instead of the live site while rewound. */
+  shot?: string | undefined;
 }
 
 /** The embedded browser showing "your site" (SPEC §6.3, §6.4). */
@@ -53,6 +58,7 @@ export function SiteView({
   label = copy.site.region,
   className,
   header,
+  shot,
 }: SiteViewProps) {
   const project = useProject(projectId);
   const { route, canBack, canForward, reloads } = useSiteRoute(projectId);
@@ -61,7 +67,36 @@ export function SiteView({
   const containerRef = useRef<HTMLDivElement>(null);
   // The surface reads the container only from handlers and effects, never during render.
   // eslint-disable-next-line react-hooks/refs
-  const [surface] = useState<SiteSurface>(() => domSurface(containerRef));
+  const [mockSurface] = useState<SiteSurface>(() => domSurface(containerRef));
+  // The real site (SPEC-phase2 §5): frames on a canvas, boxes and refs from main.
+  const live = useLiveSite(projectId);
+  // The surface reads the container only from handlers and effects, never during render.
+  // eslint-disable-next-line react-hooks/refs
+  const [realSurface] = useState(() =>
+    liveSurface(projectId, containerRef, {
+      rects: (id, refs) => bridge().site?.rects(id, refs) ?? Promise.resolve({}),
+      refAt: (id, x, y) => bridge().site?.refAt(id, x, y) ?? Promise.resolve(null),
+    }),
+  );
+  const surface = live ? realSurface : mockSurface;
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => void realSurface.refresh(), 120);
+    return () => clearInterval(timer);
+  }, [live, realSurface]);
+  // Where Fitts (or the user) sends the mock route, the live site follows.
+  const lastRoute = useRef(route);
+  useEffect(() => {
+    if (!live || lastRoute.current === route) return;
+    lastRoute.current = route;
+    bridge().site?.nav(projectId, { kind: 'path', path: route });
+  }, [live, route, projectId]);
+  const nav = (kind: 'back' | 'forward' | 'reload') => {
+    if (live) bridge().site?.nav(projectId, { kind });
+    else site[kind](projectId);
+  };
+  const liveHost = live?.url ? new URL(live.url).host : undefined;
+  const shownPath = live ? (livePath(live) ?? route) : route;
 
   return (
     <section
@@ -77,28 +112,28 @@ export function SiteView({
             <IconButton
               size="sm"
               aria-label={copy.site.back}
-              disabled={!canBack}
-              onClick={() => site.back(projectId)}
+              disabled={live ? !live.canBack : !canBack}
+              onClick={() => nav('back')}
               icon={<ArrowLeft size={16} aria-hidden="true" />}
             />
             <IconButton
               size="sm"
               aria-label={copy.site.forward}
-              disabled={!canForward}
-              onClick={() => site.forward(projectId)}
+              disabled={live ? !live.canForward : !canForward}
+              onClick={() => nav('forward')}
               icon={<ArrowRight size={16} aria-hidden="true" />}
             />
             <IconButton
               size="sm"
               aria-label={copy.site.reload}
-              onClick={() => site.reload(projectId)}
+              onClick={() => nav('reload')}
               icon={<RotateCw size={16} aria-hidden="true" />}
             />
           </div>
           <input
             readOnly
             aria-label={copy.site.url}
-            value={`${addressHost ?? project?.url ?? 'localhost'}${route}`}
+            value={`${addressHost ?? liveHost ?? project?.url ?? 'localhost'}${shownPath}`}
             className="min-w-0 flex-[1_1_180px] truncate rounded-row bg-surface-2 px-3 py-[9px] font-mono text-[12px]"
           />
           {toolbarEnd}
@@ -120,15 +155,35 @@ export function SiteView({
           style={contentInsetRight ? { paddingRight: contentInsetRight } : undefined}
           inert={!interactive && !pointing ? true : undefined}
         >
-          <Fragment key={reloads}>
-            {renderSite(projectId, {
-              route,
-              navigate: (r) => site.navigate(projectId, r),
-              variant,
-              direction,
-              onElementClick,
-            })}
-          </Fragment>
+          {live && variant === 'now' ? (
+            <div className="relative h-full">
+              <SiteCanvas
+                projectId={projectId}
+                interactive={interactive}
+                cursor={live.cursor}
+                onElementClick={onElementClick}
+              />
+              {shot && (
+                // Rewind shows what the page looked like at that step (SPEC-phase2 §5.4).
+                <img
+                  src={shot}
+                  alt=""
+                  className="absolute top-0 left-0 max-w-none"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
+                />
+              )}
+            </div>
+          ) : (
+            <Fragment key={reloads}>
+              {renderSite(projectId, {
+                route,
+                navigate: (r) => site.navigate(projectId, r),
+                variant,
+                direction,
+                onElementClick,
+              })}
+            </Fragment>
+          )}
         </div>
         {overlay?.(surface)}
         {pointing && <PointLayer surface={surface} />}
@@ -162,7 +217,8 @@ function PointLayer({ surface }: { surface: SiteSurface }) {
     };
   }, [id]);
 
-  const at = (e: React.PointerEvent | React.MouseEvent) => {
+  const at = async (e: React.PointerEvent | React.MouseEvent): Promise<string | null> => {
+    if (surface.refAtAsync) return surface.refAtAsync(e.clientX, e.clientY);
     // Look through this layer to the site underneath.
     const layer = e.currentTarget as HTMLElement;
     layer.style.pointerEvents = 'none';
@@ -177,16 +233,18 @@ function PointLayer({ surface }: { surface: SiteSurface }) {
     <div
       className="absolute inset-0 z-20 cursor-crosshair"
       onPointerMove={(e) => {
-        const ref = at(e);
-        const rect = ref ? surface.getElementRect(ref) : null;
-        setHover(ref && rect ? { ref, rect } : null);
+        void at(e).then((ref) => {
+          const rect = ref ? surface.getElementRect(ref) : null;
+          setHover(ref && rect ? { ref, rect } : null);
+        });
       }}
       onPointerLeave={() => setHover(null)}
       onClick={(e) => {
-        const ref = at(e);
-        if (!ref) return;
-        useUi.getState().set({ pointing: false, draftPointingAt: ref });
-        document.getElementById(MESSAGE_BOX_ID)?.focus();
+        void at(e).then((ref) => {
+          if (!ref) return;
+          useUi.getState().set({ pointing: false, draftPointingAt: ref });
+          document.getElementById(MESSAGE_BOX_ID)?.focus();
+        });
       }}
     >
       {hover && (

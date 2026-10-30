@@ -5,5 +5,5 @@ import { api } from './server/api';
 
 export default defineConfig({
   plugins: [fittsSource(), react(), api()],
-  server: { port: 5173, strictPort: true },
+  server: { port: Number(process.env.PORT ?? 5173), strictPort: true },
 });

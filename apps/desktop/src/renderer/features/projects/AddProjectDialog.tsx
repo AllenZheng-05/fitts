@@ -8,7 +8,8 @@ import { Tabs } from '../../components/Tabs';
 import { copy } from '../../copy';
 import { bridge } from '../../lib/bridge';
 import { format } from '../../lib/format';
-import { detectFolder, projectFromFolder, projectFromUrl, type Detection } from '../../mock/detect';
+import { useDetection } from '../../lib/use-detection';
+import { projectFromFolder, projectFromUrl, type Detection } from '../../mock/detect';
 import { addAndOpenProject } from '../../state/actions';
 import { useUi } from '../../state/ui';
 import { LiveVerify } from './LiveVerify';
@@ -34,7 +35,7 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState('');
   const [verified, setVerified] = useState(false);
 
-  const detection = detectFolder(folder);
+  const detection = useDetection(folder);
   const suggested =
     kind === 'code'
       ? (detection?.name ?? '')

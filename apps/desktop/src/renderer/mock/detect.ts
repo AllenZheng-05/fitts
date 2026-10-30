@@ -1,18 +1,9 @@
 // Mock project detection (SPEC §6.1, §6.11): what Fitts would find in a folder or URL.
-import type { Project } from '@fitts/schema';
+import type { Detection, Project } from '@fitts/schema';
 import { DEMO_CHAT, DEMO_PROJECTS, HARTWELL, MOCK_USER } from './fixtures/projects';
 
-export interface Detection {
-  /** Suggested id; the projects store makes it unique. */
-  id: string;
-  name: string;
-  framework: string;
-  devCommand: string;
-  url: string;
-  repo?: string;
-  /** Whether the Fitts source plugin is already installed. */
-  hasPlugin: boolean;
-}
+// The result shape is shared with main's real detection (SPEC-phase2 §4.1).
+export type { Detection } from '@fitts/schema';
 
 const forwardSlashes = (path: string) => path.replaceAll('\\', '/').replace(/\/+$/, '');
 
@@ -85,6 +76,7 @@ export function projectFromFolder(folder: string, name: string, detection: Detec
     framework: detection.framework,
     devCommand: detection.devCommand,
     ...(detection.repo ? { repo: detection.repo } : {}),
+    ...(detection.startPath ? { startPath: detection.startPath } : {}),
     brief: {},
     createdAt: new Date().toISOString(),
   };
