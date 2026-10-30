@@ -392,6 +392,10 @@ export const copy = {
     region: 'Your site, before and after',
     afterLabel: 'AFTER · {name}',
     everyPage: 'Every page',
+    /** While the look is being applied: the step shot against the direction's mockup. */
+    mockupAfter: 'MOCKUP · {name}',
+    page: 'Page',
+    previewCaption: 'Redesign branch {branch} · every page checked',
   },
   done: {
     preview: 'Preview of your site with every fix',
@@ -696,6 +700,9 @@ export const copy = {
     askToAct: 'Can I {action}?',
     goAhead: 'Go ahead',
     skipIt: 'Skip it',
+    whichLook:
+      'Which look should I apply? Pick one of the three above and I’ll restyle every page, or keep the look you have.',
+    keepLook: 'Keep my look',
     skippedAction: "Okay, I'll leave that one alone.",
     pathYes: 'Yes',
     pathNo: 'No',

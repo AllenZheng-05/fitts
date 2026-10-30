@@ -192,6 +192,74 @@ describe('FixHost', () => {
     expect(git(root, 'branch', '--list', 'fitts/h7-tap-target-2')).toBe('');
   });
 
+  it('a redesign lists folders and writes whole files; reset drops uncommitted edits', async () => {
+    const r = (await host.call('app', {
+      fn: 'prepare',
+      runId: 'run-1',
+      findingId: 'redesign',
+      branch: 'fitts/redesign-quiet-stone',
+    })) as { job: string; branch: string };
+    expect(await host.call('app', { fn: 'list', job: r.job, dir: '' })).toEqual(
+      expect.arrayContaining(['package.json', 'src/']),
+    );
+    expect(
+      await host.call('app', {
+        fn: 'write',
+        job: r.job,
+        path: 'src/themes/quiet/theme.css',
+        content: ':root {\n  --ink: #2f3a3a;\n}\n',
+      }),
+    ).toEqual({ ok: true });
+    // Replacing a CRLF file keeps its line endings.
+    await host.call('app', { fn: 'write', job: r.job, path: 'src/styles.css', content: 'a\nb\n' });
+    const dir = join(root, '.fitts-worktrees', 'run-1', 'redesign');
+    expect(readFileSync(join(dir, 'src', 'styles.css'), 'utf8')).toBe('a\r\nb\r\n');
+    expect(
+      await host.call('app', { fn: 'write', job: r.job, path: 'run.exe', content: 'x' }),
+    ).toEqual({ ok: false, error: "run.exe isn't a source file" });
+    await host.call('app', { fn: 'commit', job: r.job, message: 'Redesign: Quiet stone' });
+    // An adjustment that fails its check is dropped, back to the redesign's commit.
+    await host.call('app', { fn: 'write', job: r.job, path: 'src/extra.css', content: 'x' });
+    await host.call('app', { fn: 'reset', job: r.job });
+    expect(existsSync(join(dir, 'src', 'extra.css'))).toBe(false);
+    expect(existsSync(join(dir, 'src', 'themes', 'quiet', 'theme.css'))).toBe(true);
+  });
+
+  it('a fix can start from the redesign; its PR stacks on it, and push updates an open PR', async () => {
+    const fix = (await host.call('app', {
+      fn: 'prepare',
+      runId: 'run-1',
+      findingId: 'f3',
+      branch: 'fitts/h1-stacked',
+      base: 'fitts/redesign-quiet-stone',
+    })) as { job: string; branch: string };
+    const dir = join(root, '.fitts-worktrees', 'run-1', 'f3');
+    expect(existsSync(join(dir, 'src', 'themes', 'quiet', 'theme.css'))).toBe(true);
+    await host.call('app', { fn: 'write', job: fix.job, path: 'src/f3.css', content: 'x' });
+    await host.call('app', { fn: 'commit', job: fix.job, message: 'f3' });
+    const pr = (await host.call('app', {
+      fn: 'prOpen',
+      job: fix.job,
+      title: 'f3',
+      body: 'b',
+      base: 'fitts/redesign-quiet-stone',
+    })) as { number: number };
+    const registry = JSON.parse(readFileSync(dryRunRegistry(root), 'utf8')) as {
+      prs: { number: number; base?: string }[];
+    };
+    expect(registry.prs.find((p) => p.number === pr.number)?.base).toBe(
+      'fitts/redesign-quiet-stone',
+    );
+    // The base went up with it, so the stacked PR has something to point at.
+    expect(
+      git(join(tmp, 'origin.git'), 'branch', '--list', 'fitts/redesign-quiet-stone'),
+    ).toContain('fitts/redesign-quiet-stone');
+    await host.call('app', { fn: 'write', job: fix.job, path: 'src/f3.css', content: 'y' });
+    await host.call('app', { fn: 'commit', job: fix.job, message: 'f3 again' });
+    await host.call('app', { fn: 'push', job: fix.job });
+    expect(git(join(tmp, 'origin.git'), 'log', '-1', '--format=%s', fix.branch)).toBe('f3 again');
+  });
+
   it('verification runs the dev script on its own port', async () => {
     expect(await verifyCommand(root, 5181)).toBe(
       'pnpm exec vite --configLoader runner --port 5181 --strictPort',

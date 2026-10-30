@@ -4,6 +4,7 @@ import { Chip } from '../../components/Chip';
 import { Button } from '../../components/Button';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
+import { getEngineKind } from '../../state/engine';
 import { useProject } from '../../state/projects';
 import { useActiveRun, useRunStore } from '../../state/run-store';
 import { openLiveSite } from '../../state/live-site';
@@ -53,7 +54,11 @@ export function Workspace() {
         <h1 className="sr-only">{format(copy.workspace.heading, { name })}</h1>
         {run?.phase === 'interview' && <InterviewLayout run={run} />}
         {run?.phase === 'audit' &&
-          (isRedesigning(run) ? <RedesignLayout run={run} /> : <AuditLayout run={run} />)}
+          (isRedesigning(run, getEngineKind() !== 'mock') ? (
+            <RedesignLayout run={run} />
+          ) : (
+            <AuditLayout run={run} />
+          ))}
         {run?.phase === 'done' && <DoneLayout run={run} />}
       </main>
       {run && <GateModal run={run} />}

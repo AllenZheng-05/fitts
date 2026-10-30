@@ -1750,3 +1750,49 @@ screencast fallback is needed.
     (the guideline is six); spacing at 9, 11 and 18px.
 - **The dev replay path** resolves next to `out/` (`__dirname`), not `app.getAppPath()`, which
   is `out/main` when Electron starts with a script. P3's `devRepoRoot` had the same issue.
+
+## Phase 2 — after P12: applying a redesign (§8.3, §9.2)
+
+The cut-list item "Hartwell redesign apply" is built: picking a look direction changes code.
+
+- **When it runs.** A picked direction is applied after the review, before fixes are offered,
+  as one job that runs alone (fix jobs wait). Picked later, during fixes, it waits for running
+  fixes and then runs. Autonomous picks the first direction as before. The Ask modes now ask
+  "Which look should I apply?" after the review, with a "Keep my look" button, since the
+  directions card had no way to decline. Plan only never applies one. A run applies at most
+  one direction; picking another after that says to undo first.
+- **Theme-fit on small sites.** It used to run only after 3 pages, so a one-page site (a
+  portfolio) never got it. It now also runs when the crawl ends with fewer pages.
+- **The redesigner** is the fixer's tool loop with more room: it can list folders and write
+  whole source files (`write` only takes source extensions and keeps a file's CRLF), takes up
+  to 48 steps at medium effort, and gets the direction's mockup and two step shots as images.
+  Its prompt is `docs/prompts/redesign.md`: a project with a theme system gets the look as a
+  new theme made the default (existing themes keep working); otherwise it restyles in place.
+  Each wording change is reported with `note_wording` after it's made.
+- **Verification** (`verifyPages`): one worktree dev server, every crawled page (at most 10),
+  at the before shots' size. Each page must render (visible content, no Vite/Next/webpack
+  error overlay), and no page may gain a problem at severity 2 or higher against the crawl's
+  baseline, across all page probes, the focus sweep and 360/768/1280px. A failed first pass
+  gets one more pass with the reason; a second failure rolls the redesign back (worktree
+  discarded, the site unchanged, fixes carry on from HEAD).
+- **On pass:** one commit "Redesign: <name> (Fitts: look and feel)", an after shot per page
+  (assets), and one PR. Open findings whose problem is gone on the redesigned page are marked
+  fixed by the redesign (they join its `findingIds` and its PR) and leave the fix queue.
+  `Change.pages` carries each page's before and after shot.
+- **Later fixes stack on the redesign:** their worktrees start from its branch, and their PRs
+  target it (`gh pr create --base`; the dry run records `base`). Both push the base first, so
+  a stacked PR always has something to point at. Undoing the redesign returns later fixes to
+  HEAD; fixes already stacked on it aren't rebuilt.
+- **Wording cards:** each wording change is its own card and its own `wording` change. "Undo
+  this" patches that one line back on the redesign branch, commits, and pushes to the open PR.
+- **"Adjust it":** while a verified redesign exists, a message about the redesign ("For the
+  redesign, instead…", or one naming the redesign or the look) re-runs the redesigner on the
+  same worktree with that instruction, verifies every page again, and commits and pushes; a
+  failing adjustment is dropped (`git reset --hard` + `clean`, ignored files kept), leaving the
+  redesign as it was.
+- **The UI on real runs.** The redesign layout used Phase 1's mock site. On a real run it now
+  shows only while the pick is open or the look is being applied (so the findings tray is back
+  for the fixes after), comparing the current step shot with the direction's mockup (labeled
+  MOCKUP), then every page's real before and after. Done shows the redesign's before/after with
+  a page picker instead of the mock "fixed" render. The mock engine's flow is unchanged.
+- **Done's line** counts fixes and the redesign separately and leaves wording cards out.

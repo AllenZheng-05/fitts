@@ -18,6 +18,7 @@ import { useProject } from '../../state/projects';
 import { useSite } from '../../state/site';
 import { useToasts } from '../../state/toasts';
 import { currentDirection } from '../redesign/redesign';
+import { appliedRedesign, RedesignShots } from '../redesign/RedesignShots';
 import { SiteView } from '../site-view/SiteView';
 
 /** How many verified changes show before "See all N changes". */
@@ -35,19 +36,28 @@ export function DoneLayout({ run }: { run: RunState }) {
   }, [run.projectId]);
 
   const previewUrl = run.projectId === DEMO_CHAT ? 'localhost:5180' : project?.url;
+  // A real redesign shows its own before and after of every page (SPEC-phase2 §8.3).
+  const redesign = appliedRedesign(run);
   return (
     <>
       <SiteView
         projectId={run.projectId}
         label={copy.done.preview}
         className="w-[520px] flex-none"
-        interactive
+        interactive={!redesign}
         variant="fixed"
         direction={currentDirection(run)}
         addressHost={previewUrl}
+        overlay={redesign ? () => <RedesignShots run={run} fill /> : undefined}
         header={
           <span className="text-[12px] text-muted">
-            {stats.fixed === 0 ? (
+            {redesign ? (
+              <RichText
+                text={format(copy.redesign.previewCaption, {
+                  branch: `**${redesign.branch ?? ''}**`,
+                })}
+              />
+            ) : stats.fixed === 0 ? (
               // No fixes (or an audit-only live site): there is no preview branch to show.
               copy.done.previewAsIs
             ) : (

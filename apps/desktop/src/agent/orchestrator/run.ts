@@ -21,7 +21,7 @@ import { copy } from '../../renderer/copy';
 import { format } from '../../renderer/lib/format';
 import { ProbeRunner } from '../crawler/probes';
 import { aggregateWithChecks, type Check } from '../review/aggregate';
-import { FixPipeline, type Fixer } from '../fix/pipeline';
+import { FixPipeline, type Fixer, type Redesigner } from '../fix/pipeline';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
 import type { Direction, ThemeFit } from '../review/themefit';
 import { directionInstruction, findingInstruction, outlineSvg, type Media } from '../llm/media';
@@ -49,6 +49,8 @@ export interface RunDeps {
   media?: Media;
   /** The fixer (§9.2): without one (no key, offline), findings aren't fixed. */
   fixer?: Fixer;
+  /** The redesigner (§8.3): applies a picked direction. Without one, directions are advice. */
+  redesigner?: Redesigner;
   /** Theme-fit (§8.3), asked once after the first 3 routes. */
   themeFit?: (
     input: { brief: RunState['brief']; shots: string[]; inventory: string[] },
@@ -62,11 +64,15 @@ const MAX_MOCKUPS = 4;
 
 /** Theme-fit looks at this many routes' screenshots (§8.3). */
 const THEME_ROUTES = 3;
+/** A redesign is checked on at most this many pages (each loads on the worktree's server). */
+const MAX_REDESIGN_PAGES = 10;
 
 /** Routes reviewed at once (§8.1: at most 2 in flight, 5 reviewers each). */
 const ROUTES_IN_FLIGHT = 2;
 
 const LOGIN = /\b(log ?in|sign ?in)\b|\/(login|signin|sign-in|auth)\b/i;
+/** A message about the redesign ("For the redesign, instead…", the Adjust it prefill). */
+const ADJUST = /\b(redesign|the (new )?look)\b/i;
 
 export class RealRun {
   state: RunState;
@@ -101,6 +107,15 @@ export class RealRun {
   private acting: { name: string; route: string } | undefined;
   private planSaid = false;
   private directions: Direction[] = [];
+  /** Theme-fit's reason, the direction picked (§8.3), and the mockups as PNG for the redesigner. */
+  private lookWhy = '';
+  private picked: Direction | undefined;
+  private redesignStarted = false;
+  private readonly mockupPngs = new Map<string, string>();
+  /** The review waits here for a pick in the Ask modes ("Keep my look" resolves it empty). */
+  private pickWaiter: ((d: Direction | undefined) => void) | undefined;
+  private pickQuestionId: string | undefined;
+  private themeCheck: Promise<void> | undefined;
   private readonly pages = new Map<
     string,
     {
@@ -277,7 +292,7 @@ export class RealRun {
       await this.remember(snap);
       if (this.pages.size >= THEME_ROUTES && !this.themeAsked && this.deps.themeFit) {
         this.themeAsked = true;
-        void this.checkTheme();
+        this.themeCheck = this.checkTheme();
       }
       if (this.blocked() || this.finished) continue;
 
@@ -304,10 +319,18 @@ export class RealRun {
       this.deliverQueued();
     }
     if (this.finished) return;
+    // A site with fewer than 3 pages still gets theme-fit, on what there is (§8.3).
+    if (!this.themeAsked && this.deps.themeFit && this.pages.size > 0) {
+      this.themeAsked = true;
+      this.themeCheck = this.checkTheme();
+    }
     this.emit([{ type: 'now.changed', nowText: 'Checking links and network' }]);
     await this.probes.finish();
     if (this.finished) return;
     await this.review();
+    if (this.finished) return;
+    await this.themeCheck;
+    await this.redesignStep();
     if (this.finished) return;
     if (!(await this.offerFixes())) this.crawlComplete();
   }
@@ -320,33 +343,10 @@ export class RealRun {
    * modes post the approval card. Returns false when there's nothing to fix here.
    */
   private async offerFixes(): Promise<boolean> {
-    const fixer = this.deps.fixer;
-    if (!fixer) return false;
     const shown = this.state.findings
       .filter((f) => f.lane !== 'suggestion' && f.status === 'open')
       .map((f) => f.id);
-    let available = false;
-    try {
-      available = ((await this.deps.site.fix({ fn: 'available' })) as { ok: boolean }).ok;
-    } catch {
-      available = false;
-    }
-    if (!available || this.finished) return false;
-    this.pipeline = new FixPipeline(
-      {
-        state: () => this.state,
-        emit: (events) => this.emit(events),
-        say: (text) => this.say(text),
-        id: () => this.id(),
-        ask: (text) => this.ask(text),
-        baseline: (route) => this.probes.results.filter((r) => r.route === route),
-        costOf: (id) => this.deps.ledger.findingCost(id),
-        idle: () => this.fixesSettled(),
-      },
-      this.deps.site,
-      fixer,
-      this.checks,
-    );
+    if (!(await this.ensurePipeline()) || !this.pipeline) return false;
     const fixable = this.pipeline.fixable(shown);
     if (fixable.length === 0) return false;
     const mode = this.state.mode;
@@ -603,6 +603,7 @@ export class RealRun {
     }
     if (this.finished || verdict.fits) return;
     this.directions = verdict.directions;
+    this.lookWhy = verdict.why;
     this.emit([
       { type: 'chat.item', item: { id: this.id(), type: 'lookfeel', text: verdict.why } },
       {
@@ -640,6 +641,7 @@ export class RealRun {
           directionInstruction(d),
         );
         if (!out) return;
+        this.mockupPngs.set(d.id, out);
         const url = await this.deps.site
           .saveAsset(this.state.runId, `direction-${d.id}.png`, out)
           .catch(() => null);
@@ -658,12 +660,180 @@ export class RealRun {
     );
   }
 
+  /**
+   * A direction is picked (§8.3). It's applied once the review is done (the redesign runs
+   * alone and first); picked later, during fixes, it's applied right away.
+   */
   pickDirection(directionId: string): void {
     const item = [...this.state.chat].reverse().find((c) => c.type === 'directions');
     const picked = this.directions.find((d) => d.id === directionId);
-    if (item?.type !== 'directions' || !picked) return;
+    if (item?.type !== 'directions' || !picked || this.finished) return;
+    if (this.redesignStarted) {
+      if (picked.id !== this.picked?.id)
+        this.say(
+          `I’ve already applied ${this.picked?.name ?? 'a look'}. Undo the redesign first, then start a new run to try ${picked.name}.`,
+        );
+      return;
+    }
+    this.picked = picked;
     this.emit([{ type: 'chat.item.updated', item: { ...item, selectedId: directionId } }]);
-    this.say(`Going with ${picked.name}: ${picked.notes}`);
+    if (!this.deps.redesigner) {
+      this.say(`Going with ${picked.name}: ${picked.notes}`);
+      return;
+    }
+    if (this.state.mode === 'plan') {
+      this.say(
+        `Going with ${picked.name}: ${picked.notes} In Plan only I don’t change code, so that’s the look I’d apply.`,
+      );
+      return;
+    }
+    if (this.pickWaiter) {
+      this.closePickQuestion(picked.name);
+      return;
+    }
+    if (this.pipeline) {
+      this.say(`Going with ${picked.name}. Applying it now.`);
+      void this.applyRedesign();
+    } else
+      this.say(
+        `Going with ${picked.name}: ${picked.notes} I’ll apply it to every page once I’ve finished looking around.`,
+      );
+  }
+
+  /** Answers the "Which look?" question, whether by a pick or by "Keep my look". */
+  private closePickQuestion(answer: string): void {
+    const q = this.state.chat.find((c) => c.id === this.pickQuestionId);
+    if (q?.type === 'question' && q.answer === undefined)
+      this.emit([{ type: 'chat.item.updated', item: { ...q, answer } }]);
+    if (this.state.waitingFor === `question:${this.pickQuestionId ?? ''}`)
+      this.emit([{ type: 'waiting.changed' }]);
+    if (this.pickQuestionId) this.handlers.delete(this.pickQuestionId);
+    this.pickQuestionId = undefined;
+    const waiter = this.pickWaiter;
+    this.pickWaiter = undefined;
+    if (!this.finished) this.setActivity('acting');
+    waiter?.(answer === copy.fitts.keepLook ? undefined : this.picked);
+  }
+
+  /**
+   * After the review: when theme-fit posted directions, apply the picked one. The Ask modes
+   * wait for a pick ("Keep my look" skips it); Autonomous picked one already; Plan only never
+   * changes code.
+   */
+  private async redesignStep(): Promise<void> {
+    if (this.directions.length === 0 || !this.deps.redesigner || this.state.mode === 'plan') return;
+    if (!this.picked) {
+      const id = this.id();
+      this.pickQuestionId = id;
+      const pick = new Promise<Direction | undefined>((resolve) => (this.pickWaiter = resolve));
+      // `answer` has recorded the button already; this closes the rest of the question.
+      this.handlers.set(id, (answer) => this.closePickQuestion(answer));
+      this.emit([
+        {
+          type: 'chat.item',
+          item: {
+            id,
+            type: 'question',
+            blocking: true,
+            text: copy.fitts.whichLook,
+            options: [copy.fitts.keepLook],
+          },
+        },
+        { type: 'waiting.changed', waitingFor: `question:${id}` },
+        { type: 'now.changed', nowText: 'Waiting for you to pick a look' },
+      ]);
+      this.setActivity('waiting-on-user');
+      if (!(await pick) || this.finished) return;
+    }
+    await this.applyRedesign();
+  }
+
+  /** Runs the redesign job (§8.3) with the run's brief, pages, shots and the mockup. */
+  private async applyRedesign(): Promise<void> {
+    const direction = this.picked;
+    if (!direction || this.redesignStarted || this.finished) return;
+    if (!(await this.ensurePipeline())) {
+      this.say(
+        `I can’t change this project’s code (it needs to be its own git repo), so ${direction.name} stays a suggestion.`,
+      );
+      return;
+    }
+    const pipeline = this.pipeline;
+    if (!pipeline) return;
+    this.redesignStarted = true;
+    const routes = [...this.pages.keys()].slice(0, MAX_REDESIGN_PAGES);
+    const before: Record<string, string> = {};
+    for (const route of routes) {
+      const shot = await this.routeShot(route);
+      if (shot) before[route] = shot.url;
+    }
+    const mockup = this.mockupPngs.get(direction.id);
+    const shots = routes.slice(0, 2).flatMap((r) => {
+      const s = this.pages.get(r)?.evidence.shot;
+      return s ? [`data:image/jpeg;base64,${s.jpegBase64}`] : [];
+    });
+    const size = routes.map((r) => this.pages.get(r)?.size).find(Boolean);
+    await pipeline.redesign({
+      brief: this.state.brief,
+      why: this.lookWhy,
+      direction,
+      routes,
+      ...(size ? { size } : {}),
+      images: [...(mockup ? [`data:image/png;base64,${mockup}`] : []), ...shots],
+      before,
+      saveShot: (route, jpeg) =>
+        this.deps.site.saveAsset(
+          this.state.runId,
+          `redesign-after-${route.replace(/[^\w]+/g, '_') || 'root'}.jpg`,
+          jpeg,
+        ),
+    });
+    if (!this.finished && this.state.activity === 'redesigning') this.setActivity('acting');
+  }
+
+  /** "Keep" or "Undo this" on a wording card: undo reverts only that line (§8.3). */
+  decideWording(itemId: string, decision: 'keep' | 'undo'): void {
+    const item = this.state.chat.find((c) => c.id === itemId);
+    if (item?.type !== 'wording' || item.decision) return;
+    void (async () => {
+      try {
+        if (!(await this.pipeline?.decideWording(itemId, decision))) return;
+        this.emit([{ type: 'chat.item.updated', item: { ...item, decision } }]);
+      } catch (e) {
+        this.say(`I couldn’t put that wording back: ${(e as Error).message}`);
+      }
+    })();
+  }
+
+  /** The fix pipeline, once: only when the project is its own git repo (§9). */
+  private async ensurePipeline(): Promise<boolean> {
+    if (this.pipeline) return true;
+    if (!this.deps.fixer) return false;
+    let available = false;
+    try {
+      available = ((await this.deps.site.fix({ fn: 'available' })) as { ok: boolean }).ok;
+    } catch {
+      available = false;
+    }
+    if (!available || this.finished) return false;
+    this.pipeline ??= new FixPipeline(
+      {
+        state: () => this.state,
+        emit: (events) => this.emit(events),
+        say: (text) => this.say(text),
+        id: () => this.id(),
+        ask: (text) => this.ask(text),
+        baseline: (route) => this.probes.results.filter((r) => r.route === route),
+        costOf: (id) => this.deps.ledger.findingCost(id),
+        idle: () => this.fixesSettled(),
+        restingActivity: () => (this.finished ? 'idle' : 'acting'),
+      },
+      this.deps.site,
+      this.deps.fixer,
+      this.checks,
+      this.deps.redesigner,
+    );
+    return true;
   }
 
   /** The panel reviews each page, then the aggregator turns everything into findings (§8). */
@@ -1005,7 +1175,10 @@ export class RealRun {
     this.syncCoverage();
     const { done } = this.coverage.controlsTried();
     const pages = this.coverage.stateRoutes().length;
-    if (this.state.findings.filter((f) => f.lane !== 'suggestion').length === 0) {
+    const redesigned = this.state.changes.some(
+      (c) => c.kind === 'redesign' && c.status === 'verified',
+    );
+    if (!redesigned && this.state.findings.filter((f) => f.lane !== 'suggestion').length === 0) {
       this.setActivity('idle');
       this.card(
         'nothing-found',
@@ -1039,6 +1212,7 @@ export class RealRun {
     this.finished = true;
     if (this.clock) clearInterval(this.clock);
     this.abort.abort();
+    this.pickWaiter?.(undefined);
     const { done } = this.coverage.controlsTried();
     this.emit([
       { type: 'now.changed' },
@@ -1047,13 +1221,15 @@ export class RealRun {
       { type: 'phase.changed', phase: 'done' },
       { type: 'activity.changed', activity: 'idle' },
     ]);
-    const changes = this.state.changes;
-    const verified = changes.filter((c) => c.status === 'verified').length;
+    // Wording cards are parts of the redesign, not changes of their own.
+    const changes = this.state.changes.filter((c) => c.kind !== 'wording');
+    const verified = changes.filter((c) => c.status === 'verified' && c.kind !== 'redesign').length;
+    const redesigned = changes.some((c) => c.kind === 'redesign' && c.status === 'verified');
     const prs = changes.filter((c) => c.status === 'verified' && c.prNumber !== undefined).length;
     const rolled = changes.filter((c) => c.status === 'rolled-back').length;
     this.say(
       changes.length > 0
-        ? `All done. I verified ${verified} ${verified === 1 ? 'fix' : 'fixes'} and opened ${prs} pull ${prs === 1 ? 'request' : 'requests'}.` +
+        ? `All done. I verified ${verified} ${verified === 1 ? 'fix' : 'fixes'}${redesigned ? ' and the redesign' : ''} and opened ${prs} pull ${prs === 1 ? 'request' : 'requests'}.` +
             (rolled > 0
               ? ` ${rolled} ${rolled === 1 ? 'change' : 'changes'} didn’t pass my checks, so I rolled ${rolled === 1 ? 'it' : 'them'} back. Want me to try again with a different approach?`
               : '')
@@ -1065,6 +1241,7 @@ export class RealRun {
   dispose(): void {
     this.finished = true;
     this.pendingAsk?.(false);
+    this.pickWaiter?.(undefined);
     if (this.heldReq) void this.deps.site.release(this.heldReq.held.id, false);
     if (this.clock) clearInterval(this.clock);
     this.abort.abort();
@@ -1167,6 +1344,12 @@ export class RealRun {
         },
       },
     ]);
+    // "Adjust it" (§8.3): a note about the redesign changes it, verified like the first pass.
+    if (this.pipeline?.canAdjust && ADJUST.test(text)) {
+      this.say('On it. I’ll adjust the redesign and check every page again.');
+      void this.pipeline.adjust(text);
+      return;
+    }
     if (this.state.activity === 'acting') this.emit([{ type: 'queued.added', text }]);
     else this.say('Got it. I’ll keep that in mind.');
   }

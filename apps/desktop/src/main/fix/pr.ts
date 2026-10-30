@@ -11,8 +11,20 @@ export interface PrRef {
 }
 
 export interface PrBackend {
-  /** Pushes `branch` from the worktree and opens a PR with the body file. */
-  open(root: string, dir: string, branch: string, title: string, bodyFile: string): Promise<PrRef>;
+  /**
+   * Pushes `branch` from the worktree and opens a PR with the body file, against `base` when
+   * given (a fix stacked on the redesign) or the repo's default branch.
+   */
+  open(
+    root: string,
+    dir: string,
+    branch: string,
+    title: string,
+    bodyFile: string,
+    base?: string,
+  ): Promise<PrRef>;
+  /** Pushes new commits on a branch whose PR is open (it updates in place). */
+  push(dir: string, branch: string): Promise<void>;
   /** Closes the PR and deletes its branch (undo of an open PR). */
   close(root: string, pr: number, branch: string): Promise<void>;
   /** Was the PR merged? (Undo then opens a revert PR instead.) */
@@ -21,9 +33,15 @@ export interface PrBackend {
 
 const git = (cwd: string, ...args: string[]) => run('git', args, { cwd, timeoutMs: 60_000 });
 
+const pushBranch = async (dir: string, branch: string) => {
+  const push = await git(dir, 'push', '-q', '-u', 'origin', branch);
+  if (push.code !== 0) throw new Error(`push failed: ${push.stderr.trim().slice(0, 200)}`);
+};
+
 interface DryRunPr {
   number: number;
   branch: string;
+  base?: string;
   title: string;
   state: 'open' | 'closed' | 'merged';
   url: string;
@@ -43,16 +61,27 @@ export class DryRunPrs implements PrBackend {
     writeFileSync(dryRunRegistry(root), JSON.stringify(data, null, 2));
   }
 
-  async open(root: string, dir: string, branch: string, title: string): Promise<PrRef> {
-    const push = await git(dir, 'push', '-q', 'origin', branch);
-    if (push.code !== 0) throw new Error(`push failed: ${push.stderr.trim().slice(0, 200)}`);
+  async open(
+    root: string,
+    dir: string,
+    branch: string,
+    title: string,
+    _bodyFile: string,
+    base?: string,
+  ): Promise<PrRef> {
+    if (base) await pushBranch(dir, base);
+    await pushBranch(dir, branch);
     const data = this.load(root);
     const number = data.next;
     const url = `dry-run://pr/${number}`;
-    data.prs.push({ number, branch, title, state: 'open', url });
+    data.prs.push({ number, branch, ...(base ? { base } : {}), title, state: 'open', url });
     data.next += 1;
     this.save(root, data);
     return { number, url };
+  }
+
+  push(dir: string, branch: string): Promise<void> {
+    return pushBranch(dir, branch);
   }
 
   async close(root: string, pr: number, branch: string): Promise<void> {
@@ -70,18 +99,40 @@ export class DryRunPrs implements PrBackend {
 
 /** Real PRs with the GitHub CLI (needs `gh auth login`; Allen's real-PR check covers it). */
 export class GhPrs implements PrBackend {
-  async open(_root: string, dir: string, branch: string, title: string, bodyFile: string) {
-    const push = await git(dir, 'push', '-q', '-u', 'origin', branch);
-    if (push.code !== 0) throw new Error(`push failed: ${push.stderr.trim().slice(0, 200)}`);
+  async open(
+    _root: string,
+    dir: string,
+    branch: string,
+    title: string,
+    bodyFile: string,
+    base?: string,
+  ) {
+    // A stacked PR's base has to be on GitHub too (its own PR may not be open yet).
+    if (base) await pushBranch(dir, base);
+    await pushBranch(dir, branch);
     const res = await run(
       'gh',
-      ['pr', 'create', '--title', title, '--body-file', bodyFile, '--head', branch],
+      [
+        'pr',
+        'create',
+        '--title',
+        title,
+        '--body-file',
+        bodyFile,
+        '--head',
+        branch,
+        ...(base ? ['--base', base] : []),
+      ],
       { cwd: dir, timeoutMs: 60_000 },
     );
     const url = /https:\/\/\S+\/pull\/(\d+)/.exec(res.stdout);
     if (res.code !== 0 || !url?.[1])
       throw new Error(`gh pr create failed: ${res.stderr.trim().slice(0, 200)}`);
     return { number: Number(url[1]), url: url[0] };
+  }
+
+  push(dir: string, branch: string): Promise<void> {
+    return pushBranch(dir, branch);
   }
 
   async close(root: string, pr: number): Promise<void> {

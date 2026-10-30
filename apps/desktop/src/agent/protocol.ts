@@ -65,15 +65,30 @@ export type SiteOp =
 /** Calls to main's FixHost (§9): worktrees, files inside them, verification, git and PRs. */
 export type FixCall =
   | { fn: 'available' }
-  | { fn: 'prepare'; runId: string; findingId: string; branch: string }
+  /** `base`: the branch to start from (later fixes build on a verified redesign, §9.2). */
+  | { fn: 'prepare'; runId: string; findingId: string; branch: string; base?: string }
   | { fn: 'read'; job: string; path: string }
+  | { fn: 'list'; job: string; dir: string }
   | { fn: 'search'; job: string; text: string }
   | { fn: 'patch'; job: string; path: string; find: string; replace: string }
+  | { fn: 'write'; job: string; path: string; content: string }
   | { fn: 'diff'; job: string }
   | { fn: 'verify'; job: string; route: string; hrefs: string[] }
+  /** `size`: the before shots' size, so before and after line up. */
+  | {
+      fn: 'verifyPages';
+      job: string;
+      routes: string[];
+      size?: { width: number; height: number };
+    }
   | { fn: 'commit'; job: string; message: string }
+  /** Drops a job's uncommitted edits, back to its last commit (a failed adjustment). */
+  | { fn: 'reset'; job: string }
   | { fn: 'discard'; job: string }
-  | { fn: 'prOpen'; job: string; title: string; body: string }
+  /** `base`: open it against that branch instead of the default (a stacked PR). */
+  | { fn: 'prOpen'; job: string; title: string; body: string; base?: string }
+  /** Pushes a job's new commits to its open PR (a wording undo, an adjusted redesign). */
+  | { fn: 'push'; job: string }
   | { fn: 'prClose'; pr: number; branch: string }
   | { fn: 'prMerged'; pr: number }
   | { fn: 'revert'; runId: string; pr: number; branch: string; title: string; body: string }
@@ -87,6 +102,21 @@ export interface VerifyResult {
   focus: ProbeItem[];
   viewport: ProbeItem[];
   links: Record<string, number>;
+}
+
+/** Every page on a redesign's worktree server: its probes and an after shot (§8.3). */
+export interface VerifyPagesResult {
+  ok: boolean;
+  error?: string;
+  pages: {
+    route: string;
+    /** False when the page didn't load (an error page or nothing rendered). */
+    loaded: boolean;
+    results: PageProbeResult[];
+    focus: ProbeItem[];
+    viewport: ProbeItem[];
+    jpegBase64?: string;
+  }[];
 }
 
 /** What an action caused: page feedback, the requests it started, and the target's box. */

@@ -192,6 +192,7 @@ function harness(mode: RunState['mode'], verdicts: VerifyResult[]) {
       baseline: () => [failing('target-size', [item('compose-send', '28×20px')])],
       costOf: () => 0.01,
       idle: () => (idle += 1),
+      restingActivity: () => 'acting',
     },
     site,
     fixer,

@@ -31,6 +31,7 @@ import { ReviewerPanel } from './review/reviewers';
 import { themeFit } from './review/themefit';
 import { interviewTurn } from './interview/interview';
 import { runFixer } from './fix/fixer';
+import { runRedesigner } from './fix/redesign';
 import { Media } from './llm/media';
 import { voiceEntry } from './llm/voice-cost';
 import { domainOf, verifyDns, verifyFile } from './verify-site/verify';
@@ -278,6 +279,19 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
                 opts,
               );
             },
+            redesigner: (
+              task: string,
+              tools: Parameters<typeof runRedesigner>[4],
+              opts: Parameters<typeof runRedesigner>[5],
+            ) =>
+              runRedesigner(
+                runCaller,
+                callCtx(),
+                modelFor('fix', profile(), { contributor, baseten: Boolean(keys.baseten) }).model,
+                task,
+                tools,
+                opts,
+              ),
           }
         : {}),
       ...(online()
@@ -357,6 +371,9 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
     case 'pickDirection':
       run.pickDirection(String(args[0]));
       return true;
+    case 'decideWording':
+      run.decideWording(String(args[0]), args[1] === 'undo' ? 'undo' : 'keep');
+      return true;
     case 'setMode':
       run.setMode(args[0] as Parameters<RealRun['setMode']>[0]);
       return true;
@@ -373,7 +390,6 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
       realRuns.delete(projectId);
       return false;
     default:
-      // Findings, fixes and redesign arrive in later milestones.
       return true;
   }
 }

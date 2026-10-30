@@ -385,6 +385,16 @@ export class SiteWindow {
   }
 
   /** A JPEG of the page as it is now (step shots for rewind, §5.4). */
+  /** The page rendered: it has visible content and no dev-server error overlay (a broken build). */
+  rendered(): Promise<boolean> {
+    return this.evaluate<boolean>(
+      `
+      if (document.querySelector('vite-error-overlay, nextjs-portal, #webpack-dev-server-client-overlay')) return false;
+      const text = (document.body && document.body.innerText || '').trim();
+      return text.length > 0 || document.querySelectorAll('img, svg, canvas').length > 0;`,
+    ).catch(() => false);
+  }
+
   async capture(): Promise<Buffer> {
     const image = await this.wc.capturePage();
     return image.toJPEG(80);

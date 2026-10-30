@@ -7,6 +7,7 @@ import { CostLedger } from '../../src/agent/ledger/ledger';
 import { RealRun, type RunDeps } from '../../src/agent/orchestrator/run';
 import type { AxNode, AxSnapshot } from '../../src/agent/protocol';
 import type { Site } from '../../src/agent/site-client';
+import { copy } from '../../src/renderer/copy';
 
 /** A tiny app: / links to /b and /login; /b has a field and Save; / has a destructive button. */
 type FakeNode = AxNode & { to?: string };
@@ -128,6 +129,8 @@ function setup({
   themeFit,
   origin = 'http://x',
   media,
+  fixer,
+  redesigner,
 }: {
   site?: ReturnType<typeof fakeSite>;
   brain?: Brain;
@@ -136,6 +139,8 @@ function setup({
   themeFit?: RunDeps['themeFit'];
   origin?: string;
   media?: RunDeps['media'];
+  fixer?: RunDeps['fixer'];
+  redesigner?: RunDeps['redesigner'];
 } = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
@@ -144,6 +149,8 @@ function setup({
     {
       ...(themeFit ? { themeFit } : {}),
       ...(media ? { media } : {}),
+      ...(fixer ? { fixer } : {}),
+      ...(redesigner ? { redesigner } : {}),
       site,
       brain,
       ledger,
@@ -391,6 +398,90 @@ describe('theme-fit (§8.3)', () => {
     await until(() => fits.state()?.phase === 'done');
     expect(fits.state()?.chat.some((c) => c.type === 'lookfeel')).toBe(false);
     fits.run.dispose();
+  });
+
+  /** A repo the redesign can change: main's side answers every fix call. */
+  const redesignable = () => {
+    const calls: string[] = [];
+    const site = fakeSite({
+      fix: (call) => {
+        calls.push(call.fn);
+        if (call.fn === 'available') return Promise.resolve({ ok: true });
+        if (call.fn === 'prepare') return Promise.resolve({ job: 'j', branch: call.branch });
+        if (call.fn === 'verifyPages')
+          return Promise.resolve({
+            ok: true,
+            pages: call.routes.map((route) => ({
+              route,
+              loaded: true,
+              results: [],
+              focus: [],
+              viewport: [],
+              jpegBase64: 'AFTER',
+            })),
+          });
+        if (call.fn === 'prOpen') return Promise.resolve({ number: 7, url: 'dry-run://pr/7' });
+        return Promise.resolve({ ok: true });
+      },
+    });
+    const redesigner: RunDeps['redesigner'] = async (_task, tools) => {
+      await tools.write('src/theme.css', ':root{}');
+      return { patched: 1, summary: 'Restyled it.', wording: [] };
+    };
+    const fixer: RunDeps['fixer'] = () => Promise.resolve({ patched: 0, summary: '' });
+    return { site, calls, redesigner, fixer };
+  };
+
+  it('Ask modes: after the review it asks which look; a pick restyles every page in one PR', async () => {
+    const r = redesignable();
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      themeFit: () => Promise.resolve(verdict),
+    });
+    run.start();
+    await skipLogin(state, run);
+    const question = () =>
+      state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook);
+    await until(() => Boolean(question()));
+    expect(state()?.waitingFor).toBe(`question:${question()?.id ?? ''}`);
+    run.pickDirection('b');
+    await until(() => state()?.phase === 'done');
+    const change = state()?.changes.find((c) => c.kind === 'redesign');
+    expect(change).toMatchObject({
+      title: 'Redesign: Soft linen',
+      status: 'verified',
+      prNumber: 7,
+    });
+    expect(change?.pages?.length).toBeGreaterThan(1);
+    expect(r.calls.filter((c) => c === 'verifyPages')).toHaveLength(1);
+    expect(question()).toMatchObject({ answer: 'Soft linen' });
+    run.dispose();
+  });
+
+  it('“Keep my look” skips the redesign', async () => {
+    const r = redesignable();
+    const keep = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      themeFit: () => Promise.resolve(verdict),
+    });
+    keep.run.start();
+    await skipLogin(keep.state, keep.run);
+    await until(() =>
+      Boolean(
+        keep.state()?.chat.some((c) => c.type === 'question' && c.text === copy.fitts.whichLook),
+      ),
+    );
+    const q = keep
+      .state()
+      ?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook);
+    keep.run.answer(q?.id ?? '', copy.fitts.keepLook);
+    await until(() => keep.state()?.phase === 'done');
+    expect(r.calls).not.toContain('prepare');
+    keep.run.dispose();
   });
 });
 

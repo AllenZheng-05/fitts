@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import type { FixCall, VerifyResult } from '../../agent/protocol';
+import type { FixCall, VerifyPagesResult, VerifyResult } from '../../agent/protocol';
 import { detectProject } from '../projects/detect';
 import { DevServer, responds } from '../site/dev-server';
 import { SiteWindow } from '../site/site-window';
@@ -37,6 +37,8 @@ const TEXT = /\.(tsx?|jsx?|css|scss|html|json|md|vue|svelte)$/;
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.fitts-worktrees', '.vite']);
 /** Verification servers: 5181 and up (the preview branch uses 5180, §9.2). */
 const FIRST_PORT = 5181;
+/** A redesign's after shots when the before shots' size isn't known. */
+const SHOT_SIZE = { width: 1280, height: 800 };
 
 export class FixHost {
   private readonly jobs = new Map<string, Job>();
@@ -54,13 +56,17 @@ export class FixHost {
       case 'available':
         return this.available(projectId);
       case 'prepare':
-        return this.prepare(projectId, call.runId, call.findingId, call.branch);
+        return this.prepare(projectId, call.runId, call.findingId, call.branch, call.base);
       case 'read':
         return this.read(call.job, call.path);
+      case 'list':
+        return this.list(call.job, call.dir);
       case 'search':
         return this.search(call.job, call.text);
       case 'patch':
         return this.patch(call.job, call.path, call.find, call.replace);
+      case 'write':
+        return this.write(call.job, call.path, call.content);
       case 'diff':
         return this.diff(call.job);
       case 'verify': {
@@ -68,12 +74,28 @@ export class FixHost {
         this.verifying = next.catch(() => undefined);
         return next;
       }
+      case 'verifyPages': {
+        const next = this.verifying.then(() => this.verifyPages(call.job, call.routes, call.size));
+        this.verifying = next.catch(() => undefined);
+        return next;
+      }
       case 'commit':
         return this.commit(call.job, call.message);
+      case 'reset': {
+        // Ignored files (node_modules) stay: `clean` without -x only removes untracked ones.
+        const job = this.job(call.job);
+        await git(job.dir, 'reset', '-q', '--hard', 'HEAD');
+        await git(job.dir, 'clean', '-fdq');
+        return true;
+      }
       case 'discard':
         return this.discard(call.job);
       case 'prOpen':
-        return this.prOpen(call.job, call.title, call.body);
+        return this.prOpen(call.job, call.title, call.body, call.base);
+      case 'push': {
+        const job = this.job(call.job);
+        return this.prs().push(job.dir, job.branch);
+      }
       case 'prClose':
         return this.prs().close(this.root(projectId), call.pr, call.branch);
       case 'prMerged':
@@ -121,8 +143,14 @@ export class FixHost {
     return { ok: true };
   }
 
-  /** `git worktree add .fitts-worktrees/<runId>/<findingId> -b <branch> HEAD`, then deps. */
-  async prepare(projectId: string, runId: string, findingId: string, branch: string) {
+  /** `git worktree add .fitts-worktrees/<runId>/<findingId> -b <branch> <base>`, then deps. */
+  async prepare(
+    projectId: string,
+    runId: string,
+    findingId: string,
+    branch: string,
+    base = 'HEAD',
+  ) {
     const root = this.root(projectId);
     await this.exclude(root);
     let dir = join(root, '.fitts-worktrees', runId, findingId);
@@ -132,7 +160,7 @@ export class FixHost {
     for (let n = 2; (await git(root, 'rev-parse', '--verify', '--quiet', name)).code === 0; n++)
       name = `${branch}-${n}`;
     mkdirSync(dirname(dir), { recursive: true });
-    const add = await git(root, 'worktree', 'add', '-q', dir, '-b', name, 'HEAD');
+    const add = await git(root, 'worktree', 'add', '-q', dir, '-b', name, base);
     if (add.code !== 0)
       throw new Error(`git worktree add failed: ${add.stderr.trim().slice(0, 200)}`);
     await this.dependencies(root, dir);
@@ -181,6 +209,29 @@ export class FixHost {
     const full = this.inside(this.job(id), path);
     if (!existsSync(full)) throw new Error(`${path} doesn't exist`);
     return readFileSync(full, 'utf8').slice(0, 60_000);
+  }
+
+  /** A folder's entries (folders end in `/`), skipping dependencies and build output. */
+  list(id: string, dir: string): string[] {
+    const job = this.job(id);
+    const full = dir === '' || dir === '.' ? job.dir : this.inside(job, dir);
+    if (!existsSync(full) || !statSync(full).isDirectory())
+      throw new Error(`${dir} isn't a folder`);
+    return readdirSync(full)
+      .filter((name) => !SKIP.has(name))
+      .map((name) => (statSync(join(full, name)).isDirectory() ? `${name}/` : name))
+      .slice(0, 200);
+  }
+
+  /** Creates or replaces a whole source file inside the worktree (a redesign's new theme). */
+  write(id: string, path: string, content: string): { ok: boolean; error?: string } {
+    if (!TEXT.test(path)) return { ok: false, error: `${path} isn't a source file` };
+    const full = this.inside(this.job(id), path);
+    // Keep the file's line endings when replacing it.
+    const crlf = existsSync(full) && readFileSync(full, 'utf8').includes('\r\n');
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, crlf ? content.replace(/\r?\n/g, '\r\n') : content);
+    return { ok: true };
   }
 
   /** Lines containing `text` (case-insensitive) in source files, at most 30. */
@@ -283,6 +334,62 @@ export class FixHost {
     }
   }
 
+  /**
+   * A redesign's check (§8.3): one worktree server, then each route in turn: did it render,
+   * the page probes, focus and viewport sweeps, and an after shot at the crawl's window size.
+   */
+  async verifyPages(
+    id: string,
+    routes: string[],
+    size: { width: number; height: number } = SHOT_SIZE,
+  ): Promise<VerifyPagesResult> {
+    const job = this.job(id);
+    const port = await this.freePort();
+    const server = new DevServer(job.dir, await verifyCommand(job.dir, port), port);
+    let win: SiteWindow | undefined;
+    try {
+      if (!(await server.start(90_000)))
+        return {
+          ok: false,
+          error: `the dev server didn't start: ${server.log.slice(-3).join(' ')}`,
+          pages: [],
+        };
+      win = new SiteWindow(
+        `verify-${port}`,
+        server.url,
+        () => undefined,
+        () => undefined,
+      );
+      win.setActive(false);
+      win.resize(size.width, size.height);
+      const pages: VerifyPagesResult['pages'] = [];
+      for (const route of routes) {
+        await win.load(route).catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 800));
+        const loaded = await win.rendered();
+        const jpegBase64 = (await win.capture().catch(() => undefined))?.toString('base64');
+        const results = loaded ? await win.runProbes(PAGE_PROBES).catch(() => []) : [];
+        const focus = loaded ? await win.focusSweep().catch(() => []) : [];
+        const viewport = loaded ? await win.viewportSweep().catch(() => []) : [];
+        pages.push({
+          route,
+          loaded,
+          results,
+          focus,
+          viewport,
+          ...(jpegBase64 ? { jpegBase64 } : {}),
+        });
+      }
+      return { ok: true, pages };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message, pages: [] };
+    } finally {
+      win?.destroy();
+      server.stop();
+      this.ports.delete(port);
+    }
+  }
+
   private async freePort(): Promise<number> {
     for (let p = FIRST_PORT; p < FIRST_PORT + 40; p++) {
       if (this.ports.has(p) || (await responds(`http://localhost:${p}`, 300))) continue;
@@ -316,11 +423,11 @@ export class FixHost {
   }
 
   /** Pushes the branch and opens its PR; the body file sits next to the worktree, not in it. */
-  async prOpen(id: string, title: string, body: string) {
+  async prOpen(id: string, title: string, body: string, base?: string) {
     const job = this.job(id);
     const bodyFile = join(dirname(job.dir), `pr-${job.branch.replace(/[^\w-]/g, '_')}.md`);
     writeFileSync(bodyFile, body);
-    return this.prs().open(job.root, job.dir, job.branch, title, bodyFile);
+    return this.prs().open(job.root, job.dir, job.branch, title, bodyFile, base);
   }
 
   /** Undo of a merged PR: a `fitts/revert-<n>` branch reverting the fix, as its own PR. */

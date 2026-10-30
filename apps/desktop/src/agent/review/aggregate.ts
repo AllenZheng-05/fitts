@@ -499,3 +499,10 @@ function sourceOf(items: ProbeItem[]): Pick<Finding, 'source'> | Record<string, 
 /** A probe item's problem as the aggregator names it (fix verification compares these). */
 export const titleOf = (probe: ProbeName, item: ProbeItem) => template(probe, item).title;
 export const impactOf = (probe: ProbeName, item: ProbeItem) => template(probe, item).severity;
+
+/** A probe result's problems as `probe|title` keys, with their impact (verification, §9.2). */
+export function problems(probe: ProbeName, items: ProbeItem[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const i of items) out.set(`${probe}|${titleOf(probe, i)}`, impactOf(probe, i));
+  return out;
+}

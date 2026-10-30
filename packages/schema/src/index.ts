@@ -352,6 +352,8 @@ export interface Change {
   /** SPEC-phase2 §12.2: the `fitts/…` branch and the PR's URL. */
   branch?: string;
   prUrl?: string;
+  /** A redesign's pages (§8.3): each route's shot before, and the verifier's shot after. */
+  pages?: { route: string; before?: string; after: string }[];
 }
 
 export interface GateRequest {

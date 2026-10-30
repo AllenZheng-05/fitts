@@ -7,7 +7,9 @@ import { HARTWELL_THEMES } from '../../mock/sites/hartwell-themes';
 import { renderSite } from '../../mock/sites';
 import { useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
+import { getEngineKind } from '../../state/engine';
 import { currentDirection } from './redesign';
+import { appliedRedesign, RedesignShots } from './RedesignShots';
 import { ChatPanel } from '../chat/ChatPanel';
 import { SiteView } from '../site-view/SiteView';
 
@@ -26,6 +28,9 @@ export function RedesignLayout({ run }: { run: RunState }) {
     name: HARTWELL_THEMES[direction]?.label ?? direction.toUpperCase(),
   });
   const ui = useUi.getState();
+  // A real run compares real pictures: the step shot and the mockup, then every page's shots.
+  const real = getEngineKind() !== 'mock';
+  const applied = real ? appliedRedesign(run) : undefined;
 
   return (
     <>
@@ -45,19 +50,25 @@ export function RedesignLayout({ run }: { run: RunState }) {
             >
               {copy.site.beforeAfter}
             </Button>
-            <Button
-              size="sm"
-              variant={everyPage ? 'dark' : 'secondary'}
-              aria-pressed={everyPage}
-              className="font-semibold"
-              onClick={() => ui.set({ everyPage: !everyPage })}
-            >
-              {copy.redesign.everyPage}
-            </Button>
+            {(!real || applied) && (
+              <Button
+                size="sm"
+                variant={everyPage ? 'dark' : 'secondary'}
+                aria-pressed={everyPage}
+                className="font-semibold"
+                onClick={() => ui.set({ everyPage: !everyPage })}
+              >
+                {copy.redesign.everyPage}
+              </Button>
+            )}
           </>
         }
         overlay={() =>
-          everyPage ? (
+          real ? (
+            compare || everyPage ? (
+              <RedesignShots run={run} everyPage={everyPage && Boolean(applied)} fill />
+            ) : null
+          ) : everyPage ? (
             <ul className="absolute inset-0 z-10 flex flex-col gap-3 overflow-y-auto bg-surface-2 p-3">
               {ALL_PAGES.map((page) => (
                 <li key={page} className="flex flex-col gap-1">
