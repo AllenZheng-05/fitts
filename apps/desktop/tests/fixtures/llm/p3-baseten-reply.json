@@ -1,0 +1,26 @@
+{
+  "name": "p3-baseten-reply",
+  "model": "meta-models/muse-spark-open-1026",
+  "recordedAt": "2026-10-30T00:21:25.627Z",
+  "response": {
+    "outputText": "**Usability Finding: Recipient Field Displays Raw System Value \"(null)\"**\n\n**Location:** Message Composer > Recipient Field\n\n**Actual Behavior:** When composing a new message, the recipient field displays the system string `(null)` instead of a name, email address, or placeholder.\n\n**Expected Behavior:** The field should display a meaningful identifier (e.g., recipient's name/email) or a clear human-readable placeholder if data is missing.\n\n**User Impact:** \nUsers cannot verify who the message will be sent to. This causes confusion, reduces trust, and creates a high risk of sending sensitive information to the wrong recipient or abandoning the task altogether.\n\n**Heuristic Violated:** Visibility of System Status & Match Between System and Real World - The system is exposing internal code/null-state instead of user-friendly language.\n\n**Severity: Major (3/4)**\nSystem is still functional, but causes significant hesitation and potential for critical error. Fix with high priority.\n\n**Recommendation:**\n1.  **Frontend:** Never render `null`. Implement a fallback: If name is unavailable, show email address. If both are unavailable, show `Unknown Recipient` and disable Send.\n2.  **Backend/Validation:** Prevent composer from opening in a sendable state when recipient data is null, and log the source of the missing data.",
+    "output": [
+      {
+        "type": "message",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "**Usability Finding: Recipient Field Displays Raw System Value \"(null)\"**\n\n**Location:** Message Composer > Recipient Field\n\n**Actual Behavior:** When composing a new message, the recipient field displays the system string `(null)` instead of a name, email address, or placeholder.\n\n**Expected Behavior:** The field should display a meaningful identifier (e.g., recipient's name/email) or a clear human-readable placeholder if data is missing.\n\n**User Impact:** \nUsers cannot verify who the message will be sent to. This causes confusion, reduces trust, and creates a high risk of sending sensitive information to the wrong recipient or abandoning the task altogether.\n\n**Heuristic Violated:** Visibility of System Status & Match Between System and Real World - The system is exposing internal code/null-state instead of user-friendly language.\n\n**Severity: Major (3/4)**\nSystem is still functional, but causes significant hesitation and potential for critical error. Fix with high priority.\n\n**Recommendation:**\n1.  **Frontend:** Never render `null`. Implement a fallback: If name is unavailable, show email address. If both are unavailable, show `Unknown Recipient` and disable Send.\n2.  **Backend/Validation:** Prevent composer from opening in a sendable state when recipient data is null, and log the source of the missing data."
+          }
+        ]
+      }
+    ],
+    "model": "meta-models/muse-spark-open-1026",
+    "usage": {
+      "input": 162,
+      "cached": 128,
+      "output": 1033,
+      "reasoning": 755
+    }
+  }
+}

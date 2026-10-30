@@ -6,6 +6,7 @@ import { profileFor } from '../mock/profiles';
 import { IpcRunEngine } from './ipc-engine';
 import { MockRunEngine } from './mock-engine';
 import { useProjects } from './projects';
+import { useSettings } from './settings';
 
 export type { RunEngine };
 export type EngineKind = 'ipc' | 'mock';
@@ -25,7 +26,10 @@ export function getMockEngine(): MockRunEngine {
 export function getIpcEngine(): IpcRunEngine | undefined {
   const engineBridge = bridge().engine;
   if (!engineBridge) return undefined;
-  ipc ??= new IpcRunEngine(engineBridge, briefFor);
+  ipc ??= new IpcRunEngine(engineBridge, briefFor, () => {
+    const { capUsd, modelProfile, contributorMode } = useSettings.getState();
+    return { capUsd, modelProfile, contributorMode };
+  });
   return ipc;
 }
 

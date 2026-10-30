@@ -7,6 +7,7 @@
   },
   "include": [
     "src/agent/**/*",
+    "tests/agent/**/*",
     "src/renderer/mock/profiles.ts",
     "src/renderer/mock/fixtures/*.ts",
     "src/renderer/mock/scenarios/demo-chat.ts",

@@ -14,6 +14,7 @@ import {
 import { app, BrowserWindow, ipcMain, utilityProcess, type UtilityProcess } from 'electron';
 import { join } from 'node:path';
 import type { AgentMessage, MainMessage } from '../agent/protocol';
+import { devRepoRoot } from './dev-root';
 import type { Secrets } from './secrets';
 import { RunLog, runDir, SAFE_ID } from './store/run-log';
 
@@ -77,6 +78,10 @@ export class RunHost {
   private spawn(): void {
     const env = { ...process.env };
     delete env['ELECTRON_RUN_AS_NODE'];
+    // Dev builds (not e2e) log real spend next to the session's .fitts-dev/spend.json.
+    const root = devRepoRoot();
+    if (root && process.env['FITTS_NO_DEV_KEYS'] !== '1')
+      env['FITTS_DEV_SPEND_FILE'] = join(root, '.fitts-dev', 'agent-spend.ndjson');
     this.ready = false;
     const child = utilityProcess.fork(join(__dirname, 'agent.js'), [], {
       serviceName: 'Fitts agent',

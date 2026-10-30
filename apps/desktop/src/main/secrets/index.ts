@@ -7,7 +7,8 @@
 import type { KeyName } from '@fitts/schema';
 import { app, safeStorage } from 'electron';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { devRepoRoot } from '../dev-root';
 import { parse } from 'dotenv';
 
 export const KEY_NAMES: KeyName[] = ['meta', 'elevenlabs', 'baseten'];
@@ -84,8 +85,9 @@ export class Secrets {
     if (this.devFallback) return this.devFallback;
     this.devFallback = {};
     if (app.isPackaged || process.env['FITTS_NO_DEV_KEYS'] === '1') return this.devFallback;
-    const file = resolve(app.getAppPath(), '..', '..', '.env.local');
-    if (!existsSync(file)) return this.devFallback;
+    const root = devRepoRoot();
+    const file = root ? join(root, '.env.local') : undefined;
+    if (!file || !existsSync(file)) return this.devFallback;
     const env = parse(readFileSync(file));
     for (const n of KEY_NAMES) {
       const v = env[ENV_NAMES[n]]?.trim();

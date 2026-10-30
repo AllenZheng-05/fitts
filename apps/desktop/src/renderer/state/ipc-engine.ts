@@ -5,6 +5,7 @@ import {
   reduce,
   type Brief,
   type EngineBridge,
+  type EngineCall,
   type EngineEvents,
   type EngineMethod,
   type StubEngineMethod,
@@ -27,6 +28,7 @@ export class IpcRunEngine implements RunEngine {
   constructor(
     private readonly bridge: EngineBridge,
     private readonly briefFor: (projectId: string) => Brief | undefined = () => undefined,
+    private readonly settingsFor: () => EngineCall['settings'] = () => undefined,
   ) {
     bridge.onEvents((batch) => this.apply(batch));
     // A renderer that reloads mid-run picks up every run main already knows.
@@ -56,7 +58,14 @@ export class IpcRunEngine implements RunEngine {
     ...args: unknown[]
   ): void {
     const brief = this.briefFor(projectId);
-    this.bridge.call({ projectId, method, args, ...(brief ? { brief } : {}) });
+    const settings = this.settingsFor();
+    this.bridge.call({
+      projectId,
+      method,
+      args,
+      ...(brief ? { brief } : {}),
+      ...(settings ? { settings } : {}),
+    });
   }
 
   getState(projectId: string): RunState | undefined {
@@ -143,6 +152,11 @@ export class IpcRunEngine implements RunEngine {
   }
   updateBrief(projectId: string, brief: Brief) {
     this.call(projectId, 'updateBrief', brief);
+  }
+
+  /** Dev only (Scenario panel): one real model call per provider on this run (P3). */
+  llmPing(projectId: string) {
+    this.call(projectId, 'llmPing');
   }
 
   /** Dev only (Scenario panel): the P1 stub agent's playback speed. */

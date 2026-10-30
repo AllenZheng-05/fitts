@@ -5,17 +5,18 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P3 — LLM client wrapper (`agent/llm/call.ts`), cost ledger, model router; the
-  header cost chip live; 80%/100% budget cards on real spend.
-- **Next concrete step:** `agent/llm/` — an OpenAI-SDK Responses client with retries, a
-  pricing table, ledger entries that become `cost` events, and a fake client that replays
-  `tests/fixtures/llm/` recordings.
+- **Current:** P4 — the crawler tool loop and coverage gate, stop/pause/queue, and real
+  edge-state triggers (site-down, login-wall, api-trouble).
+- **Next concrete step:** `agent/crawler/` — a CDP-backed tool set over main's site window
+  (navigate, click, type, press, back, ax_snapshot, screenshot), with a Spark tool loop
+  driven by recorded fixtures in tests.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P3: LLM client, ledger, router, budgets | see `git log --grep "P3:"` | one Spark, one Wonder and one Baseten call each in the ledger (script and in-app); cost events live; the 80% and 100% cards fire with a $0.10 cap (e2e). 117 e2e pass. |
 | P2: live site view, CDP queries, detection, dev-server spawner | see `git log --grep "P2:"` | demo/chat streams live in the workspace; overlays align on the canvas (pin within 16px); the Finding panel and gate draw over it (DOM over canvas); the user drives during the interview and after Take the wheel; point returns a real ref; rewind shows stored step shots. 116 e2e pass. |
 | P1: events, reducer, IpcRunEngine, agent process, stores, secrets | see `git log --grep "P1:"` | Phase 1 UI runs unchanged on IpcRunEngine with the stub agent; all 113 e2e pass (Scenario panel specs on MockRunEngine); `replay(diff)` is exact over every mock scenario; runs are logged to events.ndjson; projects are files; keys go through safeStorage. |
 | P0: demo targets + vite plugin | see `git log --grep "P0:"` | demo/chat 25/25 planted issues reproduce (`pnpm check:demo-chat`); hartwell runs on :3000; the plugin stamps in dev only (unit tests, and a build has no stamps). Mirror repos are exported locally; creating and pushing them is NEEDS-ALLEN 3. |
@@ -27,7 +28,7 @@ See [NEEDS-ALLEN.md](NEEDS-ALLEN.md).
 
 ## Spend so far (USD)
 
-About $0.06 of the $25 session cap. `.fitts-dev/spend.json` is the source of truth.
+About $0.08 of the $25 session cap. `.fitts-dev/spend.json` is the source of truth.
 
 ## Known issues
 

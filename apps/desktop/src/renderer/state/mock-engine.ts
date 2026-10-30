@@ -489,6 +489,13 @@ export class MockRunEngine implements RunEngine {
   }
 
   /** Posts one of the §7.7 edge-state cards on the current run. */
+  /** Phase 2 stub agent: the run's spending cap from Settings (SPEC-phase2 §11). */
+  setCap(projectId: string, capUsd: number): void {
+    this.withRun(projectId, (s) => {
+      s.cost.capUsd = capUsd;
+    });
+  }
+
   showEdgeState(projectId: string, kind: EdgeStateKind): void {
     this.withRun(projectId, (s, ctx) => this.postEdgeState(s, ctx, kind));
   }

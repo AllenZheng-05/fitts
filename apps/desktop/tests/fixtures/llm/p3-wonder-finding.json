@@ -1,0 +1,38 @@
+{
+  "name": "p3-wonder-finding",
+  "model": "muse-wonder-1.0",
+  "recordedAt": "2026-10-30T00:21:20.848Z",
+  "response": {
+    "outputText": "{\n  \"heuristic\": \"H2\",\n  \"severity\": 1,\n  \"title\": \"Recipient displayed as system placeholder '(null)' in message composer\"\n}",
+    "output": [
+      {
+        "type": "reasoning",
+        "id": "rs_6ae3e301fd9e6113f4624ec5:rs_a322a8fe-90f4-4b62-a5f8-1ffda7dac9e0",
+        "encrypted_content": "Q-PaDgGqJ-mVk01cPOAbJoA4229jKbVVbpYK33W6m-pk492AkOYu5T4-XIloNXma-7TJ39Mx39ul4Tn4dtugVSuTkRveWNrVCqLG_9TL14O4c7jlGSZbMZJomDn6cc1E1sjML_DqUxo8sC59Zij2a8EtTb7l8Vf9yNvW3gnXoWxS-3L0IDEZewoe0-nI111vdH_URtnvtCqdPEgZksXw-Zu2qbeLCy70nIf-1Iwxcq7qDX757jm4TJy-ebua05oZiN_IbHyFk0UiAD18h-1dinghQLlkRO4qBYEnuZOEXc41jqsgGBkrPKkd7HPS_Q1Mm2RhWx-85hItqD-6tMkMOOB2JUwNhD_MH9FeZcGfrNRoUGO73VaW62mCsXTI9NM5jMsv1VShz6k4l4dK36B1RgQz0PDgNz2DwSAvKZ__dcjrgEF2l8jOUTnc3YWihIvZhBdxTC2SToJUq-41ALRd6WLTJyVgQM4szEeydtyRNoVr0fvYxRK-948kMgEKUe_li0do8tvBfnZQE4oUh6rmuxlOzI_ZXrwUOrf2nZ8Vpi_HQlZcjsUogXx812jjxYC8vZ_d6BKlXw7PM9tL17iM3s-xCsmHltU9jxvV3K8bMUOsSez4ZRkVYEHC9vL3V6B3trAoxSCplEB5z0BlvtCH7jXapV-NdRIBSnv8uPhXaX386Qwl904xwzgi5pdyRfsOxzWGesAUp0ADOpjaZf4lOj554bo6TJ1xP5DvW8dQ1ky_04scm1V4-MsB0GbLV3FxsrejkXdWwviiYNDSFDU-GhxxcRsaroReiGo7L9bG3ftKPLnHodHsXpEv9rugMI9sHLvatlcHH4FtLW3c-bXuFQmzcJUwvdARR8pwfsxD8yk-KpTfnqWzUiGlkRSp9tWd2ym0zWkqKymM4YUVQTb9h7jEngEq2YTQ0V9z4ANk2IcITmshDAbskGbKeaaESPQqDdhB_dvuaDVZYr3JNmEUEXd6XWAWeBAPFnZ7wuWO5gyxijJSldd1o5-z_ydHPQQF8SpZeggW_qQ_sNx-ARE7AkPq9ph9MqhcriQ89shxK_UPkNCKTcYTgHP1Af-S0mv2dQXQ2HsVcjIGMopUgw5Vo_qMS-DPcvFrXSxkUM8gf3V24rukGcAD08ny56w1TWWh1pCPgA-3flrEjFVNhIHGczJ7GyC2rwTZSCnQLgC4ZXTFvuX73K5pSHeYprR3BJ49jkcvVzOd7NoycLHEwxYOQLLpnZwJGy5I1dXBKgsN4AalDYXIJD9uh57gIMfRoJxiV7ZFZ_HPPc_I3WnUiUa3VtTOxNjfxSMH4wgv-teISDfahOVJzwI7-AIj45L-N1vV955BJyC4pr5pPrMA0nmzE1N-M2O7uNsPpfIiyweEcEjyyv2gLeIaENJS7kuI2qZ_Ic9by7j2frVPdY8AD0x_0zkZN5WoLEZG6ksyZmPHjlI1yTz2VimQc7-Mrd58so-ZE4GT_0sc-PkelM35U_YCL7R-8zB26UvkXioeDCq3hnGqJPp2km18-428Xkg3cZBBNPLw1Gzck5dJf7su-t5yMbFsMNbMD3DCVZreGsdCNrjpdPigN5lM7gCS_NBjqXbjZBngEPDjdm3yzoFRceXmUSE0WDh2jHCjhmSnU6CSCXgjufgvoL7LjMLglMDKx1sVCRq7xuur1UpMDyNU2i-X_WWhwcZ_4Fhs4eIZ2PmuFS6N1rUt4-SR_NVHRUAzYVAONDoVpQzaJlOUMBRYJ9mir8OA69HQvAWRlNkjMnqUhNf8r-_se8Vx0p7M51LLToMCin4IMG0fF0q7xVi74jiCxGNJHWSJ0x80bHEGuvJ6L3z7P8FqXs0nFJNHcjif81VG4kA_Rm5ZeCsCqAm-UEPrCI9_JAJMGeRKoCebNYANLNzoyQMtOHyRf7ykIFHSC2WMY68ukMGPJsOwjAEuO7zyPX_qtUKM4nMRoULgt9PMNTjYRqA-jSZPJgtOsP1yr7YPl9CIvf_Yd2pDRvAmxZjIgDOnN7O-EulyZVbt-9z6vcbLOCCGkOsZHwiASwe_G9W8aPZm6LkT7Y7ufPNWC0XaaUut16RmzGBl5gizt8Xl4NigkbbEa7Z7BDRiunT-lGjJcm8X6kSlpWOW5oCtfW4bcsilND7id2E8KHyx74Iv-vCaE2gcbGpR0qcb5yqxypYjvDEf90Yflp2HIazMTAJvtv2AQsApv4FFZYb_mxK1AW1828ID9d5nsRa0cVtprLqlHOsnWqecsnM5IYe_KpIyOqbpwa1c22xDL1ZMcBsImD-Vloak6ETqhrUw7h_YdQhNnM1PJ9FCGPw-Ta-ziZCK8uI2TDPhIpmLjAjzIMcX7Vf4PCCccSqQpnQd_V144_TULFf1FsPreECpJfoUt2jEA39GUTqzoXurxfTwaMG0AYOcoeLCtLi3lgMj7LoRbSZJOGUkJtRb7UIBA93jjEnBR09sdBeOJTg4eQZIPCNi5pMrNIiUNjDtSj1LEXKr9gkPRdXla9l4Oyr_7x_1L2udNJ3Fon2hJKft5aZbbUYWvWxYhFjfxEXAR3h6MfKnN0E44Y0cGIhMBPFP7az4DA3bisxdGc5U6M8nydzUvsdhOdPcjdmsh1bt5lOe6ptNI4u9iQ_kYtsG0Ud_uwl7hswUU054Oc-w5FCWegTzB1mo_WNnG2VgKHmvyiixEbj_-sMSb6uSjNvdJnJmoWU1m4qNVw-AMs-Y4zo71L457Odq_SAf5HB1B4ngZTuEEnYNav-S0YhB8KoZBH3PIbdshomWnE3aekmLo2nNoLxH8bSvlD6IOpS2hBZd2l1SikPQhGlqXy8nITSsbwk4g4PySx6Mi0w6crBDwMsj57d7MEUrKgJe44YdTwWxwLSoSr8L8iFJ4--ULPtWrTv3gRtlg7gzoElx-m8H5zkwF9u53JUzO098ILGWMzTwsElQXizMNrnIl2hvCoCy_0V6_xmDjv77DyChGVPW2IUdNkCzGlO9QVTaGXyEI4XfpGR8vwr6Pa67Dskqsz2L0zPMw4aE69HO6mf45uHY-mejfBHDIulbktOZdzuaOFSDY5hzexqi1P5FP2el_dQazRGyqWY4o0r6r69TxZX91E7JclRsnpH7CkdLqB3_5cDeCwfr69boOonf7eWdlzFHJYtOXOb6-ClZG50fkzxTBT3EFPZGljc0fxgAALmM83vH5w1-bI-bOYQb4hfZ7ffZO6webhVQdWTpvrSNUSDNVW38cVV409tCISDt8huHwuCne9fc1qoFycEwOEqHMx5z12OCwxYfnEbFNNz9rgJwRdjDtanl78uxL3YLm2l3RV3mtLJEKOIwgb4xPXB0_wNgJBtqGS__lSKaIUVoGiQrH7QNuCSwD2FMeDMtYJ_utkLG3mj1-Ik6m7jxFWMebKUAzi4Ocw-Fw9LRvNObiyiHPDVHH1Vr9RY2frIYtpVJupe9Qpno1gY24IXz7lsGMZMg1x-ND521hnYZ-b-mEIGdhvNB6TJBUkQtRAasuII_s-fRX6QPLQuKw374dnYBT_hEVoj4aifOIp856DOajPxS3iip58UZHmaN_8Dq3ruzzY-W4KU1nLumQBLJOermmWfkn1PMXsNpI0OmCUUcgSLrWZ3PRaWxDJF3BkpipSyJGB55wrYORXefxTUJXq8dLi9bUoPIbB4KkRAMYKgTJ77YWNaQyz-99vxZLWsDVXYQxW4mmWX3qqxBLwsAzk5Uj_65MEgqT7f0WiBdO20nivcgt9e0ecv7Epwc0H_Jb0GilIn_uFDYuKGc8EdYQaVPSI-RaYMuDHkFt7B92RowLWYpvpinDvSNIcAccT3C2K2rJXgNyzOox0USafjSdxjc9YNOft3jA92WNjlX2LgiWW0nPt44Z3fBr5-aD1l1u9pO52awbr_f9w3g_IqrSjz-CpmbcM9ShtQ82XD5JumnaADZwXNS_QmmBaW1E3J8R8cQmNIfjBubuo90qNn2KUmJZSVKXiAtGovTbX4DaXUWudGBlCZTSFG2YRxbTaABy-IUGD6VmzzYB5c1-y0b9Zne09J2Li0vgfmb33UrPLYJBGbvDaKzDL6IVzE01UFLdOD5afBhrGS3s30u_una_EOWxrDOsJfWp4UNGJFmw30DJhsSiL6TWcv7uxro9X43Ynx9qiTXjMbFolTAbQmxgdJB19G_a6bsqqbxksTi59P2aRkVp-MRAO1uc5yeS8wmEmmS0zG1xDz_Rmuf_4r41aZX_lr79BOQ0sCJLWrEX6krGa3BTQW6kSdcshn31946Yt3vAR2LWLF5CupAFuvNxnWchA20avLyrvbdZEcj11qQIRYubYqPx7eYBC5tVjW7KGZEhSvfuW6SZd4vRjjv6A8Lf6Qki0izZcPH4CUB-3vSOPdlttsvQc9Lk-G1tAOODzCUn2VETBE6FEl8BExT7NhHhdgkxdm8hpD8cePQDGy1nWvZNXmltDhKp4qmssmmEM0KeEpAEY0cdD6IsJ4Q0bQ8tiPr3R2CBxcAfwQxk71c06L9go3MaQRUzTbHtDPLAaMWFYoRTfqw4KFbQHbEE7ow8PO8m-ysCP6CzaG-7a0t5aA60RRy-E9MCRdjSJAB-AxHoe6nUy64yoxr8bmfB-rZ2R0B_MLJt-owfDc9CWS0_FpLhJNRpZi0d-gJuWviq7MI4zWBRMzd3afqe1hwYCPbhLMFLPBwH0O-QF9FcVrfgFGYY5zTwY0JApJB638XK6KFAgRBes_ZC7VTgdsjRTibvLUnimAkYIS502jlEiBJWPZq4UxJKerrmbYWHJ0Fy3MThcQe5FQCixE_u7NfHOot0_QrNtBeA_I4JVHYTtNx2dabwou14bAHNvZwPclN3GvHpWo_RLGm4OkzNs-ynrOL3AkYMNfctRGiEgi__a9GnemOKU6B731JNUHCI7yRxQ51RsIb0jVg_iABE16zHC6u4mjjmQsP9fIiSpv0U_7Da5GSQDsZ16YukydiBF8HrC4cRUMVh5HabzeutNiuuLCfeTbFhMhUTsstqfNAe3wI0f2aDdobw3IW8MRnJIux4EMXcprazVVIoml8tveC67aBtk1vWEq3lm5DqhlLvS4LZSh2ouTgNK-c0dh8A7kr4gqOR2eINM_5fUof3ErRtgeS8bQ3TK8Cgc-mkhkyMyjY6GKMkY1UOYr-b7ow0DpCneh3Biuyhkp9oboB2aYP-4LuWEmafwcGeeJ_v-1Rt-uEKXiHEhHmtBW2SnkyNKl9OMulXKcG2FiEVq7GS0aY9rTm5QYEZFq0VnOMN-QFLoqVy8RyW6u_-IygrujxkG4o6SBHQ4vIIBY8zD5_WrWZyrxyQuXrh54AINjQ6iBtw_JR6U74vO-MWjikL4SlblOfnfV9xqVgpUdAjjYJXsLztnO9wToNJJM5OlHnEF1jBiF2kq_bj26D7k04Q51Zkd1TdxRSp4Qj-Rn4mWo-H-xrF73Zuoor91HHoTmf-DQaPbPna8ySebaIbREvP5kLPQv7TXQv4brNbhlCh-CINzy1O-ov07E0KRi31i4q7g",
+        "summary": [],
+        "status": "completed"
+      },
+      {
+        "type": "message",
+        "id": "msg_62be481f-23f0-4ae8-a910-55cd44ad16d4",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "{\n  \"heuristic\": \"H2\",\n  \"severity\": 1,\n  \"title\": \"Recipient displayed as system placeholder '(null)' in message composer\"\n}",
+            "annotations": [],
+            "logprobs": []
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "model": "muse-wonder-1.0",
+    "usage": {
+      "input": 25,
+      "cached": 0,
+      "output": 427,
+      "reasoning": 383
+    }
+  }
+}

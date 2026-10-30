@@ -51,7 +51,9 @@ function SetupCard() {
   const settings = useSettings();
   const openSettings = useUi((s) => s.openSettings);
   const [key, setKey] = useState('');
-  const [keyWorks, setKeyWorks] = useState(settings.keys.meta);
+  const [checkedWorks, setKeyWorks] = useState(false);
+  // A key main already holds (saved earlier) works until the user types a different one.
+  const keyWorks = key ? checkedWorks : checkedWorks || settings.keys.meta;
   const [folder, setFolder] = useState('');
   const [mode, setMode] = useState<UserMode>(settings.defaultMode);
   const headingId = useId();

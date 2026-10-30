@@ -135,7 +135,7 @@ export const ENGINE_METHODS = [
 export type EngineMethod = (typeof ENGINE_METHODS)[number];
 
 /** Calls the P1 stub agent also accepts (Phase 1 mock extras; P2 moves them into main). */
-export const STUB_ENGINE_METHODS = ['recordUserClick', 'setSpeed'] as const;
+export const STUB_ENGINE_METHODS = ['recordUserClick', 'setSpeed', 'llmPing'] as const;
 export type StubEngineMethod = (typeof STUB_ENGINE_METHODS)[number];
 
 /** A renderer → agent engine call. `brief` is the project's saved brief, for the interview. */
@@ -144,6 +144,12 @@ export interface EngineCall {
   method: EngineMethod | StubEngineMethod;
   args: unknown[];
   brief?: Brief;
+  /** The settings a run reads when it starts (budget cap, models). */
+  settings?: {
+    capUsd: number;
+    modelProfile: 'quality' | 'economy' | 'open';
+    contributorMode: boolean;
+  };
 }
 
 /** Events for one project, in order, as one batch (one agent state change). */
@@ -354,6 +360,43 @@ export type EdgeStateKind =
   | 'nothing-found';
 
 export type CostPhase = 'fixes' | 'reviewers' | 'crawling' | 'summing' | 'media';
+
+/** SPEC-phase2 §11: what a model call was for. Rolls up into the five CostPhase values. */
+export type CostTask =
+  | 'interview'
+  | 'crawl'
+  | 'review'
+  | 'aggregate'
+  | 'themefit'
+  | 'fix'
+  | 'sam'
+  | 'image'
+  | 'stt'
+  | 'tts';
+
+/** One ledger entry (SPEC-phase2 §11). Every number is an estimate. */
+export interface CostEvent {
+  ts: string;
+  runId: string;
+  projectId: string;
+  task: CostTask;
+  phase: CostPhase;
+  provider: 'meta' | 'baseten' | 'elevenlabs';
+  model: string;
+  contributor: boolean;
+  inputTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  images?: number;
+  samImages?: number;
+  audioSeconds?: number;
+  ttsChars?: number;
+  usd: number;
+  latencyMs: number;
+  findingId?: string;
+  priceTable: string;
+}
 
 export interface RunState {
   runId: string;

@@ -1148,3 +1148,57 @@ screencast fallback is needed.
     - rewind showing a real stored shot
   - Unit tests: detection, the spawner's command handling and token guard, and asset-path
     traversal checks.
+
+## Phase 2 — P3: LLM client, cost ledger, model router, budgets
+
+- **`agent/llm/call.ts` is the only place the agent calls models.**
+  - **Clients:** Meta uses the Responses API through the `openai` SDK; Baseten uses chat
+    completions, translated from the same request shape. `max_output_tokens` is never below
+    2000 (V1).
+  - **Retries:** 3 retries with exponential backoff and jitter on 408/409/429/5xx and network
+    errors. A 4xx is never retried.
+  - **Aborts:** a `signal` (⌘.) stops the call and any pending backoff. An abort that lands
+    before the sleep was a real bug, found by the unit test and fixed.
+  - **Rate limits:** the `x-ratelimit-*` headers are captured.
+  - **Budget:** calls are refused (`BudgetExceeded`) while the run is at its cap.
+  - **Ledger:** every successful call writes one `CostEvent`.
+  - **`api-trouble`:** after 3 failed retries, `onTrouble` fires; it drives the card in P4.
+- **The ledger (`agent/ledger`):**
+  - Entries roll up into the five `CostPhase` values by the §11 table, with per-finding
+    `costUsd`.
+  - `CostEvent` and `CostTask` live in `@fitts/schema`. A new `ledger.entry` event logs each
+    entry for reports; the reducer ignores it, and `cost` carries the totals.
+  - **Price table:** `agent/llm/pricing.ts`, version `2026-10-28`.
+  - **ElevenLabs:** estimated at $0.00011 per character. That's an assumption to check
+    against the actual plan.
+- **Stub-period cost:** while the scripted engine still plays runs, a run's cost is its
+  scripted spend plus its ledger totals (`withLedger`). The agent applies this before diffing,
+  so `cost` events always carry the combined figure. When P4 replaces the script, the ledger
+  is the only source.
+- **Budget guard:**
+  - It posts `budget-warning` once per run at 80% and `budget` at 100%, from the combined
+    spend.
+  - Floats are compared with a 1e-9 slack: 0.1 × 0.8 = 0.08000000000000002 would otherwise
+    skip the 80% card.
+  - "Add $10" re-arms the 100% card at the new cap.
+  - "Switch to Economy" sets the run's profile, used from the next model call on.
+- **Settings reach the agent:** every engine call carries `settings` (cap, profile,
+  contributor mode), and a run takes the cap when it starts (interview or audit).
+- **Router (`agent/llm/router.ts`):** follows the §2 table.
+  - Quality's reviewers are 3 Spark plus 2 Wonder, with one Spark reviewer on Spark Open when
+    a Baseten key exists.
+  - Contributor mode applies to `demo*` projects unless the user opts a project in.
+- **Checks:**
+  - `scripts/verify/p3-ledger.ts` made one Spark, one Wonder and one Baseten call through
+    `LlmCaller` ($0.0155). All three are in the ledger with the right phases, and their
+    responses are the first fixtures in `tests/fixtures/llm/`.
+  - In the running app (dev build, dev keys), the Scenario panel's "Ping the models" made the
+    same three calls ($0.0044). They flowed through the ledger and cost events into the run.
+    The header chip shows whole cents, so a sub-cent ping doesn't change its digits.
+  - E2E: a $0.10 cap set in Settings makes the 80% card warn and the 100% card pause the run.
+- **Welcome and stored keys:** a key main already holds (saved earlier, or the dev fallback)
+  shows as "Works" without retyping, until the user types a different key.
+- **Dev repo root:** the dev `.env.local` fallback and the dev spend log
+  (`.fitts-dev/agent-spend.ndjson`) find the repo root by walking up to
+  `pnpm-workspace.yaml`. `pnpm dev` and the e2e harness start Electron from different
+  folders.

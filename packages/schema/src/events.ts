@@ -3,6 +3,7 @@
 // powers the UI, resume, replay, cost reports and the run picker.
 import type {
   Brief,
+  CostEvent,
   Change,
   ChatItem,
   Finding,
@@ -56,6 +57,8 @@ export type RunEvent =
   | { type: 'brief.updated'; brief: Brief }
   // Other
   | { type: 'cost'; cost: RunState['cost'] }
+  /** One model call's ledger entry (for reports); `cost` carries the running totals. */
+  | { type: 'ledger.entry'; entry: CostEvent }
   | { type: 'overlay.set'; overlays: RunState['overlays'] }
   | { type: 'rewind.set'; step?: number }
   /** Anything else; `unset` lists keys to delete (JSON drops `undefined` values). */
@@ -187,6 +190,7 @@ export function reduce(s: RunState | undefined, e: RunEvent): RunState | undefin
       return next as unknown as RunState;
     }
     case 'error':
+    case 'ledger.entry':
       return s;
   }
 }

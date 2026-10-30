@@ -8,7 +8,7 @@ import { IconButton } from '../../components/IconButton';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { cx } from '../../lib/cx';
 import { SCENARIOS, type ScenarioEntry, type ScenarioScreen } from '../../mock/scenarios';
-import { getIpcEngine, getMockEngine } from '../../state/engine';
+import { getEngineKind, getIpcEngine, getMockEngine } from '../../state/engine';
 import type { Speed } from '../../state/mock-engine';
 import { useRunStore } from '../../state/run-store';
 import { loadScenario } from '../../state/scenario-loader';
@@ -133,6 +133,12 @@ export function ScenarioPanel() {
             Restart scenario
           </Button>
         </div>
+        {getEngineKind() === 'ipc' && (
+          // Phase 2 P3 check: real calls (about $0.02) land in the ledger and the cost chip.
+          <Button size="sm" onClick={() => getIpcEngine()?.llmPing(activeProjectId)}>
+            Ping the models (real calls)
+          </Button>
+        )}
         <Select
           label="Jump to beat"
           size="md"

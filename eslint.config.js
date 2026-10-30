@@ -62,6 +62,7 @@ export default tseslint.config(
       '**/*.config.{ts,mts}',
       'apps/desktop/tests/e2e/**',
       'apps/desktop/tests/main/**',
+      'apps/desktop/tests/agent/**',
       'apps/desktop/src/agent/**',
       'scripts/**',
     ],
