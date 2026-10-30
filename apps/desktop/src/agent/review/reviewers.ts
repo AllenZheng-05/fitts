@@ -19,6 +19,8 @@ export interface RouteEvidence {
   route: string;
   /** The page when Fitts first saw it. */
   shot?: { jpegBase64: string };
+  /** The same page on a phone (Fitts's phone pass), when it has one. */
+  phoneShot?: { jpegBase64: string; label: string };
   snapshot: AxSnapshot;
   /** What Fitts did there, in order ("typed in Message", "tapped NEXT → /compose/confirm"). */
   trace: string[];
@@ -147,6 +149,15 @@ export class ReviewerPanel {
                         {
                           type: 'input_image',
                           image_url: `data:image/jpeg;base64,${ev.shot.jpegBase64}`,
+                        },
+                      ]
+                    : []),
+                  ...(ev.phoneShot
+                    ? [
+                        { type: 'input_text', text: `The same page on ${ev.phoneShot.label}:` },
+                        {
+                          type: 'input_image',
+                          image_url: `data:image/jpeg;base64,${ev.phoneShot.jpegBase64}`,
                         },
                       ]
                     : []),

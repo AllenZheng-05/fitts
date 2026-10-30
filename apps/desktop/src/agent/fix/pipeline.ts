@@ -185,7 +185,8 @@ export class FixPipeline {
   fixable(findingIds: string[]): string[] {
     return findingIds.filter((id) => {
       const check = this.checks.get(id);
-      return check !== undefined && VERIFIABLE.has(check.probe);
+      // A phone-only problem would "pass" at desktop size without a real fix.
+      return check !== undefined && VERIFIABLE.has(check.probe) && !check.device;
     });
   }
 

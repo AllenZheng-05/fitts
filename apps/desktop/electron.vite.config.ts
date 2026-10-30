@@ -44,6 +44,15 @@ export default defineConfig(({ command }) => {
       build: {
         rollupOptions: {
           input: resolve(__dirname, 'src/renderer/index.html'),
+          // Phase 1's stand-ins (src/renderer/mock) do nothing on import, so a module nothing
+          // uses is dropped: a release, where they sit behind __FITTS_DEV_TOOLS__, ships none
+          // of them (scripts/check-release-bundle.mjs).
+          treeshake: {
+            moduleSideEffects: (id: string) => !/[\\/]src[\\/]renderer[\\/]mock[\\/]/.test(id),
+            // Reading a property never runs code here (no getters with effects), so an unused
+            // read doesn't keep a fixture alive.
+            propertyReadSideEffects: false,
+          },
         },
       },
       plugins: [react(), tailwindcss()],

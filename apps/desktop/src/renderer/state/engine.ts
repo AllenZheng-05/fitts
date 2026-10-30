@@ -1,6 +1,7 @@
 // The UI's only door to a run (SPEC §9.2). Phase 2: IpcRunEngine (the agent process) is the
 // default; MockRunEngine stays for the Scenario panel and for tests outside Electron.
 import type { RunEngine } from '@fitts/schema';
+import { DEV } from '../dev';
 import { bridge } from '../lib/bridge';
 import { profileFor } from '../mock/profiles';
 import { IpcRunEngine } from './ipc-engine';
@@ -24,11 +25,16 @@ let ipc: IpcRunEngine | undefined;
 
 const briefFor = (id: string) => useProjects.getState().projects.find((p) => p.id === id)?.brief;
 
-/** The scripted engine. Dev tools use its extra controls; the Scenario panel plays on it. */
-export function getMockEngine(): MockRunEngine {
-  mock ??= new MockRunEngine({ profileFor, briefFor: (id) => briefFor(id) ?? {} });
-  return mock;
-}
+/**
+ * The scripted engine. Dev tools use its extra controls; the Scenario panel plays on it. A
+ * release never has it: there the real engine is always there (Electron).
+ */
+// A constant branch, so a release bundle drops the engine and its scripts.
+export const getMockEngine: () => MockRunEngine = DEV
+  ? () => (mock ??= new MockRunEngine({ profileFor, briefFor: (id) => briefFor(id) ?? {} }))
+  : () => {
+      throw new Error('The scripted engine is only in dev builds');
+    };
 
 /** The real engine, or undefined outside Electron (unit tests). */
 export function getIpcEngine(): IpcRunEngine | undefined {

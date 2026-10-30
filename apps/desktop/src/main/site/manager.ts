@@ -1,6 +1,13 @@
 // One live site per open project (SPEC-phase2 §4.1, §5): its dev server, its offscreen window,
 // frames and status to the renderer, CDP-style queries, and step shots for rewind.
-import { IPC, type Project, type SiteInput, type SiteNav, type SiteStatus } from '@fitts/schema';
+import {
+  DEVICES,
+  IPC,
+  type Project,
+  type SiteInput,
+  type SiteNav,
+  type SiteStatus,
+} from '@fitts/schema';
 import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -165,6 +172,11 @@ export class SiteManager {
         return { op: 'items', items: await win.focusSweep() };
       case 'viewport':
         return { op: 'items', items: await win.viewportSweep() };
+      case 'device': {
+        const previous = win.device?.id ?? null;
+        await win.emulate(DEVICES.find((d) => d.id === request.id) ?? null);
+        return { op: 'device', previous };
+      }
       case 'value':
         return { op: 'value', value: await win.value(request.ref) };
       case 'links':
@@ -292,6 +304,14 @@ export class SiteManager {
     ipcMain.on(IPC.siteResize, (_e, id: unknown, w: unknown, h: unknown) => {
       if (typeof id === 'string' && typeof w === 'number' && typeof h === 'number')
         this.window(id)?.resize(w, h);
+    });
+    // Only a device Fitts offers, by id: the renderer never sets arbitrary emulation.
+    ipcMain.on(IPC.siteDevice, (_e, id: unknown, deviceId: unknown) => {
+      if (typeof id !== 'string') return;
+      const device = DEVICES.find((d) => d.id === deviceId) ?? null;
+      void this.window(id)
+        ?.emulate(device)
+        .catch(() => undefined);
     });
     ipcMain.on(IPC.siteInput, (_e, id: unknown, input: SiteInput) => {
       if (typeof id === 'string' && input && typeof input === 'object')

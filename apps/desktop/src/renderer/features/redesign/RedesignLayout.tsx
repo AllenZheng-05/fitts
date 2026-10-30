@@ -7,6 +7,7 @@ import { HARTWELL_THEMES } from '../../mock/sites/hartwell-themes';
 import { renderSite } from '../../mock/sites';
 import { useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
+import { DEV } from '../../dev';
 import { getEngineKind } from '../../state/engine';
 import { currentDirection } from './redesign';
 import { appliedRedesign } from './redesign';
@@ -30,7 +31,7 @@ export function RedesignLayout({ run }: { run: RunState }) {
   });
   const ui = useUi.getState();
   // A real run compares real pictures: the step shot and the mockup, then every page's shots.
-  const real = getEngineKind() !== 'mock';
+  const real = !DEV || getEngineKind() !== 'mock';
   const applied = real ? appliedRedesign(run) : undefined;
 
   return (

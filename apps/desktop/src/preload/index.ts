@@ -50,6 +50,7 @@ const bridge: FittsBridge = {
     close: (projectId) => ipcRenderer.send(IPC.siteClose, projectId),
     resize: (projectId, width, height) =>
       ipcRenderer.send(IPC.siteResize, projectId, width, height),
+    device: (projectId, device) => ipcRenderer.send(IPC.siteDevice, projectId, device?.id ?? null),
     input: (projectId, input) => ipcRenderer.send(IPC.siteInput, projectId, input),
     nav: (projectId, nav) => ipcRenderer.send(IPC.siteNav, projectId, nav),
     rects: (projectId, refs) =>
@@ -90,6 +91,7 @@ const bridge: FittsBridge = {
     open: () =>
       ipcRenderer.invoke(IPC.replayOpen) as ReturnType<NonNullable<FittsBridge['replay']>['open']>,
   },
+  tools: () => ipcRenderer.invoke(IPC.toolsCheck) as ReturnType<NonNullable<FittsBridge['tools']>>,
   voice: {
     start: (mode, projectId) =>
       ipcRenderer.invoke(IPC.voiceStart, mode, projectId) as Promise<{

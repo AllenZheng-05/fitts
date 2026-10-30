@@ -320,3 +320,18 @@ describe('the fix pipeline (§9)', () => {
     expect(network.fixable(['n'])).toEqual([]);
   });
 });
+
+describe('what can be fixed automatically', () => {
+  it('a problem seen only on a phone is not: verification runs at desktop size', () => {
+    const pipeline = new FixPipeline(
+      {} as never,
+      {} as Site,
+      (() => undefined) as never,
+      new Map([
+        ['desk', check],
+        ['phone', { ...check, device: 'phone' }],
+      ]),
+    );
+    expect(pipeline.fixable(['desk', 'phone'])).toEqual(['desk']);
+  });
+});

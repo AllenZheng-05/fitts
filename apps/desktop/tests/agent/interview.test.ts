@@ -12,7 +12,8 @@ import {
   MAX_QUESTIONS,
   parseTurn,
 } from '../../src/agent/interview/interview';
-import { parseThemeFit } from '../../src/agent/review/themefit';
+import { parseThemeFit, themeFit } from '../../src/agent/review/themefit';
+import { redesignTask } from '../../src/agent/fix/redesign';
 
 const state = (over: Partial<RunState> = {}): RunState =>
   ({
@@ -106,6 +107,69 @@ describe('interview turns', () => {
     );
     expect(turn.fields).toEqual({ for: 'Family messaging', who: 'Grandparents' });
     expect(fake.requests[0]?.task).toBe('interview');
+  });
+
+  it('a redesign the user asks for is recorded as the look', () => {
+    const turn = parseTurn(
+      JSON.stringify({
+        say: 'Got it, a new look. Start the audit whenever you’re ready.',
+        fields: { look: 'Dark and bold, like a film poster', feel: null },
+        quickReplies: [],
+        ready: true,
+      }),
+    );
+    expect(turn.fields).toEqual({ look: 'Dark and bold, like a film poster' });
+  });
+});
+
+describe('a requested redesign (brief.look)', () => {
+  const caller = (verdict: object) =>
+    new LlmCaller(
+      () =>
+        new FakeLlmClient([
+          {
+            name: 'theme-fit',
+            model: 'm',
+            recordedAt: '2026-10-30',
+            response: {
+              outputText: JSON.stringify(verdict),
+              output: [],
+              usage: { input: 1, cached: 0, output: 1, reasoning: 0 },
+              model: 'm',
+            },
+          },
+        ]),
+      new CostLedger(),
+    );
+  const ctx = { runId: 'run-1', projectId: 'p', contributor: true, allowed: () => true };
+  const input = (look?: string) => ({
+    brief: { for: 'A portfolio', ...(look ? { look } : {}) },
+    shots: [],
+    inventory: [],
+  });
+
+  it('always gets directions: a "fits" verdict is unusable when the user asked for a new look', async () => {
+    const fits = { fits: true, why: 'Clean and modern.', directions: [] };
+    await expect(themeFit(caller(fits), ctx, 'm', input('2007 web'))).rejects.toThrow(
+      /needs directions/,
+    );
+    expect((await themeFit(caller(fits), ctx, 'm', input())).fits).toBe(true);
+  });
+
+  it('tells the redesigner the owner’s vision', () => {
+    const task = redesignTask({
+      brief: { for: 'A portfolio', look: 'Dark and bold, like a film poster' },
+      why: 'You asked for a new look.',
+      direction: {
+        id: 'a',
+        name: 'Poster',
+        swatches: ['#111111', '#f5f0e8'],
+        typeface: 'Inter',
+        notes: 'Bold.',
+      },
+      routes: ['/'],
+    });
+    expect(task).toContain('their vision: "Dark and bold, like a film poster"');
   });
 });
 

@@ -7,7 +7,8 @@ import { IconButton } from '../../components/IconButton';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
-import { VERIFY_MS, VERIFY_TOKEN } from '../../mock/detect';
+import { DEV } from '../../dev';
+import { VERIFY_MS, VERIFY_TOKEN } from '../../lib/new-project';
 import type { SiteVerification } from '@fitts/schema';
 import { bridge } from '../../lib/bridge';
 import { CONNECT_MS, DNS_RECORD_NAME, HOSTS, hostOf, type Host } from '../../mock/hosting';
@@ -185,7 +186,8 @@ export function LiveVerify({
                 {copy.addProject.hostIntro}
               </p>
               <div className="grid grid-cols-2 gap-2">
-                {HOSTS.map((host) => (
+                {/* Vercel, Netlify and Cloudflare are still mock connections: dev builds only. */}
+                {HOSTS.filter((h) => DEV || h.id === 'github-pages').map((host) => (
                   <Button
                     key={host.id}
                     size="md"

@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+
+/* The app's own brand (apps/desktop/src/renderer/styles/tokens.css), so the site looks like
+   Fitts: paper, ink outlines, hard offset shadows, Bricolage Grotesque and Geist. */
+@theme {
+  --color-paper: #fbfaf7;
+  --color-card: #ffffff;
+  --color-ink: #16161d;
+  --color-ink-2: #2e2e38;
+  --color-muted: #5a5a66;
+  --color-surface-2: #f3f1ec;
+  --color-cobalt: #3d5afe;
+  --color-cobalt-ink: #2a3fd6;
+  --color-cobalt-tint: #e8ecff;
+  --color-coral: #ff6b5b;
+  --color-coral-tint: #ffe2de;
+  --color-sun: #ffc53d;
+  --color-sun-tint: #fff4d6;
+  --color-mint: #2bd9a0;
+  --color-mint-tint: #ddf8ee;
+  --color-mint-ink: #0b6b4b;
+  --color-lilac: #b69cff;
+  --color-lilac-tint: #efe9ff;
+  --color-lilac-ink: #4a2fb0;
+
+  --radius-control: 12px;
+  --radius-card: 14px;
+  --radius-panel: 18px;
+  --radius-hero: 22px;
+
+  --shadow-button: 2px 2px 0 #16161d;
+  --shadow-panel: 3px 3px 0 #16161d;
+  --shadow-hero: 4px 4px 0 #16161d;
+
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@geist-fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@geist-fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2')
+    format('woff2-variations');
+}
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible {
+  outline: 3px solid var(--color-cobalt);
+  outline-offset: 2px;
+}

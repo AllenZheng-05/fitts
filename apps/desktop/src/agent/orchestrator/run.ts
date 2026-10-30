@@ -2,6 +2,7 @@
 // coverage gate, stop/pause/queue, take the wheel, and edge states from real conditions.
 // Probes (P5) run alongside it; reviewers (P6), the gate (P8) and fixes (P9) plug into this loop later.
 import {
+  DEVICES,
   reduce,
   type ChatItem,
   type Finding,
@@ -66,6 +67,8 @@ const MAX_MOCKUPS = 4;
 const THEME_ROUTES = 3;
 /** A redesign is checked on at most this many pages (each loads on the worktree's server). */
 const MAX_REDESIGN_PAGES = 10;
+/** The phone pass looks at this many pages. */
+const MAX_PHONE_PAGES = 8;
 
 /** Routes reviewed at once (§8.1: at most 2 in flight, 5 reviewers each). */
 const ROUTES_IN_FLIGHT = 2;
@@ -318,6 +321,8 @@ export class RealRun {
       await this.perform(action, snap.path);
       this.deliverQueued();
     }
+    if (this.finished) return;
+    await this.phonePass();
     if (this.finished) return;
     // A site with fewer than 3 pages still gets theme-fit, on what there is (§8.3).
     if (!this.themeAsked && this.deps.themeFit && this.pages.size > 0) {
@@ -804,6 +809,39 @@ export class RealRun {
         this.say(`I couldn’t put that wording back: ${(e as Error).message}`);
       }
     })();
+  }
+
+  /**
+   * The phone pass: every page again as a phone, with real mobile emulation (its viewport meta,
+   * touch, a mobile user agent), the page probes, and a phone screenshot for the reviewers. The
+   * device the user was looking at comes back afterwards.
+   */
+  private async phonePass(): Promise<void> {
+    const site = this.deps.site;
+    const phone = DEVICES.find((d) => d.id === 'phone');
+    const routes = [...this.pages.keys()].slice(0, MAX_PHONE_PAGES);
+    if (!site.device || !phone || routes.length === 0) return;
+    let previous: string | null;
+    try {
+      previous = await site.device(phone.id);
+    } catch {
+      return;
+    }
+    try {
+      for (const route of routes) {
+        if (this.finished) break;
+        this.emit([{ type: 'now.changed', nowText: `Checking ${route} on a phone` }]);
+        await site.navigate(route).catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 600));
+        await this.probes.onDevice(route, phone);
+        const shot = await site.screenshot().catch(() => null);
+        const page = this.pages.get(route);
+        if (shot && page)
+          page.evidence.phoneShot = { jpegBase64: shot.jpegBase64, label: phone.label };
+      }
+    } finally {
+      await site.device(previous).catch(() => undefined);
+    }
   }
 
   /** The fix pipeline, once: only when the project is its own git repo (§9). */

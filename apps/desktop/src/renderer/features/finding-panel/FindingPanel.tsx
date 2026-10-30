@@ -10,6 +10,7 @@ import { Tabs } from '../../components/Tabs';
 import { useOverlay } from '../../components/overlay/useOverlay';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
+import { DEV } from '../../dev';
 import { LIVE_FINDINGS } from '../../mock/fixtures/demo-chat';
 import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine } from '../../state/engine';
@@ -50,7 +51,8 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
   useOverlay({ open: true, onClose: close, containerRef: ref, trapFocus: false });
   const titleId = `finding-title-${finding.id}`;
   // Show the page where the finding's element lives (e.g. step 2 for the NEXT button).
-  const previewRoute = (finding.elementRef && ROUTE_FOR_REF[finding.elementRef]) || finding.route;
+  const previewRoute =
+    (DEV && finding.elementRef && ROUTE_FOR_REF[finding.elementRef]) || finding.route;
   // Part of a batch Fitts is waiting on: step through it and decide each fix (§6.6).
   const batch = finding.status === 'open' ? pendingBatchFor(run, finding.id) : undefined;
 
@@ -124,12 +126,22 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
                     />
                   )}
                 </div>
-              ) : (
+              ) : DEV ? (
+                // Phase 1's mock comparison (dev and e2e builds).
                 <BeforeAfterSlider
                   className="h-[200px]"
                   before={<MiniSite run={run} route={previewRoute} variant="now" />}
                   after={<MiniSite run={run} route={previewRoute} variant="fixed" />}
                 />
+              ) : (
+                // The step shot from when Fitts found it.
+                <div className="relative h-[200px] overflow-hidden rounded-control border border-ink bg-paper">
+                  <img
+                    src={`fitts-asset://${run.projectId}/${run.runId}/shots/${Math.max(1, finding.stepIndex)}.jpg`}
+                    alt={copy.finding.shotAlt}
+                    className="absolute inset-0 size-full object-contain"
+                  />
+                </div>
               ),
             },
             {
@@ -432,7 +444,7 @@ ${copy.finding.fixPrefix} ${finding.fix}`,
         onClick={() => {
           useUi.getState().set({
             draft:
-              finding.id === LIVE_FINDINGS.names.id
+              DEV && finding.id === LIVE_FINDINGS.names.id
                 ? copy.finding.changePrefill
                 : copy.finding.changePrefillGeneric,
           });

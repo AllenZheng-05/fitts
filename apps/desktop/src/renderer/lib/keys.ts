@@ -2,7 +2,7 @@
 // and stored in safeStorage; the renderer keeps only "is there a key". Outside Electron (unit
 // tests) the Phase 1 rule stands in: 8+ characters works.
 import type { KeyName } from '@fitts/schema';
-import { isKeyValid } from '../mock/detect';
+import { isKeyValid } from './new-project';
 import { useSettings } from '../state/settings';
 import { bridge } from './bridge';
 

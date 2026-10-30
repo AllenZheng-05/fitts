@@ -14,6 +14,7 @@
     "src/renderer/mock/scenarios/hartwell.ts",
     "src/renderer/mock/scenarios/interview.ts",
     "src/renderer/state/mock-engine.ts",
+    "src/renderer/lib/timing.ts",
     "src/renderer/state/script.ts",
     "src/renderer/copy.ts",
     "src/renderer/lib/format.ts",

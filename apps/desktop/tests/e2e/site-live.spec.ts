@@ -84,6 +84,57 @@ test('demo/chat streams live, the user drives it in the interview, and point ret
   await expect(page.getByText('pointing at #compose-to')).toBeVisible();
 });
 
+test('see it on a phone: the site renders at 390×844, scaled into the panel, and clicks still land', async () => {
+  test.setTimeout(120_000);
+  const { page } = launched;
+  await page.getByLabel('Meta Model API key').fill('meta-key-12345');
+  await page.getByRole('button', { name: 'Browse' }).click();
+  await expect(page.getByText(/Vite \+ React 19/)).toBeVisible();
+  await page.getByRole('button', { name: 'Open my project' }).click();
+  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose`, { timeout: 60_000 });
+
+  await page.getByLabel('See it on').selectOption('phone');
+  await expect
+    .poll(
+      // Frames can round a pixel at fractional display scaling (125%).
+      () =>
+        canvas(page).evaluate(
+          (c: HTMLCanvasElement) => c.width === 390 && Math.abs(c.height - 844) <= 1,
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  // The phone is drawn scaled to fit the panel; a click maps back into the phone's own pixels.
+  const box = await canvas(page).boundingBox();
+  if (!box) throw new Error('no canvas');
+  const scale = box.height / 844;
+  expect(scale).toBeLessThan(1);
+  await expect.poll(() => siteRect(page, 'compose-contact-grandma')).not.toBeNull();
+  const grandma = await siteRect(page, 'compose-contact-grandma');
+  if (!grandma) throw new Error('no Grandma');
+  await page.mouse.click(
+    box.x + (grandma.left + grandma.width / 2) * scale,
+    box.y + (grandma.top + grandma.height / 2) * scale,
+  );
+  await clickInSiteScaled(page, 'compose-next-1', scale);
+  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose/recipient`);
+
+  // Back to fitting the panel.
+  await page.getByLabel('See it on').selectOption('fit');
+  await expect
+    .poll(() => canvas(page).evaluate((c: HTMLCanvasElement) => c.width), { timeout: 30_000 })
+    .toBeGreaterThan(600);
+});
+
+async function clickInSiteScaled(page: Page, ref: string, scale: number) {
+  const rect = await siteRect(page, ref);
+  const box = await canvas(page).boundingBox();
+  if (!rect || !box) throw new Error(`no ${ref} in the site`);
+  await page.mouse.click(
+    box.x + (rect.left + rect.width / 2) * scale,
+    box.y + (rect.top + rect.height / 2) * scale,
+  );
+}
 /** The run as main holds it (the same reducer the UI uses). */
 async function runState(page: Page) {
   return page.evaluate(async () => {

@@ -10,6 +10,7 @@ import { bridge } from '../../lib/bridge';
 import { cx } from '../../lib/cx';
 import { format, formatUsd } from '../../lib/format';
 import { buildReport, mathLine, runStats, type RunStats } from '../../lib/report';
+import { DEV } from '../../dev';
 import { DEMO_PAST_RUNS } from '../../mock/fixtures/demo-chat';
 import { DEMO_CHAT } from '../../mock/fixtures/projects';
 import { startRoute } from '../../mock/sites';
@@ -36,7 +37,7 @@ export function DoneLayout({ run }: { run: RunState }) {
     useSite.getState().navigate(run.projectId, startRoute(run.projectId, true));
   }, [run.projectId]);
 
-  const previewUrl = run.projectId === DEMO_CHAT ? 'localhost:5180' : project?.url;
+  const previewUrl = DEV && run.projectId === DEMO_CHAT ? 'localhost:5180' : project?.url;
   // A real redesign shows its own before and after of every page (SPEC-phase2 §8.3).
   const redesign = appliedRedesign(run);
   return (
@@ -63,7 +64,7 @@ export function DoneLayout({ run }: { run: RunState }) {
               copy.done.previewAsIs
             ) : (
               <RichText
-                text={format(copy.done.previewCaption, {
+                text={format(DEV ? copy.done.previewCaption : copy.done.previewLiveCaption, {
                   branch: `**fitts/preview-run-${runNumber}**`,
                   n: stats.fixed,
                 })}
@@ -83,7 +84,7 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
   const [pastRunId, setPastRunId] = useState<string | null>(null);
   const titleId = useId();
   const runNumber = run.runId.replace('run-', '');
-  const pastRuns = run.projectId === DEMO_CHAT ? DEMO_PAST_RUNS : [];
+  const pastRuns = DEV && run.projectId === DEMO_CHAT ? DEMO_PAST_RUNS : [];
   const past = pastRuns.find((r) => r.runId === pastRunId);
   const closing =
     stats.found === 0

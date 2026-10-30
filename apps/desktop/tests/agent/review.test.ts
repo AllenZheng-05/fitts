@@ -5,7 +5,7 @@ import { CostLedger } from '../../src/agent/ledger/ledger';
 import { LlmCaller } from '../../src/agent/llm/call';
 import { FakeLlmClient, type Fixture } from '../../src/agent/llm/fake';
 import type { AxSnapshot } from '../../src/agent/protocol';
-import { aggregate, severityOf } from '../../src/agent/review/aggregate';
+import { aggregate, aggregateWithChecks, severityOf } from '../../src/agent/review/aggregate';
 import {
   cleanDrafts,
   ReviewerPanel,
@@ -262,5 +262,38 @@ describe('aggregator and evidence check', () => {
     expect(severityOf(2, 4, 5)).toBe(3);
     expect(severityOf(3, 4, 4)).toBe(4);
     expect(severityOf(1, 1, 5)).toBe(1);
+  });
+});
+
+describe('the phone pass (device sizes)', () => {
+  const small = (measured: string) => ({
+    ref: 'send',
+    selector: '',
+    measured,
+    expected: 'at least 24×24px',
+  });
+
+  it('a problem only a phone shows is its own finding, named for the phone, never auto-fixed', () => {
+    const { findings, checks } = aggregateWithChecks({
+      runId: 'run-1',
+      probes: [
+        probe({ evidenceId: 'e1', probe: 'contrast' }),
+        probe({
+          evidenceId: 'e2',
+          probe: 'target-size',
+          device: 'phone',
+          items: [small('20×20px on iPhone · 390×844')],
+        }),
+      ],
+      reviews: [],
+      stepOf: () => ({ stepIndex: 1, atMs: 1000 }),
+    });
+    const phone = findings.find((f) => f.title.startsWith('Tap target'));
+    expect(phone?.title).toBe('Tap target is too small on a phone');
+    expect(phone?.evidence.join(' ')).toContain('on iPhone · 390×844');
+    expect(checks.get(phone?.id ?? '')).toMatchObject({ device: 'phone' });
+    expect(
+      checks.get(findings.find((f) => f.title.startsWith('Text'))?.id ?? ''),
+    ).not.toHaveProperty('device');
   });
 });

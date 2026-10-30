@@ -72,6 +72,9 @@ export function redesignTask(input: {
     `# Redesign: ${d.name}`,
     '',
     `Brief: ${JSON.stringify(input.brief)}`,
+    ...(input.brief.look
+      ? [`The owner asked for this redesign; their vision: "${input.brief.look}". Honor it.`]
+      : []),
     `Why the current look doesn't fit: ${input.why}`,
     '',
     `Direction "${d.name}"`,
@@ -188,7 +191,7 @@ export function fixedByRedesign(
     .filter((f) => f.status === 'open' || f.status === 'fixing')
     .filter((f) => {
       const check = checks.get(f.id);
-      if (!check || check.probe === 'links') return false;
+      if (!check || check.probe === 'links' || check.device) return false;
       const now = byRoute.get(check.routes[0] ?? f.route);
       return now !== undefined && !now.has(`${check.probe}|${check.title}`);
     })

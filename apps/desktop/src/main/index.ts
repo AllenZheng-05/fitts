@@ -8,6 +8,7 @@ import { Secrets } from './secrets';
 import { FixHost } from './fix/fix-host';
 import { VoiceHost } from './voice';
 import { registerReplay } from './replay';
+import { registerTools } from './tools';
 import { recheck, registerVerify } from './verify-site';
 import { SiteManager } from './site/manager';
 import { ProjectStore } from './store/projects';
@@ -51,6 +52,7 @@ void app.whenReady().then(() => {
   sites.onStatus = (status) => host.siteStatus(status);
   sites.onHeld = (projectId, held) => host.siteHeld(projectId, held);
   registerReplay(userData);
+  registerTools();
   const check = (method: 'dns' | 'file', domain: string, token: string) =>
     host.verifySite(method, domain, token);
   registerVerify(check);

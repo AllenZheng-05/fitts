@@ -2,6 +2,7 @@ import type { Brief, Project } from '@fitts/schema';
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { bridge } from '../lib/bridge';
+import { DEV } from '../dev';
 import { DEMO_PROJECTS } from '../mock/fixtures/projects';
 
 /**
@@ -64,8 +65,10 @@ export const useProjects = create<ProjectsState>()(
       setLastOpen: (id) => set({ lastOpenId: id }),
       seedDemo: () =>
         set((s) => ({
-          projects: DEMO_PROJECTS.map((demo) => s.projects.find((p) => p.id === demo.id) ?? demo),
-          lastOpenId: s.lastOpenId ?? DEMO_PROJECTS[0]?.id ?? null,
+          projects: (DEV ? DEMO_PROJECTS : []).map(
+            (demo) => s.projects.find((p) => p.id === demo.id) ?? demo,
+          ),
+          lastOpenId: s.lastOpenId ?? (DEV ? DEMO_PROJECTS[0]?.id : undefined) ?? null,
         })),
       clear: () => set({ projects: [], lastOpenId: null }),
     }),

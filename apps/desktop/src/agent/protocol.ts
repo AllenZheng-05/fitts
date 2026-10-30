@@ -50,6 +50,8 @@ export type SiteOp =
   | { op: 'probes'; names: PageProbeName[] }
   | { op: 'focus' }
   | { op: 'viewport' }
+  /** Look like a device from DEVICES (null: a desktop browser); answers the one it replaced. */
+  | { op: 'device'; id: string | null }
   | { op: 'value'; ref: string }
   | { op: 'links'; hrefs: string[] }
   | { op: 'network' }
@@ -137,6 +139,7 @@ export type SiteOpResult =
   | { op: 'probes'; results: PageProbeResult[] }
   | { op: 'items'; items: ProbeItem[] }
   | { op: 'value'; value: string | null }
+  | { op: 'device'; previous: string | null }
   | { op: 'links'; statuses: Record<string, number> }
   | { op: 'network'; requests: RequestRecord[] }
   | { op: 'released' }

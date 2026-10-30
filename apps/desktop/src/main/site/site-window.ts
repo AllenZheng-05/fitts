@@ -3,7 +3,19 @@
 // own queries (element boxes, refs) run in an isolated world, never the page's.
 import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
 import PROBES from '@fitts/probes/page.js?raw';
-import type { ProbeItem, SiteInput, SiteNav, SiteRect, SiteStatus } from '@fitts/schema';
+import {
+  DEVICES,
+  type ProbeItem,
+  type SiteDevice,
+  type SiteInput,
+  type SiteNav,
+  type SiteRect,
+  type SiteStatus,
+} from '@fitts/schema';
+
+/** A current mobile Chrome, so sites serve their phone experience. */
+const MOBILE_UA =
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
 import type { AxSnapshot, HeldRequest, OpTrace } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 
@@ -91,6 +103,12 @@ export class SiteWindow {
   private acting: string | undefined;
   /** When the page last tried to open a new tab or leave the site (both blocked). */
   private openedAt = 0;
+  /** The device it's emulating (null: a desktop browser the panel's size). */
+  private deviceId: string | null = null;
+
+  get device(): SiteDevice | null {
+    return DEVICES.find((d) => d.id === this.deviceId) ?? null;
+  }
   /** Endpoints whose big JSON body was already counted. */
   private readonly parsed = new Set<string>();
 
@@ -295,6 +313,40 @@ export class SiteWindow {
 
   load(path: string): Promise<void> {
     return this.wc.loadURL(new URL(path, this.baseUrl).toString());
+  }
+
+  /**
+   * A device to look like (null: a desktop browser the panel's size). Phones and tablets get
+   * mobile emulation, so `<meta name="viewport">`, touch and a mobile user agent all apply, the
+   * way the site renders on the real thing; frames stay at CSS px (scale 1).
+   */
+  async emulate(device: SiteDevice | null): Promise<void> {
+    const dbg = this.wc.debugger;
+    // The same device again (a layout change remounts the canvas) changes nothing.
+    if (!dbg.isAttached() || (device?.id ?? null) === this.deviceId) return;
+    this.deviceId = device?.id ?? null;
+    if (device?.mobile) {
+      await dbg.sendCommand('Emulation.setDeviceMetricsOverride', {
+        width: device.width,
+        height: device.height,
+        deviceScaleFactor: 1,
+        mobile: true,
+      });
+      await dbg.sendCommand('Emulation.setTouchEmulationEnabled', {
+        enabled: true,
+        maxTouchPoints: 5,
+      });
+      await dbg.sendCommand('Emulation.setUserAgentOverride', { userAgent: MOBILE_UA });
+    } else {
+      await dbg.sendCommand('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
+      await dbg.sendCommand('Emulation.setTouchEmulationEnabled', { enabled: false });
+      await dbg.sendCommand('Emulation.setUserAgentOverride', {
+        userAgent: this.wc.getUserAgent(),
+      });
+    }
+    if (device) this.resize(device.width, device.height);
+    // A page reads its device once, at load (media queries, user agent): load it again.
+    if (this.wc.getURL()) this.wc.reload();
   }
 
   /** The window matches the site panel, in CSS px at device scale 1. */

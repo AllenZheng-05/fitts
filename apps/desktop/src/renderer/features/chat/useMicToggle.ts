@@ -1,6 +1,7 @@
 import type { RunState } from '@fitts/schema';
 import { useEffect, useRef } from 'react';
 import { listen, type Listening } from '../../lib/voice/session';
+import { DEV } from '../../dev';
 import { cannedTranscript } from '../../mock/voice';
 import { sendFromComposer } from '../../state/actions';
 import { useUi } from '../../state/ui';
@@ -50,6 +51,7 @@ export function useMicToggle(run: RunState | undefined) {
       return;
     }
     useUi.getState().set({ micPartial: '' });
-    sendFromComposer(current.projectId, cannedTranscript(current), { spoken: true });
+    // No voice session (the mock engine): Phase 1's canned line, in dev and e2e builds only.
+    if (DEV) sendFromComposer(current.projectId, cannedTranscript(current), { spoken: true });
   };
 }

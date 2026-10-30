@@ -1,5 +1,6 @@
 // The seam between the site view and whatever renders "your site" (SPEC §13). Phase 1
 // renders mock React sites; Phase 2 streams the real site (liveSurface, SPEC-phase2 §5.2).
+import { siteView } from '../../state/device';
 
 export interface Rect {
   left: number;
@@ -62,15 +63,29 @@ export function liveSurface(
   const wanted = new Map<string, number>();
   let busy = false;
   return {
+    // Site px to panel px: a device bigger than the panel is drawn scaled down (siteView).
     getElementRect(ref) {
       wanted.set(ref, Date.now());
-      return rects.get(ref) ?? null;
+      const r = rects.get(ref);
+      if (!r) return null;
+      const v = siteView(projectId);
+      return {
+        left: r.left * v.scale + v.x,
+        top: r.top * v.scale + v.y,
+        width: r.width * v.scale,
+        height: r.height * v.scale,
+      };
     },
     refAt: () => null,
     async refAtAsync(clientX, clientY) {
       const box = containerRef.current?.getBoundingClientRect();
       if (!box) return null;
-      return site.refAt(projectId, clientX - box.left, clientY - box.top);
+      const v = siteView(projectId);
+      return site.refAt(
+        projectId,
+        (clientX - box.left - v.x) / v.scale,
+        (clientY - box.top - v.y) / v.scale,
+      );
     },
     async refresh() {
       if (busy) return;

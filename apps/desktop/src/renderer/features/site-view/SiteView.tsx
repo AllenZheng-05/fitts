@@ -9,11 +9,50 @@ import { isTopOverlay, useOverlayStack } from '../../state/overlays';
 import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
 import { bridge } from '../../lib/bridge';
-import { livePath, useLiveSite } from '../../state/live-site';
+import { livePath, useLiveSite, useLiveSites } from '../../state/live-site';
+import { DEVICES } from '@fitts/schema';
+import { Select } from '../../components/fields';
+import { DEV } from '../../dev';
+import { FIT, useDevice } from '../../state/device';
 import { SiteCanvas } from './SiteCanvas';
 import { domSurface, liveSurface, type Rect, type SiteSurface } from './surface';
 
 export const MESSAGE_BOX_ID = 'message-box';
+
+/** See the site on a phone, tablet or desktop, or fitted to the panel. */
+function DevicePicker({ projectId }: { projectId: string }) {
+  const value = useDevice((s) => s.byProject[projectId] ?? FIT);
+  return (
+    <Select
+      label={copy.site.device}
+      hideLabel
+      value={value}
+      onChange={(e) => useDevice.getState().setDevice(projectId, e.target.value)}
+      options={[
+        { value: FIT, label: copy.site.deviceFit },
+        ...DEVICES.map((d) => ({ value: d.id, label: d.label })),
+      ]}
+    />
+  );
+}
+
+/** A release's site view before the real site is up: what's happening, never a stand-in. */
+function SitePending({ projectId }: { projectId: string }) {
+  const status = useLiveSites((s) => s.sites[projectId]);
+  const failed = status?.status === 'failed';
+  return (
+    <div role="status" className="flex h-full flex-col items-center justify-center gap-2 p-6">
+      <p className="text-[15px] font-semibold">
+        {failed ? copy.site.pendingFailed : copy.site.pendingStarting}
+      </p>
+      {failed && status.log && status.log.length > 0 && (
+        <pre className="max-h-40 max-w-full overflow-auto rounded-control bg-card p-3 font-mono text-[12px] text-muted">
+          {status.log.slice(-6).join('\n')}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 interface SiteViewProps {
   projectId: string;
@@ -40,6 +79,8 @@ interface SiteViewProps {
   header?: ReactNode;
   /** A stored step shot (fitts-asset://…) shown instead of the live site while rewound. */
   shot?: string | undefined;
+  /** There is no live site: the shot is the site (a recorded run, §12.3). */
+  shotIsSite?: boolean;
 }
 
 /** The embedded browser showing "your site" (SPEC §6.3, §6.4). */
@@ -59,6 +100,7 @@ export function SiteView({
   className,
   header,
   shot,
+  shotIsSite = false,
 }: SiteViewProps) {
   const project = useProject(projectId);
   const { route, canBack, canForward, reloads } = useSiteRoute(projectId);
@@ -136,6 +178,7 @@ export function SiteView({
             value={`${addressHost ?? liveHost ?? project?.url ?? 'localhost'}${shownPath}`}
             className="min-w-0 flex-[1_1_180px] truncate rounded-row bg-surface-2 px-3 py-[9px] font-mono text-[12px]"
           />
+          {live && <DevicePicker projectId={projectId} />}
           {toolbarEnd}
         </div>
         {header}
@@ -155,7 +198,7 @@ export function SiteView({
           style={contentInsetRight ? { paddingRight: contentInsetRight } : undefined}
           inert={!interactive && !pointing ? true : undefined}
         >
-          {live && variant === 'now' ? (
+          {live && (variant === 'now' || !DEV) ? (
             <div className="relative h-full">
               <SiteCanvas
                 projectId={projectId}
@@ -173,7 +216,11 @@ export function SiteView({
                 />
               )}
             </div>
-          ) : (
+          ) : shot && (shotIsSite || !DEV) ? (
+            // A recorded run (or a rewind with the site closed): the stored step shot.
+            <img src={shot} alt="" className="block max-w-none" />
+          ) : DEV ? (
+            // Phase 1's mock sites: dev and e2e builds only.
             <Fragment key={reloads}>
               {renderSite(projectId, {
                 route,
@@ -183,6 +230,8 @@ export function SiteView({
                 onElementClick,
               })}
             </Fragment>
+          ) : (
+            <SitePending projectId={projectId} />
           )}
         </div>
         {overlay?.(surface)}

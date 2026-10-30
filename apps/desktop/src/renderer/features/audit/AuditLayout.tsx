@@ -5,6 +5,7 @@ import { Button } from '../../components/Button';
 import { Chip } from '../../components/Chip';
 import { copy } from '../../copy';
 import { format, formatClock } from '../../lib/format';
+import { DEV } from '../../dev';
 import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine, recordUserClick } from '../../state/engine';
 import { useLiveSite } from '../../state/live-site';
@@ -59,7 +60,7 @@ function AuditSiteView({ run }: { run: RunState }) {
     if (driving || live) return;
     const target =
       rewindFinding?.route ??
-      (attentionRef ? ROUTE_FOR_REF[attentionRef] : undefined) ??
+      (DEV && attentionRef ? ROUTE_FOR_REF[attentionRef] : undefined) ??
       testingRoute;
     if (target) useSite.getState().navigate(run.projectId, target);
   }, [driving, live, rewindFinding?.route, attentionRef, testingRoute, run.projectId]);
@@ -106,7 +107,8 @@ function AuditSiteView({ run }: { run: RunState }) {
               >
                 {copy.site.highlights}
               </Button>
-              {!auditOnly && (
+              {/* Phase 1's mock comparison; a real run compares in the Finding panel. */}
+              {DEV && !auditOnly && (
                 <Button
                   size="sm"
                   variant={beforeAfter ? 'dark' : 'secondary'}
@@ -125,7 +127,7 @@ function AuditSiteView({ run }: { run: RunState }) {
         </>
       }
       overlay={(surface) =>
-        beforeAfter && !auditOnly ? (
+        DEV && beforeAfter && !auditOnly ? (
           <BeforeAfterSlider
             fill
             before={renderSite(run.projectId, { route, navigate: () => undefined, variant: 'now' })}
@@ -144,6 +146,7 @@ function AuditSiteView({ run }: { run: RunState }) {
         ) : null
       }
       panel={<FindingPanel run={run} />}
+      shotIsSite={replaying}
       shot={
         rewound || replaying
           ? `fitts-asset://${run.projectId}/${run.runId}/shots/${rewound ? (run.rewindStep ?? 0) : Math.max(1, run.step)}.jpg`

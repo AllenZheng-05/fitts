@@ -1,21 +1,26 @@
 // Mock project detection (SPEC §6.1, §6.11): what Fitts would find in a folder or URL.
-import type { Detection, Project } from '@fitts/schema';
+import type { Detection } from '@fitts/schema';
+import { slug } from '../lib/new-project';
 import { DEMO_CHAT, DEMO_PROJECTS, HARTWELL, MOCK_USER } from './fixtures/projects';
 
 // The result shape is shared with main's real detection (SPEC-phase2 §4.1).
 export type { Detection } from '@fitts/schema';
+// The real helpers moved to lib/new-project; tests still import them from here.
+export {
+  isKeyValid,
+  KEY_CHECK_MS,
+  projectFromFolder,
+  projectFromUrl,
+  slug,
+  VERIFY_MS,
+  VERIFY_TOKEN,
+} from '../lib/new-project';
 
 const forwardSlashes = (path: string) => path.replaceAll('\\', '/').replace(/\/+$/, '');
 
 const normalize = (path: string) => forwardSlashes(path).toLowerCase();
 
 const basename = (path: string) => forwardSlashes(path).split('/').pop() ?? path;
-
-export const slug = (text: string) =>
-  text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'project';
 
 export function detectFolder(folder: string): Detection | null {
   const path = normalize(folder.trim());
@@ -65,39 +70,3 @@ export function detectFolder(folder: string): Detection | null {
     hasPlugin: false,
   };
 }
-
-export function projectFromFolder(folder: string, name: string, detection: Detection): Project {
-  return {
-    id: detection.id,
-    name: name.trim() || detection.name,
-    kind: 'local',
-    folder,
-    url: detection.url,
-    framework: detection.framework,
-    devCommand: detection.devCommand,
-    ...(detection.repo ? { repo: detection.repo } : {}),
-    ...(detection.startPath ? { startPath: detection.startPath } : {}),
-    brief: {},
-    createdAt: new Date().toISOString(),
-  };
-}
-
-export function projectFromUrl(url: string, name: string): Project {
-  const host = url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-  return {
-    id: slug(name || host),
-    name: name.trim() || host,
-    kind: 'live',
-    url: host,
-    brief: {},
-    createdAt: new Date().toISOString(),
-  };
-}
-
-/** The token a live site serves at /.well-known/fitts-verify.txt to prove ownership. */
-export const VERIFY_TOKEN = 'fitts-verify=7Q2K9XAD4M';
-/** "Check now" succeeds after this long (§6.11). */
-export const VERIFY_MS = 1000;
-/** The Welcome key check runs this long after typing stops (§6.1). */
-export const KEY_CHECK_MS = 600;
-export const isKeyValid = (key: string) => key.trim().length >= 8;

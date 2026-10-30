@@ -62,6 +62,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fitts/desktop build
+      # A release ships none of Phase 1's stand-ins (mock sites, demo projects, sample user).
+      - run: node scripts/check-release-bundle.mjs
       - run: pnpm --filter @fitts/desktop exec electron-builder ${{ matrix.target }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

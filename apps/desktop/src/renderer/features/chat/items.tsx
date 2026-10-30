@@ -16,7 +16,7 @@ import { format, formatUsd } from '../../lib/format';
 import { sendFromComposer } from '../../state/actions';
 import { getEngine } from '../../state/engine';
 import { useSpeech } from '../../state/speech';
-import { API_RETRY_MS } from '../../state/mock-engine';
+import { API_RETRY_MS } from '../../lib/timing';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { startReview } from '../finding-panel/review';
@@ -337,7 +337,8 @@ function BriefSummary({ brief }: { brief: Brief }) {
     <div className="flex flex-col gap-2.5 rounded-card border border-ink bg-sun-tint p-3.5">
       <span className="font-display text-[15px] font-bold">{copy.brief.cardTitle}</span>
       <dl className="grid grid-cols-[70px_1fr] gap-x-2.5 gap-y-1 text-[14px]">
-        {BRIEF_ROWS.map((key) => (
+        {/* The look shows once the user has asked for one: most runs keep theirs. */}
+        {[...BRIEF_ROWS, ...(brief.look ? (['look'] as const) : [])].map((key) => (
           <div key={key} className="contents">
             <dt className="text-muted">{copy.brief.labels[key]}</dt>
             <dd className={brief[key] ? undefined : 'text-muted'}>

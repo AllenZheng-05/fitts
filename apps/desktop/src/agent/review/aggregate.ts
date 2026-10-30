@@ -2,15 +2,16 @@
 // merge into them (as agreement) or into each other; duplicates across routes become one finding
 // with `locations`; the severity rubric sets severity; the evidence check decides each finding's
 // lane. Deterministic: same inputs, same findings.
-import type {
-  Finding,
-  FindingDraft,
-  Heuristic,
-  Lens,
-  ProbeItem,
-  ProbeName,
-  ProbeResult,
-  Severity,
+import {
+  DEVICES,
+  type Finding,
+  type FindingDraft,
+  type Heuristic,
+  type Lens,
+  type ProbeItem,
+  type ProbeName,
+  type ProbeResult,
+  type Severity,
 } from '@fitts/schema';
 import type { PersonaReview } from './reviewers';
 
@@ -250,6 +251,8 @@ interface Cluster {
   refs: string[];
   template?: Template;
   probe?: ProbeName;
+  /** The device it showed up on, when only Fitts's phone pass saw it. */
+  device?: string;
   items: ProbeItem[];
   evidenceIds: Set<string>;
   drafts: { persona: string; draft: FindingDraft }[];
@@ -285,6 +288,8 @@ export interface Check {
   routes: string[];
   /** For broken links: the hrefs that must load afterwards. */
   hrefs: string[];
+  /** Seen only on this device (the phone pass): verification at desktop size can't check it. */
+  device?: string;
 }
 
 export function aggregate(input: AggregateInput): Finding[] {
@@ -305,7 +310,7 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf }: Aggregat
     if (r.pass) continue;
     for (const item of r.items) {
       const t = template(r.probe, item);
-      const key = `${r.probe}|${t.title}`;
+      const key = `${r.probe}|${t.title}|${r.device ?? ''}`;
       let c = clusters.find((x) => x.key === key);
       if (!c) {
         c = {
@@ -315,6 +320,7 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf }: Aggregat
           refs: [],
           template: t,
           probe: r.probe,
+          ...(r.device ? { device: r.device } : {}),
           items: [],
           evidenceIds: new Set(),
           drafts: [],
@@ -404,6 +410,7 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf }: Aggregat
         c.probe === 'links'
           ? c.items.map((i) => i.measured.split(' ')[0] ?? '').filter(Boolean)
           : [],
+      ...(c.device ? { device: c.device } : {}),
     });
   });
   return { findings, checks };
@@ -458,7 +465,7 @@ function toFinding(
     severity,
     ...(heuristic ? { heuristic } : {}),
     lens: c.template?.lens ?? lead?.lens ?? 'usability',
-    title: c.template?.title ?? lead?.title ?? 'Problem',
+    title: onDevice(c.template?.title ?? lead?.title ?? 'Problem', c.device),
     finding: c.template?.finding ?? lead?.finding ?? '',
     fix: c.template?.fix ?? lead?.fix ?? '',
     route: c.route,
@@ -499,6 +506,12 @@ function sourceOf(items: ProbeItem[]): Pick<Finding, 'source'> | Record<string, 
 /** A probe item's problem as the aggregator names it (fix verification compares these). */
 export const titleOf = (probe: ProbeName, item: ProbeItem) => template(probe, item).title;
 export const impactOf = (probe: ProbeName, item: ProbeItem) => template(probe, item).severity;
+
+/** A phone-pass finding says where it happens: "Tap target is too small on a phone". */
+const onDevice = (title: string, device: string | undefined) =>
+  device
+    ? `${title} on ${DEVICES.find((d) => d.id === device)?.mobile ? 'a phone' : device}`
+    : title;
 
 /** A probe result's problems as `probe|title` keys, with their impact (verification, §9.2). */
 export function problems(probe: ProbeName, items: ProbeItem[]): Map<string, number> {

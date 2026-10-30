@@ -8,7 +8,7 @@ import { getEngine } from '../../state/engine';
 import { useRun } from '../../state/run-store';
 import { useUi } from '../../state/ui';
 
-const FIELDS = ['for', 'who', 'feel', 'pain', 'flows', 'outOfScope'] as const;
+const FIELDS = ['for', 'who', 'feel', 'look', 'pain', 'flows', 'outOfScope'] as const;
 
 /** Editable brief (SPEC §6.10). Save updates the brief and Fitts acknowledges in chat. */
 export function BriefPopover({
@@ -59,7 +59,9 @@ function BriefForm({ projectId, onDone }: { projectId: string; onDone: () => voi
           size="md"
           value={brief[key] ?? ''}
           placeholder={
-            key === 'flows' || key === 'outOfScope' ? copy.brief.placeholders[key] : undefined
+            key === 'flows' || key === 'outOfScope' || key === 'look'
+              ? copy.brief.placeholders[key]
+              : undefined
           }
           onChange={(e) => setBrief((b) => ({ ...b, [key]: e.target.value || undefined }))}
         />

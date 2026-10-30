@@ -8,7 +8,7 @@ import type { CallContext, LlmCaller } from '../llm/call';
 export const MAX_QUESTIONS = 6;
 
 const field = { type: ['string', 'null'] };
-const FIELDS = ['for', 'who', 'pain', 'feel', 'flows', 'outOfScope'] as const;
+const FIELDS = ['for', 'who', 'pain', 'feel', 'look', 'flows', 'outOfScope'] as const;
 
 export const INTERVIEW_FORMAT = {
   type: 'json_schema',

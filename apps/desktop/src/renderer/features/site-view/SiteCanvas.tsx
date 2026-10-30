@@ -11,6 +11,8 @@ import {
   type WheelEvent,
 } from 'react';
 import { bridge } from '../../lib/bridge';
+import { cx } from '../../lib/cx';
+import { useDevice, useProjectDevice } from '../../state/device';
 
 /** Electron's sendInputEvent key names for keys whose DOM names differ. */
 const KEY_NAMES: Record<string, string> = {
@@ -74,7 +76,13 @@ export function SiteCanvas({
     });
   }, [projectId]);
 
-  // The site window follows the panel's size (debounced 150ms).
+  // "Fit": the site window follows the panel's size (debounced 150ms). A device: the window is
+  // the device's size (main emulates it), drawn scaled down to fit the panel, centered.
+  const device = useProjectDevice(projectId);
+  const view = useDevice((s) => s.views[projectId]) ?? { scale: 1, x: 0, y: 0 };
+  useEffect(() => {
+    bridge().site?.device(projectId, device);
+  }, [projectId, device]);
   useEffect(() => {
     const box = boxRef.current;
     const site = bridge().site;
@@ -83,6 +91,14 @@ export function SiteCanvas({
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
       const { width, height } = entry.contentRect;
+      if (device) {
+        const scale = Math.min(width / device.width, height / device.height, 1);
+        useDevice
+          .getState()
+          .setView(projectId, { scale, x: Math.max(0, (width - device.width * scale) / 2), y: 0 });
+        return;
+      }
+      useDevice.getState().setView(projectId, { scale: 1, x: 0, y: 0 });
       clearTimeout(timer);
       timer = setTimeout(() => site.resize(projectId, width, height), 150);
     });
@@ -91,7 +107,12 @@ export function SiteCanvas({
       clearTimeout(timer);
       observer.disconnect();
     };
-  }, [projectId]);
+  }, [projectId, device]);
+  /** Panel px to site px. */
+  const toSite = (x: number, y: number) => ({
+    x: (x - view.x) / view.scale,
+    y: (y - view.y) / view.scale,
+  });
 
   // Input goes out strictly in order; a press waits for its element to be named first, so
   // "You clicked …" names what was under the pointer, not the page the click led to.
@@ -106,25 +127,18 @@ export function SiteCanvas({
   };
   const mouse =
     (type: 'mouseDown' | 'mouseUp' | 'mouseMove') => (e: PointerEvent<HTMLDivElement>) => {
+      const at = toSite(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
       if (type === 'mouseDown') {
         e.currentTarget.focus();
-        const { offsetX, offsetY } = e.nativeEvent;
         if (interactive && onElementClick) {
           enqueue(async () => {
-            const el = await bridge().site?.elementAt(projectId, offsetX, offsetY);
+            const el = await bridge().site?.elementAt(projectId, at.x, at.y);
             if (el) onElementClick(el.ref, el.label);
           });
         }
       }
       const button = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
-      send({
-        kind: 'mouse',
-        type,
-        x: e.nativeEvent.offsetX,
-        y: e.nativeEvent.offsetY,
-        button,
-        clickCount: 1,
-      });
+      send({ kind: 'mouse', type, x: at.x, y: at.y, button, clickCount: 1 });
     };
   const key = (type: 'keyDown' | 'keyUp') => (e: KeyboardEvent<HTMLDivElement>) => {
     if (!interactive || e.key === 'Tab') return;
@@ -155,8 +169,7 @@ export function SiteCanvas({
         onWheel={(e: WheelEvent<HTMLDivElement>) =>
           send({
             kind: 'wheel',
-            x: e.nativeEvent.offsetX,
-            y: e.nativeEvent.offsetY,
+            ...toSite(e.nativeEvent.offsetX, e.nativeEvent.offsetY),
             deltaX: e.deltaX,
             deltaY: e.deltaY,
           })
@@ -165,7 +178,19 @@ export function SiteCanvas({
         onKeyUp={key('keyUp')}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <canvas ref={canvasRef} aria-hidden="true" className="pointer-events-none block" />
+        <canvas
+          ref={canvasRef}
+          aria-hidden="true"
+          className={cx(
+            'pointer-events-none block origin-top-left',
+            device && 'rounded-card border-[1.5px] border-ink',
+          )}
+          style={
+            device
+              ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
+              : undefined
+          }
+        />
       </div>
     </div>
   );

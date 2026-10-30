@@ -38,6 +38,17 @@ export interface FittsBridge {
       events: { ts: number; event: RunEvent }[];
     } | null>;
   };
+  /** What's installed on this computer, for Welcome's chips (each null when missing). */
+  tools?: () => Promise<ToolsStatus>;
+}
+
+export interface ToolsStatus {
+  /** `git --version`'s number. */
+  git: string | null;
+  /** The signed-in GitHub login (`gh api user`), or null when gh is missing or signed out. */
+  gh: string | null;
+  /** Node's major version. */
+  node: string | null;
 }
 
 /** Push to talk for the mic button; endpointing for "Always listening" (V5). */
@@ -122,6 +133,24 @@ export type SiteInput =
 export type SiteNav =
   { kind: 'path'; path: string } | { kind: 'back' } | { kind: 'forward' } | { kind: 'reload' };
 
+/** A screen to see a site on: its CSS px size, and whether it's a touch device. */
+export interface SiteDevice {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  mobile: boolean;
+}
+
+/** The device sizes Fitts offers, the commonest of each kind. */
+export const DEVICES: SiteDevice[] = [
+  { id: 'desktop', label: 'Desktop · 1440×900', width: 1440, height: 900, mobile: false },
+  { id: 'laptop', label: 'Laptop · 1280×800', width: 1280, height: 800, mobile: false },
+  { id: 'tablet', label: 'Tablet · 820×1180', width: 820, height: 1180, mobile: true },
+  { id: 'phone', label: 'iPhone · 390×844', width: 390, height: 844, mobile: true },
+  { id: 'android', label: 'Android · 360×800', width: 360, height: 800, mobile: true },
+];
+
 export interface SiteBridge {
   /** Real detection, or null when the folder doesn't exist. */
   detect(folder: string): Promise<Detection | null>;
@@ -129,6 +158,8 @@ export interface SiteBridge {
   open(projectId: string): void;
   close(projectId: string): void;
   resize(projectId: string, width: number, height: number): void;
+  /** Look like a device (null: a desktop browser the panel's size). */
+  device(projectId: string, device: SiteDevice | null): void;
   input(projectId: string, input: SiteInput): void;
   nav(projectId: string, nav: SiteNav): void;
   /** Element boxes by ref, in site CSS px. */
@@ -242,6 +273,7 @@ export const IPC = {
   siteOpen: 'fitts:site-open',
   siteClose: 'fitts:site-close',
   siteResize: 'fitts:site-resize',
+  siteDevice: 'fitts:site-device',
   siteInput: 'fitts:site-input',
   siteNav: 'fitts:site-nav',
   siteRects: 'fitts:site-rects',
@@ -258,6 +290,7 @@ export const IPC = {
   voiceAudio: 'fitts:voice-audio',
   voiceStopSpeaking: 'fitts:voice-stop-speaking',
   replayOpen: 'fitts:replay-open',
+  toolsCheck: 'fitts:tools-check',
   verifyCheck: 'fitts:verify-check',
   verifyPages: 'fitts:verify-pages',
 } as const;
@@ -299,6 +332,11 @@ export interface Brief {
   pain?: string;
   flows?: string;
   outOfScope?: string;
+  /**
+   * The look the user wants, when they ask for a redesign in the interview ("Dark, bold, like a
+   * film poster"). Fitts restyles the site toward it even when the current look fits.
+   */
+  look?: string;
 }
 
 export interface Finding {
@@ -596,6 +634,8 @@ export interface ProbeResult {
   items: ProbeItem[];
   /** One plain sentence ("3 font families: georgia, system-ui, trebuchet ms"). */
   summary?: string;
+  /** Measured on this device (Fitts's phone pass); absent at the crawl's own size. */
+  device?: string;
 }
 
 /** One reviewer's finding draft (finding.schema.json, SPEC-phase2 §8.1). */

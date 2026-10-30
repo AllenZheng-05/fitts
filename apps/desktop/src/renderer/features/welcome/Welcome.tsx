@@ -10,7 +10,9 @@ import { bridge } from '../../lib/bridge';
 import { format } from '../../lib/format';
 import { checkKey, storeKey } from '../../lib/keys';
 import { useDetection } from '../../lib/use-detection';
-import { KEY_CHECK_MS, projectFromFolder } from '../../mock/detect';
+import { KEY_CHECK_MS, projectFromFolder } from '../../lib/new-project';
+import type { ToolsStatus } from '@fitts/schema';
+import { DEV } from '../../dev';
 import { LAST_RUN_CAPTIONS, MOCK_USER } from '../../mock/fixtures/projects';
 import { addAndOpenProject, openReplay } from '../../state/actions';
 import { useProjects } from '../../state/projects';
@@ -77,6 +79,7 @@ function SetupCard() {
 
   const detection = useDetection(folder);
   const ready = keyWorks && detection !== null;
+  const tools = useTools();
 
   const open = () => {
     if (!detection) return;
@@ -131,10 +134,10 @@ function SetupCard() {
       <div className="flex flex-col gap-2">
         <span className="text-[14px] font-semibold">{copy.welcome.computer}</span>
         <ul className="flex flex-wrap items-center gap-1.5">
-          {copy.welcome.computerChips.map((chip) => (
-            <li key={chip}>
-              <Chip tone="mint" size="md">
-                {format(chip, { github: MOCK_USER.github })}
+          {toolChips(tools).map((chip) => (
+            <li key={chip.text}>
+              <Chip tone={chip.ok ? 'mint' : 'neutral'} size="md">
+                {chip.text}
               </Chip>
             </li>
           ))}
@@ -270,6 +273,40 @@ function PermissionChip({
   );
 }
 
+/** What main found on this computer; outside Electron (component tests), Phase 1's sample. */
+function useTools(): ToolsStatus | null {
+  const [tools, setTools] = useState<ToolsStatus | null>(() =>
+    !bridge().tools && DEV ? { git: '2', gh: MOCK_USER.github, node: '22' } : null,
+  );
+  useEffect(() => {
+    const check = bridge().tools;
+    if (!check) return;
+    let current = true;
+    void check().then((t) => current && setTools(t));
+    return () => {
+      current = false;
+    };
+  }, []);
+  return tools;
+}
+
+/** git, the GitHub account and Node: mint when there, neutral (not red) when missing. */
+function toolChips(tools: ToolsStatus | null): { text: string; ok: boolean }[] {
+  if (!tools) return [];
+  const c = copy.welcome.tools;
+  return [
+    { text: tools.git ? c.git : c.gitMissing, ok: Boolean(tools.git) },
+    {
+      text: tools.gh ? format(c.github, { login: tools.gh }) : c.githubMissing,
+      ok: Boolean(tools.gh),
+    },
+    {
+      text: tools.node ? format(c.node, { n: tools.node }) : c.nodeMissing,
+      ok: Boolean(tools.node),
+    },
+  ];
+}
+
 function WelcomeBack() {
   const projects = useProjects((s) => s.projects);
   const runs = useRunStore((s) => s.runs);
@@ -283,15 +320,21 @@ function WelcomeBack() {
       className="flex max-w-[600px] min-w-0 flex-[1_1_460px] flex-col gap-4 rounded-hero border-[1.5px] border-ink bg-card p-6 shadow-hero"
     >
       <h2 id={headingId} className="font-display text-[22px] font-bold">
-        {format(copy.welcome.backTitle, { name: MOCK_USER.firstName })}
+        {/* Phase 1's sample user and captions are for dev and e2e builds only. */}
+        {DEV ? format(copy.welcome.backTitle, { name: MOCK_USER.firstName }) : copy.welcome.back}
       </h2>
       <ul className="flex max-h-[420px] flex-wrap gap-3 overflow-y-auto">
         {projects.map((project) => {
           const run = runs[project.id];
+          const prs = run?.changes.filter((c) => c.prNumber !== undefined).length ?? 0;
+          const fixes = run?.changes.filter((c) => c.status === 'verified').length ?? 0;
           const caption =
             run?.phase === 'audit'
               ? format(copy.welcome.backRunning, { step: run.step })
-              : (LAST_RUN_CAPTIONS[project.id] ?? copy.welcome.backNeverRun);
+              : ((DEV ? LAST_RUN_CAPTIONS[project.id] : undefined) ??
+                (run?.phase === 'done'
+                  ? format(copy.welcome.backDone, { fixes, prs })
+                  : copy.welcome.backNeverRun));
           return (
             <li key={project.id} className="flex flex-[1_1_240px]">
               {/* The whole card opens the project: a big target instead of a small link. */}

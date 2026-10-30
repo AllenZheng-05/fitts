@@ -12,7 +12,7 @@ import {
   type ForwardAction,
   type RequestRecord,
 } from '@fitts/probes';
-import type { ProbeItem, ProbeName, ProbeResult } from '@fitts/schema';
+import type { ProbeItem, ProbeName, ProbeResult, SiteDevice } from '@fitts/schema';
 import type { AxSnapshot } from '../protocol';
 import type { ActionResult, Site } from '../site-client';
 import { routeOf } from './coverage';
@@ -46,15 +46,25 @@ export class ProbeRunner {
     private readonly onResult: (r: ProbeResult) => void,
   ) {}
 
-  private add(probe: ProbeName, route: string, items: ProbeItem[], summary?: string): void {
+  private add(
+    probe: ProbeName,
+    route: string,
+    items: ProbeItem[],
+    summary?: string,
+    device?: SiteDevice,
+  ): void {
     this.n += 1;
     const result: ProbeResult = {
       evidenceId: `${this.runId}-ev${this.n}`,
       probe,
       route,
       pass: items.length === 0,
-      items,
+      // Evidence says where it was measured: "28×20px on iPhone · 390×844".
+      items: device
+        ? items.map((i) => ({ ...i, measured: `${i.measured} on ${device.label}` }))
+        : items,
       ...(summary ? { summary } : {}),
+      ...(device ? { device: device.id } : {}),
     };
     this.results.push(result);
     this.onResult(result);
@@ -87,6 +97,28 @@ export class ProbeRunner {
       this.add('viewport-sweep', route, await this.site.viewportSweep());
     } catch {
       // Best effort.
+    }
+  }
+
+  /**
+   * The phone pass: the page probes on a route already shown as a phone (RealRun switched the
+   * device and navigated). Only problems the crawl's own pass didn't see are kept, so a finding
+   * on a phone is something that goes wrong there.
+   */
+  async onDevice(route: string, device: SiteDevice): Promise<void> {
+    const seen = new Set(
+      this.results
+        .filter((r) => r.route === route && !r.device)
+        .flatMap((r) => r.items.map((i) => `${r.probe}|${i.ref}|${i.selector}`)),
+    );
+    const fresh = (probe: ProbeName, items: ProbeItem[]) =>
+      items.filter((i) => !seen.has(`${probe}|${i.ref}|${i.selector}`));
+    try {
+      for (const r of await this.site.probes(PAGE_PROBES))
+        if (r.probe !== 'font-inventory' && r.probe !== 'web-vitals')
+          this.add(r.probe, route, fresh(r.probe, r.items), undefined, device);
+    } catch {
+      // A page that wouldn't load as a phone: the desktop pass still stands.
     }
   }
 

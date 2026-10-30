@@ -103,5 +103,8 @@ export async function themeFit(
     fixture: 'theme-fit',
     ...(signal ? { signal } : {}),
   });
-  return parseThemeFit(res.outputText);
+  const verdict = parseThemeFit(res.outputText);
+  // A redesign the user asked for always gets directions (§8.3); a "fits" without them can't.
+  if (input.brief.look && verdict.fits) throw new Error('a requested redesign needs directions');
+  return verdict;
 }

@@ -26,6 +26,8 @@ export interface Site {
   probes(names: PageProbeName[]): Promise<PageProbeResult[]>;
   focusSweep(): Promise<ProbeItem[]>;
   viewportSweep(): Promise<ProbeItem[]>;
+  /** Look like a device (an id from DEVICES; null: desktop). Resolves to the one it replaced. */
+  device?(id: string | null): Promise<string | null>;
   value(ref: string): Promise<string | null>;
   links(hrefs: string[]): Promise<Record<string, number>>;
   network(): Promise<RequestRecord[]>;
@@ -95,6 +97,7 @@ export class SiteRpc {
       probes: async (names) => (await expect({ op: 'probes', names }, 'probes')).results,
       focusSweep: async () => (await expect({ op: 'focus' }, 'items')).items,
       viewportSweep: async () => (await expect({ op: 'viewport' }, 'items')).items,
+      device: async (id) => (await expect({ op: 'device', id }, 'device')).previous,
       value: async (ref) => (await expect({ op: 'value', ref }, 'value')).value,
       links: async (hrefs) => (await expect({ op: 'links', hrefs }, 'links')).statuses,
       network: async () => (await expect({ op: 'network' }, 'network')).requests,

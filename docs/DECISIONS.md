@@ -1816,3 +1816,36 @@ Running Fitts on Allen's real portfolio (a copy) turned up three bugs, now fixed
   tab or off-site navigation during an action now counts as a response (`OpTrace.opened`), and
   so does the page scrolling, moving focus, changing its #hash, or opening or closing a dialog
   (`Feedback.moved`). The same audit went from 28 shown findings to 7.
+## Phase 2 — after P12: no stand-ins in a release, redesign requests, device sizes
+
+- **Phase 1's stand-ins are dev-only.** `src/renderer/dev.ts` exports `DEV`
+  (`__FITTS_DEV_TOOLS__`: true in `pnpm dev` and e2e builds, false in a release). Behind it:
+  the mock sites (site view, Finding panel, before/after toggles, Done preview), the mock engine
+  and Scenario scripts, mock detection, the seeded demo projects, the sample user ("Welcome
+  back, Allen", "GitHub · AllenZheng-05"), the made-up last-run captions and past runs, the
+  canned voice transcript, and the mocked Vercel/Netlify/Cloudflare connections (GitHub Pages,
+  DNS and file stay). A release shows the real site, or "Starting your site…" / the dev
+  server's last log lines; a recorded run's step shots stand in for its site.
+  - The real helpers that lived in `mock/detect.ts` moved to `lib/new-project.ts`.
+  - Welcome's computer chips are real: main checks `git --version`, `node --version` and
+    `gh api user` (skipped offline) once per launch.
+  - The renderer build marks `src/renderer/mock` side-effect free (and property reads too), so
+    the bundler drops what nothing uses. `scripts/check-release-bundle.mjs` fails a release
+    build that still has stand-in text; CI and `dist:*` run it before packaging.
+- **Redesign requests in the interview.** The brief has `look`: the user's vision when they
+  want a new look ("dark and bold, like a film poster"). The interview asks once whether they
+  want one; the brief card shows Look only when there is one; the brief editor has it. With a
+  look, theme-fit must return "doesn't fit" with three takes on the vision (a "fits" answer is
+  rejected as unusable), and the redesigner is told to honor it.
+- **Device sizes.** The site view has "See it on": Fit to panel (as before), Desktop 1440×900,
+  Laptop 1280×800, Tablet 820×1180, iPhone 390×844, Android 360×800 (`DEVICES` in the schema).
+  Phones and tablets get real mobile emulation over CDP (device metrics with `mobile`, touch, a
+  mobile Chrome user agent) and a reload; main only accepts a device id from the renderer. A
+  device bigger than the panel is drawn scaled down and centered; clicks, Point and overlays
+  map through the same scale. Frames can be a pixel off at fractional display scaling.
+- **The phone pass.** When the crawl ends, Fitts revisits each page (at most 8) as an iPhone,
+  runs the page probes there, and gives the reviewers that phone screenshot next to the desktop
+  one. Probe problems only the phone shows become their own findings ("Tap target is too small
+  on a phone", evidence "… on iPhone · 390×844"). They aren't fixed automatically, and a
+  redesign doesn't claim them, because verification runs at desktop size; verifying on a
+  device is a follow-up.
