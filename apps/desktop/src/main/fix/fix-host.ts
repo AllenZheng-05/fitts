@@ -10,6 +10,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -106,7 +107,16 @@ export class FixHost {
     }
     const top = await git(root, 'rev-parse', '--show-toplevel');
     if (top.code !== 0) return { ok: false, reason: 'not a git repository' };
-    if (resolve(top.stdout.trim()) !== root)
+    // Compare real paths: git reports the resolved one (macOS /var is /private/var, Windows
+    // temp folders can be 8.3 short names).
+    const real = (p: string) => {
+      try {
+        return realpathSync.native(p);
+      } catch {
+        return resolve(p);
+      }
+    };
+    if (real(top.stdout.trim()) !== real(root))
       return { ok: false, reason: 'the project is inside another repository' };
     return { ok: true };
   }

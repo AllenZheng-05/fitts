@@ -269,8 +269,11 @@ describe('RealRun edge states from real conditions', () => {
     site.setUp(false);
     run.siteDown();
     expect(card(state(), 'site-down')).toBeTruthy();
+    const before = state()?.step ?? 0;
     run.answer(card(state(), 'site-down')?.id ?? '', 'restart');
-    await until(() => site.log.includes('restart') && state()?.activity === 'acting');
+    // The crawl carries on: it takes more steps (a fast machine can finish before a poll
+    // ever sees activity 'acting').
+    await until(() => site.log.includes('restart') && (state()?.step ?? 0) > before);
     run.dispose();
   });
 
