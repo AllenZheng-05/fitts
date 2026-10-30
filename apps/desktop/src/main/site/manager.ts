@@ -4,7 +4,7 @@ import { IPC, type Project, type SiteInput, type SiteNav, type SiteStatus } from
 import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { detectProject } from '../projects/detect';
+import { detectProject, devCommandOnPort } from '../projects/detect';
 import { runDir, SAFE_ID } from '../store/run-log';
 import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
@@ -71,9 +71,11 @@ export class SiteManager {
     const detection = await detectProject(folder);
     const forced = Number(process.env['FITTS_SITE_PORT'] ?? '');
     const port = forced || detection?.port || 5173;
+    // The detected command is made to serve on `port`; one the user typed is used as written.
+    const custom = project.devCommand && project.devCommand !== detection?.devCommand;
     const server = new DevServer(
       folder,
-      project.devCommand ?? detection?.devCommand ?? 'npm run dev',
+      custom ? (project.devCommand ?? '') : devCommandOnPort(folder, port),
       port,
     );
     const live: Live = { server, status: { projectId, status: 'starting' } };

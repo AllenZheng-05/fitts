@@ -9,7 +9,8 @@ import { useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
 import { getEngineKind } from '../../state/engine';
 import { currentDirection } from './redesign';
-import { appliedRedesign, RedesignShots } from './RedesignShots';
+import { appliedRedesign } from './redesign';
+import { RedesignShots } from './RedesignShots';
 import { ChatPanel } from '../chat/ChatPanel';
 import { SiteView } from '../site-view/SiteView';
 

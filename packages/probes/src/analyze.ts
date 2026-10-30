@@ -48,6 +48,8 @@ export interface Feedback {
   busyMs: number | null;
   /** Text that appeared (newest last, trimmed). */
   added: string[];
+  /** The page scrolled, moved focus, changed its #hash, or opened or closed a dialog. */
+  moved?: boolean;
   /** Text announced in a live region (role=status/alert, aria-live). */
   live: string[];
   /** Generic error text that appeared ("Error 0x3F"), as probe items. */
@@ -128,6 +130,8 @@ export interface ActionTrace {
   requests: RequestRecord[];
   /** Characters typed (type actions). */
   chars?: number;
+  /** It opened a new tab or left the site (blocked by Fitts, but the page did respond). */
+  opened?: boolean;
 }
 
 /**
@@ -164,7 +168,9 @@ export function feedbackTiming(t: ActionTrace): ProbeItem[] {
     t.kind === 'click' &&
     fb &&
     fb.firstChangeMs === null &&
+    !fb.moved &&
     !t.navigated &&
+    !t.opened &&
     t.requests.length === 0
   )
     items.push(

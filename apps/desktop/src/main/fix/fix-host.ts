@@ -17,7 +17,7 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { FixCall, VerifyPagesResult, VerifyResult } from '../../agent/protocol';
-import { detectProject } from '../projects/detect';
+import { devCommandOnPort } from '../projects/detect';
 import { DevServer, responds } from '../site/dev-server';
 import { SiteWindow } from '../site/site-window';
 import { run } from '../spawn';
@@ -292,7 +292,7 @@ export class FixHost {
   async verify(id: string, route: string, hrefs: string[]): Promise<VerifyResult> {
     const job = this.job(id);
     const port = await this.freePort();
-    const server = new DevServer(job.dir, await verifyCommand(job.dir, port), port);
+    const server = new DevServer(job.dir, verifyCommand(job.dir, port), port);
     let win: SiteWindow | undefined;
     try {
       if (!(await server.start(90_000)))
@@ -345,7 +345,7 @@ export class FixHost {
   ): Promise<VerifyPagesResult> {
     const job = this.job(id);
     const port = await this.freePort();
-    const server = new DevServer(job.dir, await verifyCommand(job.dir, port), port);
+    const server = new DevServer(job.dir, verifyCommand(job.dir, port), port);
     let win: SiteWindow | undefined;
     try {
       if (!(await server.start(90_000)))
@@ -472,22 +472,7 @@ export class FixHost {
   }
 }
 
-/**
- * The worktree's dev command on its own port. A Vite `dev` script gets its port flags replaced
- * (scripts often pin `--port 5173 --strictPort`); anything else gets `PORT`.
- */
-export async function verifyCommand(dir: string, port: number): Promise<string> {
-  try {
-    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
-      scripts?: Record<string, string>;
-    };
-    const dev = pkg.scripts?.['dev'] ?? '';
-    if (/^vite(\s|$)/.test(dev)) {
-      const rest = dev.replace(/\s--port[=\s]\d+/g, '').replace(/\s--strictPort\b/g, '');
-      return `pnpm exec ${rest} --port ${port} --strictPort`;
-    }
-  } catch {
-    // Fall through to detection.
-  }
-  return (await detectProject(dir))?.devCommand ?? 'npm run dev';
+/** The worktree's dev command on its own port (see devCommandOnPort). */
+export function verifyCommand(dir: string, port: number): string {
+  return devCommandOnPort(dir, port);
 }

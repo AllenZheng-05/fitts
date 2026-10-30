@@ -1,17 +1,10 @@
-import type { Change, ChatItem, RunState } from '@fitts/schema';
+import type { ChatItem, RunState } from '@fitts/schema';
 import { useState } from 'react';
 import { BeforeAfterSlider } from '../../components/BeforeAfterSlider';
 import { Select } from '../../components/fields';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
-
-type Page = NonNullable<Change['pages']>[number];
-
-/** The applied redesign (§8.3), when the real engine has checked it on every page. */
-export function appliedRedesign(run: RunState): (Change & { pages: Page[] }) | undefined {
-  const c = run.changes.find((x) => x.kind === 'redesign' && x.status === 'verified');
-  return c?.pages?.length ? (c as Change & { pages: Page[] }) : undefined;
-}
+import { appliedRedesign } from './redesign';
 
 /** The picked direction (or the first one), with its mockup if it has one. */
 function direction(run: RunState) {

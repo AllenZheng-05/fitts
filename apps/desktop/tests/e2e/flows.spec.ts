@@ -122,6 +122,8 @@ test('keyboard only: setup, interview and the audit', async () => {
   await expect(page.getByText('Microphone', { exact: true })).toBeVisible();
   await page.getByLabel('Project folder').focus();
   await page.keyboard.type('~/code/fitts/demo/chat');
+  // Open is enabled once main has looked at the folder and the detected project shows.
+  await expect(page.getByText(/Vite \+ React 19/)).toBeVisible();
   await page.keyboard.press('Tab'); // Browse
   await page.keyboard.press('Tab'); // mode
   await page.keyboard.press('Tab'); // Open my project

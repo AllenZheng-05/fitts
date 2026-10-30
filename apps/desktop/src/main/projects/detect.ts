@@ -61,6 +61,31 @@ export function detectDevCommand(folder: string, pkg: Pkg): { command: string; p
   return { command, ...(portFlag?.[1] ? { port: Number(portFlag[1]) } : {}) };
 }
 
+/**
+ * The dev command that serves on `port`. A Vite `dev` script gets its port flags replaced, with
+ * --strictPort so a busy port fails instead of moving (Vite ignores `PORT`, and scripts often pin
+ * `--port 5173`); anything else is the detected command, which gets `PORT` in its environment.
+ */
+export function devCommandOnPort(folder: string, port: number): string {
+  let pkg: Pkg = {};
+  try {
+    pkg = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')) as Pkg;
+  } catch {
+    return 'npm run dev';
+  }
+  const dev = pkg.scripts?.['dev'] ?? '';
+  if (/^vite(\s|$)/.test(dev)) {
+    const rest = dev.replace(/\s--port[=\s]\d+/g, '').replace(/\s--strictPort\b/g, '');
+    const runner = findUp(folder, 'pnpm-lock.yaml')
+      ? 'pnpm exec'
+      : findUp(folder, 'yarn.lock')
+        ? 'yarn'
+        : 'npx';
+    return `${runner} ${rest} --port ${port} --strictPort`;
+  }
+  return detectDevCommand(folder, pkg).command;
+}
+
 /** A vite config's `port: 1234`, when the script has no --port. */
 function viteConfigPort(folder: string): number | undefined {
   for (const f of ['vite.config.ts', 'vite.config.js', 'vite.config.mts', 'vite.config.mjs']) {

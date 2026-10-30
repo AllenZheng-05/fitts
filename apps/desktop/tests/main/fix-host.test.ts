@@ -260,9 +260,10 @@ describe('FixHost', () => {
     expect(git(join(tmp, 'origin.git'), 'log', '-1', '--format=%s', fix.branch)).toBe('f3 again');
   });
 
-  it('verification runs the dev script on its own port', async () => {
-    expect(await verifyCommand(root, 5181)).toBe(
-      'pnpm exec vite --configLoader runner --port 5181 --strictPort',
+  it('verification runs the dev script on its own port', () => {
+    // No lockfile here, so npx; a pnpm project gets `pnpm exec`.
+    expect(verifyCommand(root, 5181)).toBe(
+      'npx vite --configLoader runner --port 5181 --strictPort',
     );
   });
 });

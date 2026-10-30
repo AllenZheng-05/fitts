@@ -1796,3 +1796,23 @@ The cut-list item "Hartwell redesign apply" is built: picking a look direction c
   MOCKUP), then every page's real before and after. Done shows the redesign's before/after with
   a page picker instead of the mock "fixed" render. The mock engine's flow is unchanged.
 - **Done's line** counts fixes and the redesign separately and leaves wording cards out.
+
+## Phase 2 — after P12: fixes from auditing a real portfolio
+
+Running Fitts on Allen's real portfolio (a copy) turned up three bugs, now fixed:
+
+- **A folder named "portfolio" opened a fake site.** The renderer answered with Phase 1's mock
+  detection first and main's real detection 300ms later, and any folder ending in `portfolio`
+  matched a mock fixture (Next.js 15 on :3001, the stand-in page). A quick "Open" saved that.
+  In the app, detection now waits for main; the mock only answers for folders main can't find
+  (Phase 1's demo paths and e2e fixtures) and outside Electron.
+- **Plain Vite projects started on the wrong port.** Main passed the port as `PORT`, which Vite
+  ignores; demo/chat only worked because its config reads it. The site's dev server now gets
+  the same command fix verification uses (`devCommandOnPort`): a Vite `dev` script gets
+  `--port N --strictPort`, run with the project's own package manager (`pnpm exec`, `yarn` or
+  `npx`). A dev command the user typed is still used as written.
+- **External links counted as "does nothing visible".** Main blocks new tabs and off-site
+  navigation, so 21 of 28 findings were links to GitHub, Devpost and LinkedIn. A blocked new
+  tab or off-site navigation during an action now counts as a response (`OpTrace.opened`), and
+  so does the page scrolling, moving focus, changing its #hash, or opening or closing a dialog
+  (`Feedback.moved`). The same audit went from 28 shown findings to 7.

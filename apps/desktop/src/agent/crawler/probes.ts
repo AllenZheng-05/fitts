@@ -124,6 +124,7 @@ export class ProbeRunner {
       kind: action.kind,
       feedback: result.trace?.feedback ?? null,
       navigated: result.navigated,
+      ...(result.trace?.opened ? { opened: true } : {}),
       requests: result.trace?.requests ?? [],
       ...(action.kind === 'type' ? { chars: action.text?.length ?? 0 } : {}),
     };

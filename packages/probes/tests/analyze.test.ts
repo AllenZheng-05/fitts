@@ -133,6 +133,13 @@ describe('feedback timing', () => {
     );
     expect(items[0]?.measured).toMatch(/changed nothing/);
   });
+
+  it('a new tab, a link off the site, a scroll, a focus move or a dialog is a response', () => {
+    const still = { firstChangeMs: null, busyMs: null, added: [], live: [], errors: [] };
+    expect(feedbackTiming(trace({ feedback: still, opened: true }))).toEqual([]);
+    expect(feedbackTiming(trace({ feedback: { ...still, moved: true } }))).toEqual([]);
+    expect(feedbackTiming(trace({ feedback: { ...still, moved: false } }))).toHaveLength(1);
+  });
 });
 
 describe('network', () => {

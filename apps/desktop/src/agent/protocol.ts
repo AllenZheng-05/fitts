@@ -124,6 +124,8 @@ export interface OpTrace {
   feedback: Feedback | null;
   requests: RequestRecord[];
   rect?: SiteRect;
+  /** The action tried to open a new tab or leave the site (main blocks both). */
+  opened?: boolean;
 }
 
 export type SiteOpResult =

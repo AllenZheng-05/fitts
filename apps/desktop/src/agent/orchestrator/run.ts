@@ -667,7 +667,7 @@ export class RealRun {
   pickDirection(directionId: string): void {
     const item = [...this.state.chat].reverse().find((c) => c.type === 'directions');
     const picked = this.directions.find((d) => d.id === directionId);
-    if (item?.type !== 'directions' || !picked || this.finished) return;
+    if (item?.type !== 'directions' || !picked) return;
     if (this.redesignStarted) {
       if (picked.id !== this.picked?.id)
         this.say(
@@ -677,7 +677,8 @@ export class RealRun {
     }
     this.picked = picked;
     this.emit([{ type: 'chat.item.updated', item: { ...item, selectedId: directionId } }]);
-    if (!this.deps.redesigner) {
+    // Without a redesigner (offline), or once the run is over, a pick is only acknowledged.
+    if (!this.deps.redesigner || this.finished) {
       this.say(`Going with ${picked.name}: ${picked.notes}`);
       return;
     }

@@ -18,7 +18,8 @@ import { useProject } from '../../state/projects';
 import { useSite } from '../../state/site';
 import { useToasts } from '../../state/toasts';
 import { currentDirection } from '../redesign/redesign';
-import { appliedRedesign, RedesignShots } from '../redesign/RedesignShots';
+import { appliedRedesign } from '../redesign/redesign';
+import { RedesignShots } from '../redesign/RedesignShots';
 import { SiteView } from '../site-view/SiteView';
 
 /** How many verified changes show before "See all N changes". */

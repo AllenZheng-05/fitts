@@ -25,6 +25,10 @@ export function useDetection(folder: string): Detection | null {
     };
   }, [folder]);
 
-  const realForThis = real && real.folder === folder.trim() ? real.detection : null;
-  return realForThis ?? mock;
+  // In the app, nothing shows until main has looked at the folder: answering with the mock first
+  // let a quick "Open" save a Phase 1 fixture (a folder named "portfolio" became a fake Next.js
+  // site). The mock stays the answer for folders main can't find, and outside Electron.
+  if (!bridge().site) return mock;
+  if (!real || real.folder !== folder.trim()) return null;
+  return real.detection ?? mock;
 }

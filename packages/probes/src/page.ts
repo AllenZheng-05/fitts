@@ -492,11 +492,25 @@ let feedback: {
   added: { el: Element; text: string }[];
   live: string[];
   observer: MutationObserver;
+  /** Where the page was: a scroll, a focus move, a #hash or a dialog is a response too. */
+  place: string;
 } | null = null;
+
+/** Scroll position, focused element, #hash and open dialogs, as one comparable string. */
+const place = () =>
+  [
+    Math.round(window.scrollX),
+    Math.round(window.scrollY),
+    location.hash,
+    document.querySelectorAll('dialog[open]').length,
+  ].join('|');
+let focused: Element | null = null;
 
 function feedbackArm(): void {
   feedback?.observer.disconnect();
+  focused = document.activeElement;
   const state = {
+    place: place(),
     t0: performance.now(),
     first: null as number | null,
     busyAt: null as number | null,
@@ -538,7 +552,11 @@ function feedbackArm(): void {
 }
 
 function feedbackRead(F: Refs): Feedback {
-  if (!feedback) return { firstChangeMs: null, busyMs: null, added: [], live: [], errors: [] };
+  if (!feedback)
+    return { firstChangeMs: null, busyMs: null, added: [], live: [], errors: [], moved: false };
+  // The click itself focuses what was clicked; a move anywhere else is the page responding.
+  const active = document.activeElement;
+  const refocused = active !== focused && active !== document.body && !active?.matches(':hover');
   const errors = feedback.added
     .filter((a) => a.text.length < 120 && isGenericError(a.text) && document.contains(a.el))
     .map((a) => {
@@ -556,6 +574,7 @@ function feedbackRead(F: Refs): Feedback {
     added: feedback.added.map((a) => a.text).slice(0, 20),
     live: feedback.live.slice(0, 10),
     errors,
+    moved: place() !== feedback.place || refocused,
   };
 }
 

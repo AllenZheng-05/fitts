@@ -59,11 +59,15 @@ export class SiteWindow {
     });
     wc.on('cursor-changed', (_e, type) => this.onStatus({ cursor: type }));
     // Only the project's origin; everything else is checked later (links probe), never opened.
+    // Either way the page did respond to the action that caused it (the feedback probe).
     wc.on('will-navigate', (e, url) => {
-      if (!this.allowed(url)) e.preventDefault();
+      if (this.allowed(url)) return;
+      e.preventDefault();
+      this.openedAt = Date.now();
     });
     wc.setWindowOpenHandler(({ url }) => {
       if (this.allowed(url)) void wc.loadURL(url);
+      else this.openedAt = Date.now();
       return { action: 'deny' };
     });
     const pushHistory = () =>
@@ -85,6 +89,8 @@ export class SiteWindow {
   private readonly networkIds = new WeakMap<RequestRecord, string>();
   /** The control being used right now, so requests can be traced back to it. */
   private acting: string | undefined;
+  /** When the page last tried to open a new tab or leave the site (both blocked). */
+  private openedAt = 0;
   /** Endpoints whose big JSON body was already counted. */
   private readonly parsed = new Set<string>();
 
@@ -527,7 +533,11 @@ export class SiteWindow {
       ? await this.probes<Feedback>('return P.feedbackRead(F);').catch(() => null)
       : null;
     const requests = mine().map((r) => ({ ...r }));
-    return { ...result, trace: { feedback, requests, ...(rect ? { rect } : {}) } };
+    const opened = this.openedAt >= t0;
+    return {
+      ...result,
+      trace: { feedback, requests, ...(rect ? { rect } : {}), ...(opened ? { opened } : {}) },
+    };
   }
 
   /** A real click at the element's center, after scrolling it into view. */

@@ -43,6 +43,9 @@ test('bench:audit', async () => {
   await page.reload();
 
   await page.getByRole('button', { name: 'Browse' }).click();
+  // Main's real detection (its framework line) before opening, never a Phase 1 fixture.
+  const pkg = JSON.parse(readFileSync(join(FOLDER, 'package.json'), 'utf8')) as { name?: string };
+  await expect(page.getByText(pkg.name ?? basename(FOLDER)).first()).toBeVisible();
   await page.getByRole('button', { name: 'Open my project' }).click();
   await expect(page.getByLabel('Address')).toHaveValue(new RegExp(`localhost:${PORT}`), {
     timeout: 120_000,
@@ -66,7 +69,8 @@ test('bench:audit', async () => {
         const [projectId, s] = Object.entries(all).find(([, r]) => r.phase !== 'interview') ?? [];
         if (!projectId || !s) return false;
         const pick = s.chat.find(
-          (c) => c.type === 'question' && c.answer === undefined && c.options.includes('Keep my look'),
+          (c) =>
+            c.type === 'question' && c.answer === undefined && c.options.includes('Keep my look'),
         );
         if (pick)
           await page.evaluate(
@@ -74,7 +78,9 @@ test('bench:audit', async () => {
               (
                 window as unknown as {
                   fitts: {
-                    engine: { call(c: { projectId: string; method: string; args: unknown[] }): void };
+                    engine: {
+                      call(c: { projectId: string; method: string; args: unknown[] }): void;
+                    };
                   };
                 }
               ).fitts.engine.call({
