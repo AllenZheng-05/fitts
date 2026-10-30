@@ -12,6 +12,7 @@ files:
   - package.json
   # The window icon (main/window.ts resolves it next to out/).
   - resources/icon.png
+  - resources/icon.ico
 extraResources:
   # The judges' recorded run (§12.3).
   - from: resources/replays
@@ -20,7 +21,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: resources/icon.png
+  icon: resources/icon.ico
 nsis:
   oneClick: false
   perMachine: false

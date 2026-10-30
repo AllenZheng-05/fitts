@@ -11,7 +11,7 @@ import { registerReplay } from './replay';
 import { recheck, registerVerify } from './verify-site';
 import { SiteManager } from './site/manager';
 import { ProjectStore } from './store/projects';
-import { createMainWindow, ICON_PATH } from './window';
+import { APP_ID, createMainWindow, ICON_PATH } from './window';
 
 // E2E runs point user data at a throwaway folder so they never touch real settings.
 const userDataOverride = process.env['FITTS_USER_DATA'];
@@ -21,7 +21,7 @@ app.setName('Fitts');
 registerAssetScheme();
 // Windows groups taskbar buttons by app ID. Without one of its own, Fitts shares
 // electron.exe's identity and the taskbar shows Electron's icon instead of the window's.
-if (process.platform === 'win32') app.setAppUserModelId('app.fitts.desktop');
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 
 void app.whenReady().then(() => {
   // The app's own page may use the microphone, audio only (SPEC-phase2 §14); nothing else is
