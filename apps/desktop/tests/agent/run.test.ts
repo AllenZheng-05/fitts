@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ExplorerBrain, type Brain } from '../../src/agent/crawler/brain';
 import { BudgetGuard } from '../../src/agent/ledger/budget';
 import { CostLedger } from '../../src/agent/ledger/ledger';
-import { RealRun } from '../../src/agent/orchestrator/run';
+import { RealRun, type RunDeps } from '../../src/agent/orchestrator/run';
 import type { AxNode, AxSnapshot } from '../../src/agent/protocol';
 import type { Site } from '../../src/agent/site-client';
 
@@ -20,7 +20,9 @@ const APP: Record<string, FakeNode[]> = {
     { ref: 'name', role: 'textbox', name: 'Name', type: 'text' },
     { ref: 'save', role: 'button', name: 'Save' },
     { ref: 'home', role: 'button', name: 'Home', to: '/' },
+    { ref: 'go-c', role: 'button', name: 'Open C', to: '/c' },
   ],
+  '/c': [{ ref: 'c-home', role: 'button', name: 'Home again', to: '/' }],
   '/login': [{ ref: 'pw', role: 'textbox', name: 'Password', type: 'password' }],
 };
 
@@ -108,18 +110,30 @@ function setup({
   site = fakeSite(),
   brain = new ExplorerBrain(),
   cap = 20,
-}: { site?: ReturnType<typeof fakeSite>; brain?: Brain; cap?: number } = {}) {
+  mode = 'ask-unsure',
+  themeFit,
+}: {
+  site?: ReturnType<typeof fakeSite>;
+  brain?: Brain;
+  cap?: number;
+  mode?: RunState['mode'];
+  themeFit?: RunDeps['themeFit'];
+} = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
-  const run = new RealRun(initial(cap), {
-    site,
-    brain,
-    ledger,
-    budget: new BudgetGuard(),
-    origin: 'http://x',
-    emit: (e) => events.push(...e),
-    actionDelayMs: 0,
-  });
+  const run = new RealRun(
+    { ...initial(cap), mode },
+    {
+      ...(themeFit ? { themeFit } : {}),
+      site,
+      brain,
+      ledger,
+      budget: new BudgetGuard(),
+      origin: 'http://x',
+      emit: (e) => events.push(...e),
+      actionDelayMs: 0,
+    },
+  );
   return { run, site, events, ledger, state: () => replay(events) };
 }
 
@@ -140,17 +154,17 @@ describe('RealRun crawl (coverage gate)', () => {
     run.start();
     await until(() => Boolean(card(state(), 'login-wall')));
     run.answer(card(state(), 'login-wall')?.id ?? '', 'skip');
-    await until(() => Boolean(card(state(), 'nothing-found')));
+    // With probe findings (here: no back or cancel control on /c) the run ends on its own.
+    await until(() => state()?.phase === 'done');
     const s = state();
-    expect(s?.routes.map((r) => r.path)).toEqual(['/', '/b', '/login']);
+    expect(s?.routes.map((r) => r.path)).toEqual(['/', '/b', '/c', '/login']);
     expect(s?.routes.every((r) => r.status === 'done')).toBe(true);
     expect(s?.controlsTried.done).toBe(s?.controlsTried.total);
     expect(site.log).not.toContain('click del');
     expect(site.log).toContain('type name fitts-test message');
     // The replayed log equals the run's own state.
     expect(JSON.parse(JSON.stringify(s))).toEqual(JSON.parse(JSON.stringify(run.state)));
-    run.answer(card(s, 'nothing-found')?.id ?? '', 'finish');
-    expect(state()?.phase).toBe('done');
+    expect(s?.findings.map((f) => f.title)).toEqual(['No back or cancel in this flow']);
   });
 });
 
@@ -294,5 +308,65 @@ describe('RealRun edge states from real conditions', () => {
     expect(state()?.cost.capUsd).toBeCloseTo(10.1);
     expect(run.allowed()).toBe(true);
     run.dispose();
+  });
+});
+
+/** The fake app's /login comes before /c: skip it so the crawl reaches a third page. */
+async function skipLogin(state: () => RunState | undefined, run: RealRun) {
+  await until(() => Boolean(card(state(), 'login-wall')));
+  run.answer(card(state(), 'login-wall')?.id ?? '', 'skip');
+}
+
+describe('theme-fit (§8.3)', () => {
+  const verdict = {
+    fits: false,
+    why: 'Hot pink and confetti read as celebratory.',
+    directions: ['Quiet stone', 'Soft linen', 'Evening'].map((name, i) => ({
+      id: ['a', 'b', 'c'][i] ?? 'a',
+      name,
+      swatches: ['#f4f1ec', '#2f3a3a'],
+      typeface: 'Source Serif 4',
+      notes: 'Quiet and warm.',
+    })),
+  };
+
+  it('asks once after 3 routes, then posts the lookfeel card and 3 directions; picking one acknowledges it', async () => {
+    const asks: number[] = [];
+    const { run, state } = setup({
+      themeFit: (input) => {
+        asks.push(input.shots.length);
+        return Promise.resolve(verdict);
+      },
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => Boolean(state()?.chat.some((c) => c.type === 'directions')));
+    expect(asks).toEqual([3]);
+    const lookfeel = state()?.chat.find((c) => c.type === 'lookfeel');
+    expect(lookfeel).toMatchObject({ text: verdict.why });
+    run.pickDirection('b');
+    const directions = state()?.chat.find((c) => c.type === 'directions');
+    expect(directions).toMatchObject({ selectedId: 'b' });
+    expect(state()?.chat.at(-1)).toMatchObject({ text: 'Going with Soft linen: Quiet and warm.' });
+    run.dispose();
+  });
+
+  it('Autonomous picks the first direction on its own; a fit posts nothing', async () => {
+    const auto = setup({ mode: 'autonomous', themeFit: () => Promise.resolve(verdict) });
+    auto.run.start();
+    await skipLogin(auto.state, auto.run);
+    await until(() =>
+      Boolean(auto.state()?.chat.some((c) => c.type === 'directions' && c.selectedId === 'a')),
+    );
+    auto.run.dispose();
+
+    const fits = setup({
+      themeFit: () => Promise.resolve({ fits: true, why: 'Calm.', directions: [] }),
+    });
+    fits.run.start();
+    await skipLogin(fits.state, fits.run);
+    await until(() => fits.state()?.phase === 'done');
+    expect(fits.state()?.chat.some((c) => c.type === 'lookfeel')).toBe(false);
+    fits.run.dispose();
   });
 });

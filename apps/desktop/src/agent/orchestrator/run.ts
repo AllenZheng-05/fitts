@@ -19,6 +19,7 @@ import { Coverage, routeOf } from '../crawler/coverage';
 import { ProbeRunner } from '../crawler/probes';
 import { aggregate } from '../review/aggregate';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
+import type { Direction, ThemeFit } from '../review/themefit';
 
 /** api-trouble retries on its own after this long (§6.3). */
 export const API_RETRY_MS = 12_000;
@@ -39,7 +40,15 @@ export interface RunDeps {
   actionDelayMs?: number;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
+  /** Theme-fit (§8.3), asked once after the first 3 routes. */
+  themeFit?: (
+    input: { brief: RunState['brief']; shots: string[]; inventory: string[] },
+    signal?: AbortSignal,
+  ) => Promise<ThemeFit>;
 }
+
+/** Theme-fit looks at this many routes' screenshots (§8.3). */
+const THEME_ROUTES = 3;
 
 /** Routes reviewed at once (§8.1: at most 2 in flight, 5 reviewers each). */
 const ROUTES_IN_FLIGHT = 2;
@@ -64,6 +73,8 @@ export class RealRun {
   private readonly retryOn = new Map<string, Set<string>>();
   private readonly retried = new Set<string>();
   /** What the reviewer panel gets for each route, and when Fitts was first there. */
+  private themeAsked = false;
+  private directions: Direction[] = [];
   private readonly pages = new Map<
     string,
     { evidence: Omit<RouteEvidence, 'probes'>; stepIndex: number; atMs: number }
@@ -231,6 +242,10 @@ export class RealRun {
       if (this.loginWall(snap)) continue;
       await this.probes.onPage(snap);
       await this.remember(snap);
+      if (this.pages.size >= THEME_ROUTES && !this.themeAsked && this.deps.themeFit) {
+        this.themeAsked = true;
+        void this.checkTheme();
+      }
       if (this.blocked() || this.finished) continue;
 
       const here = routeOf(snap.path);
@@ -268,7 +283,7 @@ export class RealRun {
     const route = routeOf(snap.path);
     if (this.pages.has(route)) return;
     let shot: RouteEvidence['shot'];
-    if (this.deps.panel) {
+    if (this.deps.panel || this.deps.themeFit) {
       try {
         shot = { jpegBase64: (await this.deps.site.screenshot()).jpegBase64 };
       } catch {
@@ -280,6 +295,50 @@ export class RealRun {
       stepIndex: this.state.step,
       atMs: this.state.elapsedMs,
     });
+  }
+
+  /**
+   * Theme-fit, alongside the crawl: when the look doesn't suit who the site is for, post the
+   * lookfeel card and 3 directions (§8.3). Autonomous picks the first (closest to the brief).
+   */
+  private async checkTheme(): Promise<void> {
+    const ask = this.deps.themeFit;
+    if (!ask) return;
+    const pages = [...this.pages.values()].slice(0, THEME_ROUTES);
+    const shots = pages.flatMap((p) => (p.evidence.shot ? [p.evidence.shot.jpegBase64] : []));
+    const inventory = this.probes.results
+      .filter((r) => r.probe === 'font-inventory' && r.summary)
+      .slice(0, THEME_ROUTES)
+      .map((r) => `${r.route}: ${r.summary ?? ''}`);
+    let verdict: ThemeFit;
+    try {
+      verdict = await ask({ brief: this.state.brief, shots, inventory }, this.abort.signal);
+    } catch {
+      return; // No verdict (aborted, or an unusable answer): the audit goes on without one.
+    }
+    if (this.finished || verdict.fits) return;
+    this.directions = verdict.directions;
+    this.emit([
+      { type: 'chat.item', item: { id: this.id(), type: 'lookfeel', text: verdict.why } },
+      {
+        type: 'chat.item',
+        item: {
+          id: this.id(),
+          type: 'directions',
+          options: verdict.directions.map(({ id, name, swatches }) => ({ id, name, swatches })),
+        },
+      },
+    ]);
+    const first = verdict.directions[0];
+    if (this.state.mode === 'autonomous' && first) this.pickDirection(first.id);
+  }
+
+  pickDirection(directionId: string): void {
+    const item = [...this.state.chat].reverse().find((c) => c.type === 'directions');
+    const picked = this.directions.find((d) => d.id === directionId);
+    if (item?.type !== 'directions' || !picked) return;
+    this.emit([{ type: 'chat.item.updated', item: { ...item, selectedId: directionId } }]);
+    this.say(`Going with ${picked.name}: ${picked.notes}`);
   }
 
   /** The panel reviews each page, then the aggregator turns everything into findings (§8). */

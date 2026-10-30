@@ -1,0 +1,31 @@
+{
+  "name": "theme-fit",
+  "model": "muse-spark-1.3",
+  "recordedAt": "2026-10-30T04:08:46.696Z",
+  "response": {
+    "outputText": "{\"directions\": [{\"id\": \"a\", \"name\": \"Quiet stone\", \"notes\": \"Warm grays and soft off white with a gentle serif support stillness and quiet dignity.\", \"swatches\": [\"#2F3336\", \"#6B7280\", \"#E8E6E1\", \"#F7F5F0\"], \"typeface\": \"Lora\"}, {\"id\": \"b\", \"name\": \"Soft willow\", \"notes\": \"Muted sage and misty neutrals with clear readable type feel calm and caring.\", \"swatches\": [\"#33413A\", \"#6A7D74\", \"#DDE3DE\", \"#F4F6F4\"], \"typeface\": \"Source Serif 4\"}, {\"id\": \"c\", \"name\": \"Gentle dusk\", \"notes\": \"Deep slate blue with pale lavender gray keeps the tone respectful and reassuring.\", \"swatches\": [\"#2E3448\", \"#5C657E\", \"#D9DCE5\", \"#F2F3F7\"], \"typeface\": \"Merriweather\"}], \"fits\": false, \"why\": \"You told me this is for bereaved families seeking calm. Hot pink, bright yellow and a bouncy rounded font with party language read as festive, which can feel jarring and disrespectful in grief.\"}",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_5c22a35d-c758-4fd1-8baf-1cbe0abfc8ba",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "{\"directions\": [{\"id\": \"a\", \"name\": \"Quiet stone\", \"notes\": \"Warm grays and soft off white with a gentle serif support stillness and quiet dignity.\", \"swatches\": [\"#2F3336\", \"#6B7280\", \"#E8E6E1\", \"#F7F5F0\"], \"typeface\": \"Lora\"}, {\"id\": \"b\", \"name\": \"Soft willow\", \"notes\": \"Muted sage and misty neutrals with clear readable type feel calm and caring.\", \"swatches\": [\"#33413A\", \"#6A7D74\", \"#DDE3DE\", \"#F4F6F4\"], \"typeface\": \"Source Serif 4\"}, {\"id\": \"c\", \"name\": \"Gentle dusk\", \"notes\": \"Deep slate blue with pale lavender gray keeps the tone respectful and reassuring.\", \"swatches\": [\"#2E3448\", \"#5C657E\", \"#D9DCE5\", \"#F2F3F7\"], \"typeface\": \"Merriweather\"}], \"fits\": false, \"why\": \"You told me this is for bereaved families seeking calm. Hot pink, bright yellow and a bouncy rounded font with party language read as festive, which can feel jarring and disrespectful in grief.\"}",
+            "annotations": [],
+            "logprobs": []
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "model": "muse-spark-1.3",
+    "usage": {
+      "input": 2188,
+      "cached": 0,
+      "output": 988,
+      "reasoning": 694
+    }
+  }
+}

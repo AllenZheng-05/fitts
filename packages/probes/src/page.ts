@@ -267,8 +267,21 @@ function textElements(): HTMLElement[] {
 function fontInventory(F: Refs): PageProbeResult {
   const families = new Map<string, { n: number; el: Element }>();
   const sizes = new Map<string, number>();
+  // The palette too (theme-fit's inventory, §8.3): text and background colors by use.
+  const colors = new Map<string, number>();
+  const tally = (css: string) => {
+    const c = parseColor(css);
+    if (!c || c.a === 0) return;
+    const hex = `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+    colors.set(hex, (colors.get(hex) ?? 0) + 1);
+  };
+  for (const el of document.body.querySelectorAll('*')) {
+    if (colors.size > 200) break;
+    if (visible(el)) tally(getComputedStyle(el).backgroundColor);
+  }
   for (const el of textElements()) {
     const s = getComputedStyle(el);
+    tally(s.color);
     const family = (s.fontFamily.split(',')[0] ?? '').replace(/["']/g, '').trim().toLowerCase();
     const f = families.get(family);
     if (f) f.n += 1;
@@ -294,7 +307,13 @@ function fontInventory(F: Refs): PageProbeResult {
     probe: 'font-inventory',
     pass: !tooManyFamilies && !tooManySizes,
     items,
-    summary: `${families.size} font families (${[...families.keys()].join(', ')}), ${sizes.size} sizes`,
+    summary: `${families.size} font families (${[...families.keys()].join(', ')}), ${sizes.size} sizes; colors ${[
+      ...colors,
+    ]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([hex]) => hex)
+      .join(' ')}`,
   };
 }
 

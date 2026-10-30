@@ -5,19 +5,21 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P7 — the real interview and theme-fit (§6.2, §8.3). Acceptance: the real
-  interview fills the brief (For and Who from the first answer on demo/chat); on demo/hartwell,
-  theme-fit returns `fits: false` with 3 directions.
-- **Next concrete step:** `docs/prompts/interview.md` (Fitts's voice rules embedded) and an
-  `agent/interview/` module behind `startInterview` and `sendMessage` while the phase is
-  interview. Replace the stub interview for live projects. Use structured output to fill brief
-  fields, and record its fixtures once with Spark contributor.
+- **Current:** P8 — the permission gate, Fetch interception and per-mode behavior (§13).
+  Acceptance: `DELETE /api/conversations/12` is held until the user answers; Ask every action
+  asks before each click; Plan only never clicks.
+- **Next concrete step:** a gate classifier (risk and confidence per action) in the agent, read
+  against the mode at each action. In main, CDP `Fetch.enable` for non-GET requests on the site
+  window, with destructive ones held at `requestPaused` while the gate modal is open, released by
+  `continueRequest` or `failRequest`. Log `gate.requested` and `gate.decided` events. Then let
+  the crawler click destructive controls *through* the gate, instead of skipping them as in P4.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P7: real interview + theme-fit | see `git log --grep "P7:"` | Live (`tests/bench/p7.bench.ts`, under $0.01): on demo/chat the first answer filled For ("Family messaging for grandparents") and Who ("Older adults, grandparents"); on demo/hartwell theme-fit said `fits: false` with 3 directions. The recorded fixtures replay in unit tests. |
 | P6: reviewers, aggregator, evidence check, suggestions lane | see `git log --grep "P6:"` | `pnpm bench:chat` (real panel, Economy plus contributor, about $0.026 a run): recall 20/25 (80%), 2 false positives at severity ≥2, on two runs. Offline (probes only): 18/25 and 0. The aggregator, evidence check and rubric are unit-tested (`tests/agent/review.test.ts`), and the scorer too (`tests/bench/score.test.ts`). |
 | P5: deterministic probes | see `git log --grep "P5:"` | All 18 probe-detectable planted issues on demo/chat are caught by their probe in the live crawl (e2e reads `probe.result` from the run log). Each in-page probe passes and fails on fixture pages in real Chromium (`tests/e2e/probes.spec.ts`). The analyses are unit-tested (`packages/probes/tests`, `tests/agent/probes.test.ts`). |
 | P4: crawler + coverage gate + run controls + edge-state triggers | see `git log --grep "P4:"` | The real crawl (explorer brain, offline) reaches all 8 Phase 1 demo/chat routes (plus /help) and tries or skips every primary control, over 30 of them (e2e). Take the wheel stops stepping (e2e and unit). ⌘. aborts the model call in flight (unit). site-down, login-wall, api-trouble and budget fire from real conditions (unit, `tests/agent/run.test.ts`). |

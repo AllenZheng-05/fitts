@@ -1388,3 +1388,59 @@ screencast fallback is needed.
 - **Fix in the build.** Bundling the new shared code put Rolldown's CJS helper inside the agent
   entry, so main loaded `agent.js` and crashed at launch. `preserveEntrySignatures: 'strict'`
   keeps shared code in chunks.
+
+## Phase 2 — P7: the real interview and theme-fit
+
+- **The interview's state stays in the stub engine.** Phase 1's opener, brief card,
+  quick-replies handling and ready bar already live in `MockRunEngine`. The agent adds model
+  turns on top through three new stub methods:
+  - `interviewUser` posts the answer and shows Fitts typing;
+  - `interviewReply` merges the brief fields, says the line and posts quick replies;
+  - `interviewFallback` runs the scripted step.
+
+  One owner keeps the event diff simple. The interview only moves to RealRun if it needs to
+  act on the site, and it doesn't: the user drives it.
+- **When the model answers.** An `answerInterview`, or a `sendMessage` without `pointingAt`,
+  while the run is in the interview phase goes to the model when:
+  - the project's live site is running,
+  - a Meta key exists,
+  - and the run isn't offline.
+
+  Otherwise the Phase 1 script answers, and so does any failed or unusable model turn.
+- **What the model sees:**
+  - the conversation (Fitts as assistant, the user as user);
+  - the brief so far;
+  - how many questions it has asked (out of 6);
+  - the current page's path, title and headings, inside `<untrusted_page_content>`;
+  - the screenshot;
+  - the paths the user clicked through, from site-status URL changes.
+
+  Output is strict JSON with all six brief fields (null for untouched ones), say, quickReplies
+  and ready. Values are trimmed summaries. `ready` isn't trusted: the UI's own rule (For and
+  Who known) shows the ready bar, as in Phase 1.
+- **Theme-fit** runs once, alongside the crawl, when the 3rd route is first recorded. It gets
+  the brief, those routes' screenshots and their font-inventory summaries, which now include
+  the 8 most-used text and background colors.
+  - **Doesn't fit:** the run posts the `lookfeel` card (the model's why) and a `directions` card
+    (3 directions with hex swatches only).
+  - **Autonomous:** picks the first direction. The prompt asks for the closest first, which
+    stands in for "model-ranked".
+  - **`pickDirection`:** marks the card and acknowledges the choice in chat.
+  - **Deferred:** mockups (Muse Image) are P10, and applying a direction is a fix job (P9).
+  - A verdict that says "doesn't fit" without 3 usable directions is dropped, not half-posted.
+- **The model per profile follows §2:** Wonder on Quality, Spark on Economy, Spark Open on
+  Open weights with a Baseten key.
+- **Fixtures are recorded from the app itself.** With `FITTS_RECORD_LLM=<dir>` (dev only), each
+  real response is saved as `<fixture>.json`, without reasoning items: their encrypted blob is
+  opaque, and it happened to contain an `sk-`-looking substring that would trip secret scans.
+  The P7 live checks recorded `tests/fixtures/llm/p7/interview-turn.json` and `theme-fit.json`,
+  and unit tests replay them.
+- **Live checks** (`tests/bench/p7.bench.ts`, Economy with contributor pricing, under $0.01):
+  - **demo/chat:** the first answer filled For "Family messaging for grandparents" and Who
+    "Older adults, grandparents", and the ready bar showed.
+  - **demo/hartwell:** `fits: false`. "You told me this is for bereaved families seeking calm.
+    Hot pink, bright yellow and a bouncy rounded font with party language read as festive…"
+    Directions: Quiet stone, Soft willow and Gentle dusk.
+- **The unit test's fake app gained a third page.** With it, the back-mid-flow probe finds a
+  real "no back or cancel" problem there, so that crawl now ends on its own with one finding,
+  instead of on the nothing-found card.

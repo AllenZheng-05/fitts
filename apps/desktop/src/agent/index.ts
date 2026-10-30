@@ -24,9 +24,12 @@ import { CostLedger, withLedger } from './ledger/ledger';
 import { basetenClient, LlmCaller, metaClient, type Provider } from './llm/call';
 import { contributorFor, modelFor, reviewerRoster, SPARK_OPEN, type Profile } from './llm/router';
 import { testKey } from './llm/test-key';
+import { recording } from './llm/fake';
 import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
 import { RealRun } from './orchestrator/run';
 import { ReviewerPanel } from './review/reviewers';
+import { themeFit } from './review/themefit';
+import { interviewTurn } from './interview/interview';
 import type { AgentMessage, MainMessage } from './protocol';
 import { SiteRpc } from './site-client';
 
@@ -43,14 +46,24 @@ export const keys: Partial<Record<KeyName, string>> = {};
 const engine = new MockRunEngine({ profileFor, briefFor: (id) => briefs.get(id) ?? {} });
 const ledger = new CostLedger();
 const budget = new BudgetGuard();
-const caller = new LlmCaller((provider: Provider) => {
-  if (provider === 'meta' && keys.meta) return metaClient(keys.meta);
-  if (provider === 'baseten' && keys.baseten) return basetenClient(keys.baseten);
-  return undefined;
-}, ledger);
+/** The model clients for the current keys (recorded as fixtures when FITTS_RECORD_LLM is set). */
+function clientFor(provider: Provider) {
+  const client =
+    provider === 'meta' && keys.meta
+      ? metaClient(keys.meta)
+      : provider === 'baseten' && keys.baseten
+        ? basetenClient(keys.baseten)
+        : undefined;
+  const dir = process.env['FITTS_RECORD_LLM'];
+  return client && dir ? recording(client, dir) : client;
+}
+const caller = new LlmCaller(clientFor, ledger);
 
 /** Live sites main reported (url when running), and the real runs on them (P4). */
 const liveSites = new Map<string, { status: string; url?: string }>();
+/** The paths the user clicked through on each live site (the interview's context, §6.2). */
+const visited = new Map<string, string[]>();
+const online = () => Boolean(keys.meta) && process.env['FITTS_OFFLINE'] !== '1';
 const realRuns = new Map<string, RealRun>();
 const siteRpc = new SiteRpc(send);
 
@@ -137,6 +150,45 @@ async function llmPing(projectId: string): Promise<void> {
   }
 }
 
+/** One real interview turn on a live project (§6.2); the scripted step if the model can't. */
+async function realInterviewTurn(projectId: string, text: string, spoken: boolean): Promise<void> {
+  if (!engine.interviewUser(projectId, text, spoken ? { spoken: true } : {})) return;
+  const s = raw.get(projectId);
+  const site = siteRpc.for(projectId);
+  try {
+    if (!s) throw new Error('no run');
+    const [shot, snap] = await Promise.all([
+      site.screenshot().catch(() => undefined),
+      site.snapshot().catch(() => undefined),
+    ]);
+    const set = settings.get(projectId);
+    const contributor = contributorFor(projectId, set?.contributorMode ?? false);
+    const profile = profiles.get(projectId) ?? set?.modelProfile ?? 'quality';
+    const turn = await interviewTurn(
+      caller,
+      {
+        runId: s.runId,
+        projectId,
+        contributor,
+        allowed: () => {
+          const now = sent.get(projectId);
+          return !now || budget.allowed(now.cost.spentUsd, now.cost.capUsd);
+        },
+      },
+      modelFor('interview', profile, { contributor, baseten: Boolean(keys.baseten) }).model,
+      {
+        state: raw.get(projectId) ?? s,
+        ...(shot ? { shot: shot.jpegBase64 } : {}),
+        ...(snap ? { page: { path: snap.path, title: snap.title, headings: snap.headings } } : {}),
+        path: visited.get(projectId) ?? [],
+      },
+    );
+    engine.interviewReply(projectId, turn);
+  } catch {
+    engine.interviewFallback(projectId, text);
+  }
+}
+
 /** Starts the real audit on a live project, carrying the interview's state over (§6.1). */
 function startRealAudit(projectId: string, set: EngineCall['settings']): boolean {
   const site = liveSites.get(projectId);
@@ -146,17 +198,10 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
   const origin = new URL(site.url).origin;
   const runRef: { current?: RealRun } = {};
   const contributor = contributorFor(projectId, set?.contributorMode ?? false);
-  const runCaller = new LlmCaller(
-    (provider: Provider) => {
-      if (provider === 'meta' && keys.meta) return metaClient(keys.meta);
-      if (provider === 'baseten' && keys.baseten) return basetenClient(keys.baseten);
-      return undefined;
-    },
-    ledger,
-    { onTrouble: () => runRef.current?.apiTrouble() },
-  );
-  const online = Boolean(keys.meta) && process.env['FITTS_OFFLINE'] !== '1';
-  const useModel = online && process.env['FITTS_CRAWL_BRAIN'] !== 'explorer';
+  const runCaller = new LlmCaller(clientFor, ledger, {
+    onTrouble: () => runRef.current?.apiTrouble(),
+  });
+  const useModel = online() && process.env['FITTS_CRAWL_BRAIN'] !== 'explorer';
   const callCtx = () => ({
     runId: from.runId,
     projectId,
@@ -164,7 +209,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
     allowed: () => runRef.current?.allowed() ?? true,
   });
   const profile = () => profiles.get(projectId) ?? set?.modelProfile ?? 'quality';
-  const panel = online
+  const panel = online()
     ? new ReviewerPanel(runCaller, callCtx, () =>
         reviewerRoster(profile(), { contributor, baseten: Boolean(keys.baseten) }),
       )
@@ -202,6 +247,19 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       },
       onEconomy: () => profiles.set(projectId, 'economy'),
       ...(panel ? { panel } : {}),
+      ...(online()
+        ? {
+            themeFit: (input: Parameters<typeof themeFit>[3], signal?: AbortSignal) =>
+              themeFit(
+                runCaller,
+                callCtx(),
+                modelFor('themefit', profile(), { contributor, baseten: Boolean(keys.baseten) })
+                  .model,
+                input,
+                signal,
+              ),
+          }
+        : {}),
     },
   );
   runRef.current = run;
@@ -248,6 +306,9 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
     case 'answerQuestion':
       run.answer(String(args[0]), String(args[1]));
       return true;
+    case 'pickDirection':
+      run.pickDirection(String(args[0]));
+      return true;
     case 'setMode':
       run.setMode(args[0] as Parameters<RealRun['setMode']>[0]);
       return true;
@@ -287,6 +348,20 @@ function call({ projectId, method, args, brief, settings: set }: EngineCall): vo
     return;
   }
   if (callReal(projectId, method, args)) return;
+  // The real interview, on a live project with a key (the stub keeps the interview's state).
+  const answering =
+    method === 'answerInterview' ||
+    (method === 'sendMessage' && !(args[1] as { pointingAt?: string } | undefined)?.pointingAt);
+  if (
+    answering &&
+    raw.get(projectId)?.phase === 'interview' &&
+    liveSites.get(projectId)?.status === 'running' &&
+    online()
+  ) {
+    const spoken = Boolean((args[1] as { spoken?: boolean } | undefined)?.spoken);
+    void realInterviewTurn(projectId, typeof args[0] === 'string' ? args[0] : '', spoken);
+    return;
+  }
   if (method === 'startAudit' && startRealAudit(projectId, set)) return;
   if (method === 'answerQuestion') {
     const item = raw.get(projectId)?.chat.find((c) => c.id === args[0]);
@@ -310,6 +385,11 @@ port.on('message', (e: { data: MainMessage }) => {
     } else if (message.kind === 'siteStatus') {
       const { projectId, status, url } = message.status;
       liveSites.set(projectId, { status, ...(url ? { url } : {}) });
+      if (url) {
+        const path = new URL(url).pathname;
+        const list = visited.get(projectId) ?? [];
+        if (list.at(-1) !== path) visited.set(projectId, [...list, path].slice(-20));
+      }
       if (status === 'failed') realRuns.get(projectId)?.siteDown();
     } else if (message.kind === 'siteResult') {
       siteRpc.resolve(

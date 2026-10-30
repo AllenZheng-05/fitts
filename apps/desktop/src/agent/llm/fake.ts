@@ -1,5 +1,7 @@
 // Recorded model responses for tests (SPEC-phase2 §18): tests never call the network. A fixture
 // is tests/fixtures/llm/<name>.json, recorded once from a real call.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { LlmClient, LlmRequest, LlmResponse } from './call';
 import { LlmError } from './call';
 
@@ -35,4 +37,28 @@ export class FakeLlmClient implements LlmClient {
     if (!fixture) return Promise.reject(new LlmError('no fixture', undefined, false));
     return Promise.resolve({ ...fixture.response, model: req.model });
   }
+}
+
+/**
+ * Dev only (FITTS_RECORD_LLM=<dir>): records each real response as a fixture named by the
+ * request's `fixture` (or its task), so tests can replay it. Responses only: no keys, no inputs.
+ */
+export function recording(client: LlmClient, dir: string): LlmClient {
+  return {
+    async respond(req) {
+      const response = await client.respond(req);
+      const name = req.fixture ?? req.task;
+      // Reasoning items carry an opaque encrypted blob tests never need.
+      const kept = { ...response, output: response.output.filter((o) => o.type !== 'reasoning') };
+      const fixture: Fixture = {
+        name,
+        model: req.model,
+        recordedAt: new Date().toISOString(),
+        response: kept,
+      };
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${name}.json`), JSON.stringify(fixture, null, 2));
+      return response;
+    },
+  };
 }

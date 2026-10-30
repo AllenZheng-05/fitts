@@ -193,6 +193,53 @@ export class MockRunEngine implements RunEngine {
     });
   }
 
+  // ── Phase 2 agent: the real interview (SPEC-phase2 §6.2) ──────────────────────
+  // The agent asks the model; this engine keeps the interview's state, so the opener, the brief
+  // card and the ready bar work as in Phase 1.
+
+  /** Posts the user's answer and shows Fitts typing. False when the run isn't interviewing. */
+  interviewUser(projectId: string, text: string, opts: { spoken?: boolean } = {}): boolean {
+    const ctrl = this.ensure(projectId);
+    if (ctrl.state.phase !== 'interview') return false;
+    this.mutate(ctrl, (s, ctx) => {
+      ctx.post({ type: 'user.message', text, ...(opts.spoken ? { spoken: true } : {}) });
+      markQuickRepliesUsed(s);
+      s.fittsTyping = true;
+    });
+    return true;
+  }
+
+  /** Fitts's reply from the model: brief fields, the next line, and quick replies. */
+  interviewReply(
+    projectId: string,
+    reply: { say: string; fields: Partial<Brief>; quickReplies: string[] },
+  ): void {
+    const ctrl = this.ensure(projectId);
+    this.mutate(ctrl, (s, ctx) => {
+      s.fittsTyping = false;
+      for (const [k, v] of Object.entries(reply.fields))
+        if (typeof v === 'string' && v.trim()) s.brief[k as keyof Brief] = v.trim();
+      ctrl.interviewStep += 1;
+      ctx.say(reply.say);
+      if (reply.quickReplies.length > 0)
+        ctx.post({ type: 'quick-replies', options: reply.quickReplies });
+    });
+  }
+
+  /** The scripted step, when the model can't answer (no key, offline, an error). */
+  interviewFallback(projectId: string, text: string): void {
+    const ctrl = this.ensure(projectId);
+    this.mutate(ctrl, (s, ctx) => {
+      s.fittsTyping = false;
+      const step = ctrl.profile.interview[ctrl.interviewStep];
+      if (step) {
+        Object.assign(s.brief, step.fill(text));
+        ctrl.interviewStep += 1;
+        step.reply(s, ctx);
+      } else ctx.say(copy.fitts.ack);
+    });
+  }
+
   // ── RunEngine: run control ──────────────────────────────────────────────────
 
   startAudit(projectId: string): void {
