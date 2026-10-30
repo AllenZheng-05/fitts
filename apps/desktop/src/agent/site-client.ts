@@ -1,7 +1,7 @@
 // The agent's only way to touch the user's site: RPC to main (SPEC-phase2 §1). Main runs each
 // operation on the project's site window (and, from P8, through the permission gate).
 import type { PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
-import type { ProbeItem } from '@fitts/schema';
+import type { ProbeItem, SiteRect } from '@fitts/schema';
 import type { AgentMessage, AxSnapshot, FixCall, OpTrace, SiteOp, SiteOpResult } from './protocol';
 
 export interface ActionResult {
@@ -31,6 +31,10 @@ export interface Site {
   network(): Promise<RequestRecord[]>;
   /** The gate's answer for a held request (§13). */
   release(id: string, allow: boolean): Promise<void>;
+  // Media (§10)
+  rects(refs: string[]): Promise<Record<string, SiteRect>>;
+  png(jpegBase64: string): Promise<string>;
+  saveAsset(runId: string, name: string, base64: string): Promise<string>;
   /** The fix pipeline's privileged half in main (§9). */
   fix(call: FixCall): Promise<unknown>;
 }
@@ -98,6 +102,10 @@ export class SiteRpc {
         await expect({ op: 'release', id, allow }, 'released');
       },
       fix: async (call) => (await expect({ op: 'fix', call }, 'fix')).value,
+      rects: async (refs) => (await expect({ op: 'rects', refs }, 'rects')).rects,
+      png: async (jpegBase64) => (await expect({ op: 'png', jpegBase64 }, 'png')).pngBase64,
+      saveAsset: async (runId, name, base64) =>
+        (await expect({ op: 'saveAsset', runId, name, base64 }, 'saved')).url,
     };
   }
 }

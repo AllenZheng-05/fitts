@@ -55,6 +55,10 @@ export type SiteOp =
   | { op: 'network' }
   /** The gate's answer for a held request (§13): send it, or fail it. */
   | { op: 'release'; id: string; allow: boolean }
+  // Media (§10): element boxes, a JPEG as PNG (Muse Image takes PNG), and saving an asset.
+  | { op: 'rects'; refs: string[] }
+  | { op: 'png'; jpegBase64: string }
+  | { op: 'saveAsset'; runId: string; name: string; base64: string }
   /** The fix pipeline's privileged half, in main (§9). */
   | { op: 'fix'; call: FixCall };
 
@@ -104,6 +108,9 @@ export type SiteOpResult =
   | { op: 'links'; statuses: Record<string, number> }
   | { op: 'network'; requests: RequestRecord[] }
   | { op: 'released' }
+  | { op: 'rects'; rects: Record<string, SiteRect> }
+  | { op: 'png'; pngBase64: string }
+  | { op: 'saved'; url: string }
   | { op: 'fix'; value: unknown };
 
 /** A request paused at `Fetch.requestPaused`, waiting for the gate. */

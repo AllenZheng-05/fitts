@@ -31,6 +31,7 @@ import { ReviewerPanel } from './review/reviewers';
 import { themeFit } from './review/themefit';
 import { interviewTurn } from './interview/interview';
 import { runFixer } from './fix/fixer';
+import { Media } from './llm/media';
 import type { AgentMessage, MainMessage } from './protocol';
 import { SiteRpc } from './site-client';
 
@@ -249,6 +250,9 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       },
       onEconomy: () => profiles.set(projectId, 'economy'),
       ...(panel ? { panel } : {}),
+      ...(online() && keys.meta && process.env['FITTS_NO_MEDIA'] !== '1'
+        ? { media: new Media(keys.meta, ledger) }
+        : {}),
       ...(online()
         ? {
             fixer: (

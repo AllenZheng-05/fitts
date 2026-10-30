@@ -5,18 +5,27 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P10 — SAM 3.1 and Muse Image (§10). Acceptance: the Finding panel shows the
-  SAM outline and a real mockup; hartwell redesign directions use Muse Image.
-- **Next concrete step:** read §10, then add `agent/llm/` clients for SAM (V3 verified the
-  endpoint) and Muse Image edits (V4). Store results as `fitts-asset://` assets
-  (`finding.assets.mask` and `.mockup`), and generate mockups for the 3 theme-fit directions.
-  Record fixtures once.
+- **Current:** P11 — voice (§14).
+  - **Already written, not yet wired:** `main/voice/transcribe.ts` (V5 WebSocket),
+    `main/voice/tts.ts` (ElevenLabs stream-input) and `renderer/lib/voice-command.ts`
+    ("Fitts, …" parsing).
+- **Next concrete steps:**
+  1. Voice IPC in main (start, audio, end, cancel, speak, stop) and a preload bridge.
+  2. Grant mic permission for the app page only.
+  3. Renderer: an AudioWorklet capture at 24 kHz s16le, and a real mic toggle (canned
+     transcript when there's no key or the run is offline, so Phase 1 e2e stays).
+  4. Always-listening wake words, and barge-in on `speechStart`.
+  5. `speech.ts` backend: ElevenLabs PCM through Web Audio, falling back to speechSynthesis.
+  6. Ledger usage for stt and tts.
+  7. Unit tests with a local fake WebSocket server, and a manual script (mic and speakers) in
+     NEEDS-ALLEN.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P10: SAM + Muse Image | see `git log --grep "P10:"` | Live (`tests/bench/p10.bench.ts`, about $0.10): demo/chat findings got SAM outlines (11), and the Finding panel showed the outline and a real Muse Image mockup; hartwell's 3 directions got mockups. Screenshots are in `.fitts-dev/bench/p10-*.png`. |
 | P9: fix pipeline + verification + PRs + preview + undo/redo/retry | see `git log --grep "P9:"` | Live (`tests/bench/p9.bench.ts`, a mirror clone with a local bare origin, `FITTS_GH_DRY_RUN=1`, Autonomous): 8 verified dry-run PRs without asking. The sabotaged fix rolled back, then the retry verified it (PR #9). Undo closed a PR; undo of a merged PR opened a revert PR. Unit and integration: `tests/agent/fix.test.ts`, `tests/main/fix-host.test.ts` (a real git repo). |
 | P8: permission gate + Fetch interception + modes | see `git log --grep "P8:"` | Live (e2e on demo/chat): `DELETE /api/conversations/12` from Fitts tapping "Delete conversation" is held at CDP Fetch; the gate modal shows it; the server hasn't received it; "Don't do it" fails it and conversation 12 survives. Unit: Ask every action asks before each tap; Plan only never clicks or types; Dangerous mode releases on localhost only. |
 | P7: real interview + theme-fit | see `git log --grep "P7:"` | Live (`tests/bench/p7.bench.ts`, under $0.01): on demo/chat the first answer filled For ("Family messaging for grandparents") and Who ("Older adults, grandparents"); on demo/hartwell theme-fit said `fits: false` with 3 directions. The recorded fixtures replay in unit tests. |

@@ -331,7 +331,8 @@ export type ChatItem =
   | {
       id: string;
       type: 'directions';
-      options: { id: string; name: string; swatches: string[] }[];
+      /** `mockup` (SPEC-phase2 §10): a Muse Image picture of the direction, an asset URL. */
+      options: { id: string; name: string; swatches: string[]; mockup?: string }[];
       selectedId?: string;
     }
   | {

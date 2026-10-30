@@ -384,6 +384,18 @@ function Directions({ item, run }: { item: Item<'directions'>; run: RunState }) 
               selected ? 'border-2 border-cobalt p-2' : 'border border-ink',
             )}
           >
+            {option.mockup && (
+              <span className="relative">
+                <img
+                  src={option.mockup}
+                  alt={format(copy.items.directionMockupAlt, { name: option.name })}
+                  className="aspect-[8/5] w-full rounded-tag border border-ink object-cover"
+                />
+                <span className="absolute bottom-1 left-1 rounded-tag border border-ink bg-card px-1 py-px text-[9px] leading-none font-bold whitespace-nowrap">
+                  {copy.finding.mockupLabel}
+                </span>
+              </span>
+            )}
             <span aria-hidden="true" className="flex gap-[3px]">
               {option.swatches.slice(0, 2).map((color) => (
                 <span key={color} className="size-4 rounded-tag" style={{ background: color }} />

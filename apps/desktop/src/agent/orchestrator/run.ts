@@ -13,6 +13,7 @@ import {
 import type { BudgetGuard } from '../ledger/budget';
 import type { CostLedger } from '../ledger/ledger';
 import type { AxSnapshot, HeldRequest } from '../protocol';
+import type { SiteRect } from '@fitts/schema';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
 import { Coverage, DESTRUCTIVE, routeOf } from '../crawler/coverage';
@@ -23,6 +24,7 @@ import { aggregateWithChecks, type Check } from '../review/aggregate';
 import { FixPipeline, type Fixer } from '../fix/pipeline';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
 import type { Direction, ThemeFit } from '../review/themefit';
+import { directionInstruction, findingInstruction, outlineSvg, type Media } from '../llm/media';
 
 /** api-trouble retries on its own after this long (§6.3). */
 export const API_RETRY_MS = 12_000;
@@ -43,6 +45,8 @@ export interface RunDeps {
   actionDelayMs?: number;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
+  /** SAM outlines and Muse Image mockups (§10). Without it, the UI keeps DOM boxes. */
+  media?: Media;
   /** The fixer (§9.2): without one (no key, offline), findings aren't fixed. */
   fixer?: Fixer;
   /** Theme-fit (§8.3), asked once after the first 3 routes. */
@@ -51,6 +55,10 @@ export interface RunDeps {
     signal?: AbortSignal,
   ) => Promise<ThemeFit>;
 }
+
+/** Media per run (§10): SAM outlines for the top shown findings, mockups for fewer. */
+const MAX_OUTLINES = 12;
+const MAX_MOCKUPS = 4;
 
 /** Theme-fit looks at this many routes' screenshots (§8.3). */
 const THEME_ROUTES = 3;
@@ -95,7 +103,14 @@ export class RealRun {
   private directions: Direction[] = [];
   private readonly pages = new Map<
     string,
-    { evidence: Omit<RouteEvidence, 'probes'>; stepIndex: number; atMs: number }
+    {
+      evidence: Omit<RouteEvidence, 'probes'>;
+      stepIndex: number;
+      atMs: number;
+      /** The shot's size and element boxes (SAM's box prompts, §10). */
+      size?: { width: number; height: number };
+      rects?: Record<string, SiteRect>;
+    }
   >();
 
   constructor(
@@ -424,17 +439,32 @@ export class RealRun {
     const route = routeOf(snap.path);
     if (this.pages.has(route)) return;
     let shot: RouteEvidence['shot'];
-    if (this.deps.panel || this.deps.themeFit) {
+    let size: { width: number; height: number } | undefined;
+    let rects: Record<string, SiteRect> | undefined;
+    if (this.deps.panel || this.deps.themeFit || this.deps.media) {
       try {
-        shot = { jpegBase64: (await this.deps.site.screenshot()).jpegBase64 };
+        const s = await this.deps.site.screenshot();
+        shot = { jpegBase64: s.jpegBase64 };
+        size = { width: s.width, height: s.height };
+        if (this.deps.media) {
+          const refs = new Set([
+            ...snap.nodes.map((n) => n.ref),
+            ...this.probes.results
+              .filter((r) => r.route === route)
+              .flatMap((r) => r.items.map((i) => i.ref)),
+          ]);
+          rects = await this.deps.site.rects([...refs].filter(Boolean));
+        }
       } catch {
-        // Reviewed without a screenshot.
+        // Reviewed without a screenshot; SAM falls back to DOM boxes.
       }
     }
     this.pages.set(route, {
       evidence: { route, snapshot: snap, trace: [], ...(shot ? { shot } : {}) },
       stepIndex: this.state.step,
       atMs: this.state.elapsedMs,
+      ...(size ? { size } : {}),
+      ...(rects ? { rects } : {}),
     });
   }
 
@@ -586,6 +616,46 @@ export class RealRun {
     ]);
     const first = verdict.directions[0];
     if (this.state.mode === 'autonomous' && first) this.pickDirection(first.id);
+    void this.directionMockups(verdict.directions);
+  }
+
+  /** A Muse Image mockup per direction, on the first route's shot (§10). */
+  private async directionMockups(directions: Direction[]): Promise<void> {
+    const media = this.deps.media;
+    const route = [...this.pages.keys()][0];
+    if (!media || !route) return;
+    const shot = await this.routeShot(route);
+    if (!shot) return;
+    const png = await shot.png().catch(() => null);
+    if (!png) return;
+    await Promise.all(
+      directions.map(async (d) => {
+        const out = await media.edit(
+          {
+            runId: this.state.runId,
+            projectId: this.state.projectId,
+            allowed: () => this.allowed(),
+          },
+          png,
+          directionInstruction(d),
+        );
+        if (!out) return;
+        const url = await this.deps.site
+          .saveAsset(this.state.runId, `direction-${d.id}.png`, out)
+          .catch(() => null);
+        const item = [...this.state.chat].reverse().find((c) => c.type === 'directions');
+        if (!url || item?.type !== 'directions') return;
+        this.emit([
+          {
+            type: 'chat.item.updated',
+            item: {
+              ...item,
+              options: item.options.map((o) => (o.id === d.id ? { ...o, mockup: url } : o)),
+            },
+          },
+        ]);
+      }),
+    );
   }
 
   pickDirection(directionId: string): void {
@@ -641,6 +711,99 @@ export class RealRun {
     });
     this.checks = checks;
     this.post(findings);
+    void this.media(findings.filter((f) => f.lane !== 'suggestion'));
+  }
+
+  /** A route's shot as an asset (saved once) and as PNG for Muse Image (converted once). */
+  private readonly routeShots = new Map<
+    string,
+    Promise<{ url: string; png: () => Promise<string> } | null>
+  >();
+
+  private routeShot(route: string) {
+    let cached = this.routeShots.get(route);
+    if (!cached) {
+      const page = this.pages.get(route);
+      const shot = page?.evidence.shot;
+      cached = shot
+        ? (async () => {
+            const name = `shot-${route.replace(/[^\w]+/g, '_') || 'root'}.jpg`;
+            const url = await this.deps.site.saveAsset(this.state.runId, name, shot.jpegBase64);
+            let png: Promise<string> | undefined;
+            return { url, png: () => (png ??= this.deps.site.png(shot.jpegBase64)) };
+          })().catch(() => null)
+        : Promise.resolve(null);
+      this.routeShots.set(route, cached);
+    }
+    return cached;
+  }
+
+  /**
+   * §10, in the background: SAM outlines the element in each shown finding's shot; Muse Image
+   * draws a mockup of the fix for the most serious few. Failures leave the DOM box and the
+   * placeholder. Every result is cached on the finding (`assets`).
+   */
+  private async media(shown: Finding[]): Promise<void> {
+    const media = this.deps.media;
+    if (!media || shown.length === 0) return;
+    const ranked = [...shown].sort((a, b) => b.severity - a.severity);
+    const ctx = (findingId: string) => ({
+      runId: this.state.runId,
+      projectId: this.state.projectId,
+      findingId,
+      allowed: () => this.allowed(),
+    });
+    const setAssets = (id: string, assets: NonNullable<Finding['assets']>) => {
+      const f = this.state.findings.find((x) => x.id === id);
+      if (f)
+        this.emit([
+          { type: 'finding.updated', finding: { ...f, assets: { ...f.assets, ...assets } } },
+        ]);
+    };
+    for (const f of ranked.slice(0, MAX_OUTLINES)) {
+      const page = this.pages.get(f.route);
+      const shot = await this.routeShot(f.route);
+      if (!page?.evidence.shot || !page.size || !shot) continue;
+      setAssets(f.id, { shot: shot.url });
+      const box = f.elementRef ? page.rects?.[f.elementRef] : undefined;
+      if (!box) continue;
+      const path = await media.outline(
+        ctx(f.id),
+        { jpegBase64: page.evidence.shot.jpegBase64, ...page.size },
+        box,
+      );
+      if (!path) continue;
+      const svg = outlineSvg(path, page.size.width, page.size.height);
+      try {
+        const url = await this.deps.site.saveAsset(
+          this.state.runId,
+          `mask-${f.id}.svg`,
+          Buffer.from(svg).toString('base64'),
+        );
+        setAssets(f.id, { mask: url });
+      } catch {
+        // Keep the DOM box.
+      }
+    }
+    await Promise.all(
+      ranked.slice(0, MAX_MOCKUPS).map(async (f) => {
+        const shot = await this.routeShot(f.route);
+        if (!shot) return;
+        try {
+          const png = await media.edit(
+            ctx(f.id),
+            await shot.png(),
+            findingInstruction(f.title, f.fix),
+          );
+          if (!png) return;
+          setAssets(f.id, {
+            mockup: await this.deps.site.saveAsset(this.state.runId, `mockup-${f.id}.png`, png),
+          });
+        } catch {
+          // Keep the placeholder.
+        }
+      }),
+    );
   }
 
   /** Adds findings; shown ones get a chat card and a numbered pin (§8.2: suggestions don't). */

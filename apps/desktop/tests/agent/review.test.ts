@@ -255,10 +255,11 @@ describe('aggregator and evidence check', () => {
     expect(findings[0]?.agreement.who).toEqual(['Probe', 'Novice', 'Trust & ethics']);
   });
 
-  it('severity rubric: impact, raised for 3+ screens and for 3+ reviewers, capped at 4', () => {
+  it('severity rubric: impact, raised one step for 3+ screens or 3+ reviewers, capped at 4', () => {
     expect(severityOf(2, 1, 1)).toBe(2);
     expect(severityOf(2, 3, 1)).toBe(3);
     expect(severityOf(2, 1, 3)).toBe(3);
+    expect(severityOf(2, 4, 5)).toBe(3);
     expect(severityOf(3, 4, 4)).toBe(4);
     expect(severityOf(1, 1, 5)).toBe(1);
   });

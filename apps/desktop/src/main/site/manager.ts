@@ -1,7 +1,7 @@
 // One live site per open project (SPEC-phase2 §4.1, §5): its dev server, its offscreen window,
 // frames and status to the renderer, CDP-style queries, and step shots for rewind.
 import { IPC, type Project, type SiteInput, type SiteNav, type SiteStatus } from '@fitts/schema';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, nativeImage } from 'electron';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectProject } from '../projects/detect';
@@ -16,6 +16,8 @@ interface Live {
   status: SiteStatus;
   health?: ReturnType<typeof setInterval>;
 }
+
+const ASSET_NAME = /^[\w.-]+\.(jpg|png|svg)$/;
 
 export class SiteManager {
   private readonly live = new Map<string, Live>();
@@ -121,6 +123,7 @@ export class SiteManager {
       const up = live ? await responds(live.server.url) : false;
       return { op: 'health', up, log: live?.server.log ?? [] };
     }
+    if (request.op === 'png' || request.op === 'saveAsset') return this.media(projectId, request);
     const win = live?.window;
     if (!win) throw new Error('The site is not running');
     switch (request.op) {
@@ -163,6 +166,8 @@ export class SiteManager {
         return { op: 'released' };
       case 'fix':
         throw new Error('Fix calls go to the FixHost');
+      case 'rects':
+        return { op: 'rects', rects: await win.rects(request.refs) };
     }
   }
 
@@ -181,6 +186,34 @@ export class SiteManager {
 
   window(projectId: string): SiteWindow | undefined {
     return this.live.get(projectId)?.window;
+  }
+
+  private media(
+    projectId: string,
+    request: Extract<SiteOp, { op: 'png' | 'saveAsset' }>,
+  ): SiteOpResult {
+    if (request.op === 'png')
+      return {
+        op: 'png',
+        pngBase64: nativeImage
+          .createFromBuffer(Buffer.from(request.jpegBase64, 'base64'))
+          .toPNG()
+          .toString('base64'),
+      };
+    return {
+      op: 'saved',
+      url: this.saveAsset(projectId, request.runId, request.name, request.base64),
+    };
+  }
+
+  /** Writes runs/<runId>/assets/<name> (SAM outlines, mockups, route shots; §10, §12.3). */
+  saveAsset(projectId: string, runId: string, name: string, base64: string): string {
+    if (!SAFE_ID.test(projectId) || !SAFE_ID.test(runId) || !ASSET_NAME.test(name))
+      throw new Error('bad asset name');
+    const dir = join(runDir(this.root, projectId, runId), 'assets');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, name), Buffer.from(base64, 'base64'));
+    return `fitts-asset://${projectId}/${runId}/assets/${name}`;
   }
 
   /** Saves the page as it is now as runs/<runId>/shots/<step>.jpg (rewind, §5.4). */

@@ -27,7 +27,7 @@ export function assetPath(root: string, url: string): string | null {
   const [runId, kind, ...rest] = decodeURIComponent(u.pathname).split('/').filter(Boolean);
   if (!SAFE_ID.test(projectId) || !runId || !SAFE_ID.test(runId)) return null;
   if (kind !== 'shots' && kind !== 'assets') return null;
-  if (rest.length !== 1 || !/^[\w.-]+\.(jpg|png|webp)$/.test(rest[0] ?? '')) return null;
+  if (rest.length !== 1 || !/^[\w.-]+\.(jpg|png|webp|svg)$/.test(rest[0] ?? '')) return null;
   const base = join(runDir(root, projectId, runId), kind);
   const file = normalize(join(base, rest[0] ?? ''));
   return file.startsWith(base + sep) ? file : null;

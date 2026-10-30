@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@fitts/probes": "workspace:*",
+    "@meta-sam/parser": "0.1.0",
     "@fitts/schema": "workspace:*",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/fraunces": "5.3.0",

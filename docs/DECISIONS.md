@@ -1576,3 +1576,48 @@ screencast fallback is needed.
   - **Undo:** an open PR's undo closed it. Undoing a PR marked merged opened revert PR #10.
   - **Diffs** are small and targeted, and commits have no trailers. Quality varies (see Known
     issues).
+
+## Phase 2 — P10: SAM 3.1 and Muse Image
+
+- **Where calls live.** `agent/llm/media.ts` (inside the network boundary) uses the V3 path for
+  SAM: Responses streaming with `buildObjectPrompt` box prompts, parsed by `@meta-sam/parser`.
+  Muse Image uses `images.edit` with a PNG.
+  - Each call is a ledger entry in the `media` phase, at the pricing table's SAM ($0.0025 an
+    image) and image ($0.01) prices.
+  - Every failure returns null: the UI keeps the DOM box, or the lilac placeholder.
+  - `FITTS_NO_MEDIA=1` turns media off.
+- **Inputs come from the route's first visit.** When Fitts first sees a route it keeps the
+  screenshot, its size, and the boxes of every snapshot control and probe item (a new `rects`
+  site op). SAM gets that shot plus the finding element's box. The shot is in CSS px at device
+  scale 1, the same as the boxes.
+- **What runs, and how much.** After the review posts findings, in the background:
+  - SAM outlines for the 12 most severe shown findings that have an element box;
+  - Muse Image mockups for the 4 most severe;
+  - a mockup per theme-fit direction, on the first route's shot.
+
+  The caps keep a run's media cost near $0.07. Results are cached on the finding (`assets`) or
+  the direction option (`mockup`).
+- **Assets.** The agent sends bytes to main (`saveAsset`), which writes
+  `runs/<runId>/assets/<name>`, served as `fitts-asset://` (now including `.svg`). JPEG shots
+  are converted to PNG in main (`nativeImage`) for Muse Image.
+  - The SAM outline is stored as an SVG, not a PNG mask: the mask's outline path with a coral
+    stroke and a light fill, in the shot's coordinates. It's drawn over the route shot, and it
+    scales with it.
+- **UI** (only when assets exist; mock runs and the Scenario panel look as in Phase 1):
+  - The Finding panel's Live preview shows the real shot with the outline.
+  - The Mockup tab shows the mockup with its "Mockup · not code" tag.
+  - Direction cards show their mockup above the swatches, with the same tag.
+  - Live overlays keep the DOM box (instant), as §10 says.
+- **The severity rubric is capped at one step up.** P10's live run showed minor problems
+  ("Text is too faint", "Tap target is too small") at Severity 4 · Catastrophic. Frequency
+  (3+ screens) and persistence (3+ reviewers) each added a step, and with reviewers now citing
+  probe evidence, both fire often. Now either one raises severity by one step, at most once,
+  so only a major problem can become catastrophic.
+- **Live check** (`tests/bench/p10.bench.ts`, about $0.10):
+  - **demo/chat** (a mirror clone in Ask when unsure, so the audit screen stays up): 11
+    findings outlined by SAM, and the Finding panel showed the outline and a real mockup.
+  - **hartwell:** all 3 directions got Muse Image mockups.
+  - Screenshots are in `.fitts-dev/bench/p10-*.png`.
+- **The Done screen has no Finding panel** (Phase 1 design), so the outline and mockup are
+  seen during the audit. PR images (`--attach`) use the step shot. Attaching the outline is
+  part of the real-PR check.

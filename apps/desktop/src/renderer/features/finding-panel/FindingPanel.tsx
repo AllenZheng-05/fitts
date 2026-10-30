@@ -108,7 +108,23 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
             {
               id: 'live',
               label: copy.finding.livePreview,
-              content: (
+              content: finding.assets?.shot ? (
+                // A real run: the page when Fitts found it, with SAM's outline (§10).
+                <div className="relative h-[200px] overflow-hidden rounded-control border border-ink bg-paper">
+                  <img
+                    src={finding.assets.shot}
+                    alt={copy.finding.shotAlt}
+                    className="absolute inset-0 size-full object-contain"
+                  />
+                  {finding.assets.mask && (
+                    <img
+                      src={finding.assets.mask}
+                      alt=""
+                      className="pointer-events-none absolute inset-0 size-full object-contain"
+                    />
+                  )}
+                </div>
+              ) : (
                 <BeforeAfterSlider
                   className="h-[200px]"
                   before={<MiniSite run={run} route={previewRoute} variant="now" />}
@@ -119,7 +135,18 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
             {
               id: 'mockup',
               label: copy.finding.mockup,
-              content: (
+              content: finding.assets?.mockup ? (
+                <div className="relative h-[200px] overflow-hidden rounded-control border border-ink bg-paper">
+                  <img
+                    src={finding.assets.mockup}
+                    alt={format(copy.finding.mockupAlt, { title: finding.title })}
+                    className="absolute inset-0 size-full object-contain"
+                  />
+                  <span className="absolute top-2 left-2 rounded-tag border border-ink bg-card px-2 py-0.5 text-[12px] font-bold">
+                    {copy.finding.mockupLabel}
+                  </span>
+                </div>
+              ) : (
                 <div className="flex h-[200px] flex-col items-center justify-center gap-2 rounded-control border border-dashed border-ink-faint bg-lilac-tint p-4 text-center">
                   <span className="rounded-tag border border-ink bg-card px-2 py-0.5 text-[12px] font-bold">
                     {copy.finding.mockupLabel}

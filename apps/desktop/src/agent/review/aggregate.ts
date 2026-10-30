@@ -416,14 +416,13 @@ function median(values: number[]): number {
 }
 
 /**
- * Severity rubric (§8.2): impact (the probe's template, or the reviewers' median) raised one
- * step when it shows up on 3+ screens (frequency) and when 3+ reviewers agree it matters
- * (persistence: people keep hitting it), at most 4.
+ * Severity rubric (§8.2): impact (the probe's template, or the reviewers' median), raised one
+ * step when it shows up on 3+ screens (frequency) or 3+ reviewers agree it matters
+ * (persistence). One step at most: a minor problem everywhere is major, not catastrophic.
  */
 export function severityOf(impact: number, routes: number, agreeing: number): Severity {
   let s = Math.round(impact);
-  if (routes >= 3 && s < 4) s += 1;
-  if (agreeing >= 3 && s < 4 && s >= 2) s += 1;
+  if ((routes >= 3 || agreeing >= 3) && s >= 2 && s < 4) s += 1;
   return Math.min(4, Math.max(1, s)) as Severity;
 }
 

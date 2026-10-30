@@ -81,6 +81,9 @@ function fakeSite(over: Partial<Site> = {}) {
     links: () => Promise.resolve({}),
     network: () => Promise.resolve([]),
     fix: () => Promise.reject(new Error('no fixes in this fake')),
+    rects: () => Promise.resolve({}),
+    png: (jpeg) => Promise.resolve(jpeg),
+    saveAsset: (runId, name) => Promise.resolve(`fitts-asset://demo-chat/${runId}/assets/${name}`),
     release: (id, allow) => {
       log.push(`release ${id} ${allow ? 'allow' : 'deny'}`);
       return Promise.resolve();
@@ -124,6 +127,7 @@ function setup({
   mode = 'ask-unsure',
   themeFit,
   origin = 'http://x',
+  media,
 }: {
   site?: ReturnType<typeof fakeSite>;
   brain?: Brain;
@@ -131,6 +135,7 @@ function setup({
   mode?: RunState['mode'];
   themeFit?: RunDeps['themeFit'];
   origin?: string;
+  media?: RunDeps['media'];
 } = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
@@ -138,6 +143,7 @@ function setup({
     { ...initial(cap), mode },
     {
       ...(themeFit ? { themeFit } : {}),
+      ...(media ? { media } : {}),
       site,
       brain,
       ledger,
@@ -471,6 +477,51 @@ describe('the permission gate and modes (§13)', () => {
     expect(
       state()?.chat.some((c) => c.type === 'fitts.message' && c.text.includes('Plan only')),
     ).toBe(true);
+    run.dispose();
+  });
+});
+
+describe('media (§10)', () => {
+  it('outlines each shown finding’s element with SAM and draws mockups, as assets', async () => {
+    const outlines: { box: unknown }[] = [];
+    const edits: string[] = [];
+    const media = {
+      outline: (_ctx: unknown, _shot: unknown, box: unknown) => {
+        outlines.push({ box });
+        return Promise.resolve('M0 0 L10 0 L10 10 Z');
+      },
+      edit: (_ctx: unknown, _png: string, prompt: string) => {
+        edits.push(prompt);
+        return Promise.resolve('UE5H');
+      },
+    };
+    const site = fakeSite({
+      probes: () =>
+        Promise.resolve([
+          {
+            probe: 'target-size' as const,
+            pass: false,
+            items: [
+              { ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' },
+            ],
+          },
+        ]),
+      rects: () => Promise.resolve({ 'go-b': { left: 10, top: 20, width: 28, height: 20 } }),
+    });
+    const { run, state } = setup({ site, media: media as never });
+    run.start();
+    await skipLogin(state, run);
+    await until(() =>
+      Boolean(state()?.findings.find((f) => f.title === 'Tap target is too small')?.assets?.mockup),
+    );
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    expect(f?.assets).toEqual({
+      shot: 'fitts-asset://demo-chat/run-1/assets/shot-_.jpg',
+      mask: `fitts-asset://demo-chat/run-1/assets/mask-${f?.id ?? ''}.svg`,
+      mockup: `fitts-asset://demo-chat/run-1/assets/mockup-${f?.id ?? ''}.png`,
+    });
+    expect(outlines[0]?.box).toEqual({ left: 10, top: 20, width: 28, height: 20 });
+    expect(edits[0]).toContain('Give it at least 44×44px');
     run.dispose();
   });
 });
