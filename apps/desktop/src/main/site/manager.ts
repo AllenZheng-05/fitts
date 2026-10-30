@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectProject } from '../projects/detect';
 import { runDir, SAFE_ID } from '../store/run-log';
-import type { SiteOp, SiteOpResult } from '../../agent/protocol';
+import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
 import { SiteWindow } from './site-window';
 
@@ -21,6 +21,8 @@ export class SiteManager {
   private readonly live = new Map<string, Live>();
   /** Status changes also go to the agent (site-down, live projects). */
   onStatus: ((status: SiteStatus) => void) | undefined;
+  /** A write from Fitts's action held for the gate goes to the agent (§13). */
+  onHeld: ((projectId: string, held: HeldRequest) => void) | undefined;
 
   constructor(
     private readonly root: string,
@@ -78,6 +80,7 @@ export class SiteManager {
       server.url,
       (jpeg, w, h) => this.broadcast(IPC.siteFrame, projectId, jpeg, w, h),
       (patch) => this.status(projectId, patch),
+      (held) => this.onHeld?.(projectId, held),
     );
     live.window = win;
     await win.load(project.startPath ?? detection?.startPath ?? '/').catch(() => undefined);
@@ -136,7 +139,7 @@ export class SiteManager {
       case 'navigate':
         return win.goto(request.path);
       case 'click':
-        return win.click(request.ref);
+        return win.click(request.ref, request.destructive ?? false);
       case 'type':
         return win.type(request.ref, request.text);
       case 'press':
@@ -155,6 +158,9 @@ export class SiteManager {
         return { op: 'links', statuses: await win.links(request.hrefs) };
       case 'network':
         return { op: 'network', requests: win.drainNetwork() };
+      case 'release':
+        await win.release(request.id, request.allow);
+        return { op: 'released' };
     }
   }
 

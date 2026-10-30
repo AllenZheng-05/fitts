@@ -30,7 +30,12 @@ function fakeSite(over: Partial<Site> = {}) {
   let path = '/';
   const log: string[] = [];
   let up = true;
-  const site: Site & { log: string[]; setUp(v: boolean): void } = {
+  const site: Site & {
+    log: string[];
+    setUp(v: boolean): void;
+    /** Main holding a write from a destructive tap (set by the test once the run exists). */
+    onHeld?: (ref: string) => void;
+  } = {
     log,
     setUp: (v) => (up = v),
     snapshot: () =>
@@ -48,10 +53,11 @@ function fakeSite(over: Partial<Site> = {}) {
       path = p;
       return Promise.resolve({ path, navigated: true });
     },
-    click: (ref) => {
+    click: (ref, destructive) => {
       log.push(`click ${ref}`);
       const node = APP[path]?.find((n) => n.ref === ref);
       if (!node) return Promise.reject(new Error('gone'));
+      if (destructive) site.onHeld?.(ref);
       const before = path;
       if (node.to) path = node.to;
       return Promise.resolve({ path, navigated: path !== before });
@@ -74,6 +80,10 @@ function fakeSite(over: Partial<Site> = {}) {
     value: () => Promise.resolve(null),
     links: () => Promise.resolve({}),
     network: () => Promise.resolve([]),
+    release: (id, allow) => {
+      log.push(`release ${id} ${allow ? 'allow' : 'deny'}`);
+      return Promise.resolve();
+    },
     ...over,
   };
   return site;
@@ -112,12 +122,14 @@ function setup({
   cap = 20,
   mode = 'ask-unsure',
   themeFit,
+  origin = 'http://x',
 }: {
   site?: ReturnType<typeof fakeSite>;
   brain?: Brain;
   cap?: number;
   mode?: RunState['mode'];
   themeFit?: RunDeps['themeFit'];
+  origin?: string;
 } = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
@@ -129,7 +141,7 @@ function setup({
       brain,
       ledger,
       budget: new BudgetGuard(),
-      origin: 'http://x',
+      origin,
       emit: (e) => events.push(...e),
       actionDelayMs: 0,
     },
@@ -149,7 +161,7 @@ const card = (s: RunState | undefined, kind: string) =>
   s?.chat.find((c) => c.type === 'state' && c.stateKind === kind && c.answer === undefined);
 
 describe('RealRun crawl (coverage gate)', () => {
-  it('reaches every route, tries every primary control, skips the destructive one, and ends', async () => {
+  it('reaches every route, tries every primary control (destructive ones through the gate), and ends', async () => {
     const { run, site, state } = setup();
     run.start();
     await until(() => Boolean(card(state(), 'login-wall')));
@@ -160,7 +172,8 @@ describe('RealRun crawl (coverage gate)', () => {
     expect(s?.routes.map((r) => r.path)).toEqual(['/', '/b', '/c', '/login']);
     expect(s?.routes.every((r) => r.status === 'done')).toBe(true);
     expect(s?.controlsTried.done).toBe(s?.controlsTried.total);
-    expect(site.log).not.toContain('click del');
+    // P8: no longer skipped; the tap goes through the gate (its write would be held).
+    expect(site.log).toContain('click del');
     expect(site.log).toContain('type name fitts-test message');
     // The replayed log equals the run's own state.
     expect(JSON.parse(JSON.stringify(s))).toEqual(JSON.parse(JSON.stringify(run.state)));
@@ -368,5 +381,95 @@ describe('theme-fit (§8.3)', () => {
     await until(() => fits.state()?.phase === 'done');
     expect(fits.state()?.chat.some((c) => c.type === 'lookfeel')).toBe(false);
     fits.run.dispose();
+  });
+});
+
+describe('the permission gate and modes (§13)', () => {
+  /** Main holds the DELETE that "Delete everything" sends. */
+  const withGate = (run: RealRun, site: ReturnType<typeof fakeSite>) => {
+    site.onHeld = () => run.held({ id: 'h1', method: 'DELETE', url: 'http://x/api/items/1' });
+  };
+
+  it('holds the DELETE from a destructive tap until the user answers; Don’t do it fails it', async () => {
+    const { run, site, state } = setup();
+    withGate(run, site);
+    run.start();
+    await until(() => Boolean(state()?.gate));
+    expect(state()?.gate).toMatchObject({
+      action: 'Delete everything',
+      route: '/',
+      heldRequest: 'DELETE /api/items/1',
+    });
+    expect(state()?.activity).toBe('waiting-on-user');
+    const step = state()?.step ?? 0;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(state()?.step).toBe(step); // nothing else happens while the gate is open
+    expect(site.log.filter((l) => l.startsWith('release'))).toEqual([]);
+    run.respondGate(state()?.gate?.id ?? '', 'deny');
+    expect(site.log).toContain('release h1 deny');
+    expect(state()?.gate).toBeUndefined();
+    expect(
+      state()?.chat.some(
+        (c) => c.type === 'fitts.message' && c.text === "Okay, I won't tap it. Moving on.",
+      ),
+    ).toBe(true);
+    await until(() => (state()?.step ?? 0) > step);
+    run.dispose();
+  });
+
+  it('Allow once sends it; Dangerous mode on localhost sends it without asking', async () => {
+    const allow = setup();
+    withGate(allow.run, allow.site);
+    allow.run.start();
+    await until(() => Boolean(allow.state()?.gate));
+    allow.run.respondGate(allow.state()?.gate?.id ?? '', 'allow');
+    expect(allow.site.log).toContain('release h1 allow');
+    allow.run.dispose();
+
+    const danger = setup({ mode: 'dangerous', origin: 'http://localhost:5173' });
+    withGate(danger.run, danger.site);
+    danger.run.start();
+    await until(() => danger.site.log.includes('release h1 allow'));
+    expect(danger.state()?.gate).toBeUndefined();
+    danger.run.dispose();
+  });
+
+  it('Dangerous mode off localhost still asks', async () => {
+    const remote = setup({ mode: 'dangerous', origin: 'https://example.com' });
+    withGate(remote.run, remote.site);
+    remote.run.start();
+    await until(() => Boolean(remote.state()?.gate));
+    remote.run.dispose();
+    expect(remote.site.log).toContain('release h1 deny');
+  });
+
+  it('Ask every action asks before each tap; Skip it skips that control', async () => {
+    const { run, site, state } = setup({ mode: 'ask-every' });
+    run.start();
+    const question = () =>
+      state()?.chat.find((c) => c.type === 'question' && c.answer === undefined);
+    await until(() => Boolean(question()));
+    expect(question()).toMatchObject({
+      text: 'Can I tap Open B?',
+      options: ['Go ahead', 'Skip it'],
+    });
+    expect(site.log.some((l) => l.startsWith('click'))).toBe(false);
+    run.answer(question()?.id ?? '', 'Skip it');
+    await until(() => Boolean(question()));
+    expect(site.log.some((l) => l.startsWith('click'))).toBe(false);
+    run.answer(question()?.id ?? '', 'Go ahead');
+    await until(() => site.log.some((l) => l.startsWith('click')));
+    run.dispose();
+  });
+
+  it('Plan only never clicks or types', async () => {
+    const { run, site, state } = setup({ mode: 'plan' });
+    run.start();
+    await until(() => Boolean(card(state(), 'login-wall')) || state()?.phase === 'done');
+    expect(site.log.some((l) => l.startsWith('click') || l.startsWith('type'))).toBe(false);
+    expect(
+      state()?.chat.some((c) => c.type === 'fitts.message' && c.text.includes('Plan only')),
+    ).toBe(true);
+    run.dispose();
   });
 });

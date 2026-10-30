@@ -12,10 +12,12 @@ import {
 } from '@fitts/schema';
 import type { BudgetGuard } from '../ledger/budget';
 import type { CostLedger } from '../ledger/ledger';
-import type { AxSnapshot } from '../protocol';
+import type { AxSnapshot, HeldRequest } from '../protocol';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
-import { Coverage, routeOf } from '../crawler/coverage';
+import { Coverage, DESTRUCTIVE, routeOf } from '../crawler/coverage';
+import { copy } from '../../renderer/copy';
+import { format } from '../../renderer/lib/format';
 import { ProbeRunner } from '../crawler/probes';
 import { aggregate } from '../review/aggregate';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
@@ -74,6 +76,12 @@ export class RealRun {
   private readonly retried = new Set<string>();
   /** What the reviewer panel gets for each route, and when Fitts was first there. */
   private themeAsked = false;
+  /** The open "Can I …?" question (Ask every action), resolved false if the run moves on. */
+  private pendingAsk: ((ok: boolean) => void) | undefined;
+  /** The request the gate modal is holding, and the action that sent it (§13). */
+  private heldReq: { held: HeldRequest; gateId: string } | undefined;
+  private acting: { name: string; route: string } | undefined;
+  private planSaid = false;
   private directions: Direction[] = [];
   private readonly pages = new Map<
     string,
@@ -297,6 +305,120 @@ export class RealRun {
     });
   }
 
+  /** Plan only and Ask every action, for a click or typing (§13). False skips the control. */
+  private async mayAct(
+    action: Extract<Action, { kind: 'click' | 'type' }>,
+    from: string,
+  ): Promise<boolean> {
+    const mode = this.state.mode;
+    if (mode === 'plan') {
+      if (!this.planSaid) {
+        this.planSaid = true;
+        this.say('You picked Plan only, so I’ll look at each control without touching it.');
+      }
+      this.emit([{ type: 'now.changed', nowText: `Looking at ${action.name || 'a control'}` }]);
+      this.coverage.skip(from, action.ref, 'Plan only: looked, didn’t touch');
+      return false;
+    }
+    if (mode !== 'ask-every') return true;
+    const verb = action.kind === 'type' ? `type in ${action.name}` : `tap ${action.name}`;
+    const ok = await this.ask(format(copy.fitts.askToAct, { action: verb }));
+    if (!ok) {
+      this.coverage.skip(from, action.ref, 'you skipped it');
+      this.say(copy.fitts.skippedAction);
+    }
+    return ok && !this.finished;
+  }
+
+  /** A blocking "Can I …?" question with Go ahead / Skip it. */
+  private ask(text: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const id = this.id();
+      this.emit([
+        {
+          type: 'chat.item',
+          item: {
+            id,
+            type: 'question',
+            blocking: true,
+            text,
+            options: [copy.fitts.goAhead, copy.fitts.skipIt],
+          },
+        },
+        { type: 'waiting.changed', waitingFor: `question:${id}` },
+      ]);
+      this.setActivity('waiting-on-user');
+      const done = (ok: boolean) => {
+        this.pendingAsk = undefined;
+        this.handlers.delete(id);
+        resolve(ok);
+      };
+      this.pendingAsk = done;
+      this.handlers.set(id, (answer) => {
+        if (!this.finished && this.state.activity === 'waiting-on-user') this.setActivity('acting');
+        done(answer === copy.fitts.goAhead);
+      });
+    });
+  }
+
+  /**
+   * A write from Fitts's own action was held at the network (§13). Dangerous mode on localhost
+   * lets it through; every other mode opens the gate modal and waits.
+   */
+  held(held: HeldRequest): void {
+    if (this.finished) {
+      void this.deps.site.release(held.id, false);
+      return;
+    }
+    const action = this.acting?.name ?? 'that';
+    let path = held.url;
+    try {
+      path = new URL(held.url).pathname;
+    } catch {
+      // Keep the URL.
+    }
+    if (this.state.mode === 'dangerous' && isLocal(this.deps.origin)) {
+      void this.deps.site.release(held.id, true);
+      this.say(format(copy.fitts.gateSkippedDangerous, { action }));
+      return;
+    }
+    const gateId = `gate-${held.id}`;
+    this.heldReq = { held, gateId };
+    this.emit([
+      {
+        type: 'gate.requested',
+        gate: {
+          id: gateId,
+          action,
+          route:
+            this.acting?.route ??
+            routeOf(this.state.routes.find((r) => r.status === 'testing')?.path ?? '/'),
+          heldRequest: `${held.method} ${path}`,
+          testing: 'H3 user control and H5 error prevention',
+        },
+      },
+      { type: 'waiting.changed', waitingFor: 'gate' },
+    ]);
+    this.setActivity('waiting-on-user');
+  }
+
+  /** The gate modal's answer: send or fail the held request, then carry on (§13). */
+  respondGate(gateId: string, decision: 'deny' | 'other' | 'allow'): void {
+    const h = this.heldReq;
+    if (!h || h.gateId !== gateId) return;
+    this.heldReq = undefined;
+    void this.deps.site.release(h.held.id, decision === 'allow');
+    this.emit([{ type: 'gate.decided', gateId, decision }]);
+    this.say(
+      decision === 'allow'
+        ? copy.fitts.gateAllowed
+        : decision === 'other'
+          ? copy.fitts.gateOther
+          : copy.fitts.gateDenied,
+    );
+    this.resumeFromCard();
+  }
+
   /**
    * Theme-fit, alongside the crawl: when the look doesn't suit who the site is for, post the
    * lookfeel card and 3 directions (§8.3). Autonomous picks the first (closest to the brief).
@@ -443,6 +565,13 @@ export class RealRun {
       this.emit([{ type: 'step.finished', step }]);
       return;
     }
+    // The mode, read at each action (§13): Plan only looks; Ask every action asks first.
+    if (action.kind !== 'navigate' && !(await this.mayAct(action, from))) {
+      this.emit([{ type: 'step.finished', step }]);
+      this.syncCoverage();
+      return;
+    }
+    this.acting = action.kind === 'click' ? { name: action.name, route: routeOf(from) } : undefined;
     try {
       if (action.kind === 'navigate') {
         if (this.coverage.routeDone(from)) this.coverage.setStatus(from, 'done');
@@ -452,9 +581,10 @@ export class RealRun {
       } else {
         const result =
           action.kind === 'click'
-            ? await this.deps.site.click(action.ref)
+            ? await this.deps.site.click(action.ref, DESTRUCTIVE.test(action.name))
             : await this.deps.site.type(action.ref, action.text);
         this.coverage.markTried(from, action.ref);
+        this.acting = undefined;
         const errored = await this.probes.afterAction(action, from, result);
         const key = `${routeOf(from)} ${action.ref}`;
         if (errored && !this.retried.has(key)) {
@@ -628,6 +758,8 @@ export class RealRun {
 
   dispose(): void {
     this.finished = true;
+    this.pendingAsk?.(false);
+    if (this.heldReq) void this.deps.site.release(this.heldReq.held.id, false);
     if (this.clock) clearInterval(this.clock);
     this.abort.abort();
     this.kick();
@@ -648,6 +780,7 @@ export class RealRun {
   /** ⌘.: abort the model call in flight, then ask what to do (§6.1). */
   stopAction(): void {
     if (this.finished) return;
+    this.pendingAsk?.(false);
     this.abort.abort();
     this.abort = new AbortController();
     this.emit([{ type: 'now.changed' }]);
@@ -675,6 +808,7 @@ export class RealRun {
 
   takeWheel(): void {
     if (this.finished || this.state.activity === 'user-driving') return;
+    this.pendingAsk?.(false);
     this.emit([
       { type: 'waiting.changed' },
       { type: 'activity.changed', activity: 'user-driving' },
@@ -771,5 +905,20 @@ export class RealRun {
   updateBrief(brief: RunState['brief']): void {
     this.emit([{ type: 'brief.updated', brief }]);
     this.say('Got it, I’ll keep that in mind from here.');
+  }
+}
+
+/** Dangerous mode works only on the user's own machine (§13). */
+function isLocal(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname;
+    return (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '[::1]' ||
+      host.endsWith('.localhost')
+    );
+  } catch {
+    return false;
   }
 }

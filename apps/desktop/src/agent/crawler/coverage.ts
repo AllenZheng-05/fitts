@@ -4,7 +4,7 @@
 import type { RunState } from '@fitts/schema';
 import type { AxNode, AxSnapshot } from '../protocol';
 
-/** Names Fitts never clicks without the permission gate (§13). */
+/** Names that put a click through the permission gate (§13): its writes are held. */
 export const DESTRUCTIVE =
   /\b(delete|remove|pay|purchase|buy|checkout|transfer|unsubscribe|cancel plan|close account)\b/i;
 
@@ -74,7 +74,6 @@ export class Coverage {
         role: n.role,
         ...(n.type ? { type: n.type } : {}),
         tried: false,
-        ...(DESTRUCTIVE.test(n.name) ? { skipped: 'needs your OK first' } : {}),
       });
     }
   }

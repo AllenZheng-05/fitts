@@ -14,7 +14,13 @@ import {
 } from '@fitts/schema';
 import { app, BrowserWindow, ipcMain, utilityProcess, type UtilityProcess } from 'electron';
 import { join } from 'node:path';
-import type { AgentMessage, MainMessage, SiteOp, SiteOpResult } from '../agent/protocol';
+import type {
+  AgentMessage,
+  HeldRequest,
+  MainMessage,
+  SiteOp,
+  SiteOpResult,
+} from '../agent/protocol';
 import { devRepoRoot } from './dev-root';
 import type { Secrets } from './secrets';
 import { RunLog, runDir, SAFE_ID } from './store/run-log';
@@ -47,6 +53,11 @@ export class RunHost {
   /** Tells the agent a project's live site changed (running, failed, …). */
   siteStatus(status: SiteStatus): void {
     this.send({ kind: 'siteStatus', status });
+  }
+
+  /** A write from Fitts's action, held for the gate (§13). */
+  siteHeld(projectId: string, held: HeldRequest): void {
+    this.send({ kind: 'siteHeld', projectId, held });
   }
 
   /** Called when a run starts a new step (main saves a step shot for rewind). */

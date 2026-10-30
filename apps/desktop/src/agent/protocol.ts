@@ -37,7 +37,8 @@ export interface AxSnapshot {
 /** Browser actions the agent asks main to run on a project's site window (§1: RPC). */
 export type SiteOp =
   | { op: 'navigate'; path: string }
-  | { op: 'click'; ref: string }
+  /** `destructive`: the control's name says it deletes or pays; any write it sends is held. */
+  | { op: 'click'; ref: string; destructive?: boolean }
   | { op: 'type'; ref: string; text: string }
   | { op: 'press'; key: string }
   | { op: 'back' }
@@ -51,7 +52,9 @@ export type SiteOp =
   | { op: 'viewport' }
   | { op: 'value'; ref: string }
   | { op: 'links'; hrefs: string[] }
-  | { op: 'network' };
+  | { op: 'network' }
+  /** The gate's answer for a held request (§13): send it, or fail it. */
+  | { op: 'release'; id: string; allow: boolean };
 
 /** What an action caused: page feedback, the requests it started, and the target's box. */
 export interface OpTrace {
@@ -70,7 +73,15 @@ export type SiteOpResult =
   | { op: 'items'; items: ProbeItem[] }
   | { op: 'value'; value: string | null }
   | { op: 'links'; statuses: Record<string, number> }
-  | { op: 'network'; requests: RequestRecord[] };
+  | { op: 'network'; requests: RequestRecord[] }
+  | { op: 'released' };
+
+/** A request paused at `Fetch.requestPaused`, waiting for the gate. */
+export interface HeldRequest {
+  id: string;
+  method: string;
+  url: string;
+}
 
 export type MainMessage =
   | { kind: 'call'; call: EngineCall }
@@ -79,6 +90,8 @@ export type MainMessage =
   | { kind: 'testKey'; id: number; name: KeyName; value: string }
   /** A project's live site changed (running / failed / unavailable). */
   | { kind: 'siteStatus'; status: SiteStatus }
+  /** A write Fitts's action sent was held for the gate (§13: Fetch interception). */
+  | { kind: 'siteHeld'; projectId: string; held: HeldRequest }
   | { kind: 'siteResult'; id: number; ok: true; result: SiteOpResult }
   | { kind: 'siteResult'; id: number; ok: false; error: string };
 

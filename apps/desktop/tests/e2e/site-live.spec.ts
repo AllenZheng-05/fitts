@@ -98,6 +98,7 @@ async function runState(page: Page) {
       overlays: { attention?: { ref: string } };
       chat: { type: string; stateKind?: string; text?: string }[];
       step: number;
+      gate?: { id: string; action: string; heldRequest: string };
     };
   });
 }
@@ -126,20 +127,39 @@ test('the real crawl reaches every route and tries every primary control (covera
     .poll(async () => (await runState(page)).overlays.attention?.ref ?? null, { timeout: 30_000 })
     .not.toBeNull();
 
+  // P8: Fitts taps "Delete conversation" through the gate; its DELETE is held at the network
+  // until the user answers, and "Don't do it" fails it.
+  const gates: { action: string; heldRequest: string; sentBeforeAnswer: boolean }[] = [];
   await expect
     .poll(
-      async () =>
-        (await runState(page)).chat.some(
+      async () => {
+        const now = await runState(page);
+        if (now.gate) {
+          const res = await fetch(`http://localhost:${PORT}/api/conversations/12`);
+          gates.push({ ...now.gate, sentBeforeAnswer: res.status !== 200 });
+          await page.getByRole('button', { name: "Don't do it" }).click();
+        }
+        return now.chat.some(
           (c) =>
             c.stateKind === 'nothing-found' ||
             (c.type === 'fitts.message' && /All done/.test(c.text ?? '')),
-        ),
+        );
+      },
       {
         timeout: 200_000,
         intervals: [2000],
       },
     )
     .toBe(true);
+  expect(gates).toEqual([
+    expect.objectContaining({
+      action: 'Delete conversation',
+      route: '/contacts/grandma',
+      heldRequest: 'DELETE /api/conversations/12',
+      sentBeforeAnswer: false,
+    }),
+  ]);
+  expect((await fetch(`http://localhost:${PORT}/api/conversations/12`)).status).toBe(200);
   const s = await runState(page);
   const paths = s.routes.map((r) => r.path);
   for (const p of [

@@ -15,7 +15,8 @@ export interface Site {
   snapshot(): Promise<AxSnapshot>;
   screenshot(): Promise<{ jpegBase64: string; width: number; height: number }>;
   navigate(path: string): Promise<ActionResult>;
-  click(ref: string): Promise<ActionResult>;
+  /** `destructive`: any write the click sends is held for the gate (§13). */
+  click(ref: string, destructive?: boolean): Promise<ActionResult>;
   type(ref: string, text: string): Promise<ActionResult>;
   press(key: string): Promise<ActionResult>;
   back(): Promise<ActionResult>;
@@ -28,6 +29,8 @@ export interface Site {
   value(ref: string): Promise<string | null>;
   links(hrefs: string[]): Promise<Record<string, number>>;
   network(): Promise<RequestRecord[]>;
+  /** The gate's answer for a held request (§13). */
+  release(id: string, allow: boolean): Promise<void>;
 }
 
 export class SiteRpc {
@@ -70,7 +73,8 @@ export class SiteRpc {
       snapshot: async () => (await expect({ op: 'snapshot' }, 'snapshot')).snapshot,
       screenshot: () => expect({ op: 'screenshot' }, 'screenshot'),
       navigate: (path) => action({ op: 'navigate', path }),
-      click: (ref) => action({ op: 'click', ref }),
+      click: (ref, destructive) =>
+        action({ op: 'click', ref, ...(destructive ? { destructive: true } : {}) }),
       type: (ref, text) => action({ op: 'type', ref, text }),
       press: (key) => action({ op: 'press', key }),
       back: () => action({ op: 'back' }),
@@ -88,6 +92,9 @@ export class SiteRpc {
       value: async (ref) => (await expect({ op: 'value', ref }, 'value')).value,
       links: async (hrefs) => (await expect({ op: 'links', hrefs }, 'links')).statuses,
       network: async () => (await expect({ op: 'network' }, 'network')).requests,
+      release: async (id, allow) => {
+        await expect({ op: 'release', id, allow }, 'released');
+      },
     };
   }
 }

@@ -5,20 +5,28 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P8 — the permission gate, Fetch interception and per-mode behavior (§13).
-  Acceptance: `DELETE /api/conversations/12` is held until the user answers; Ask every action
-  asks before each click; Plan only never clicks.
-- **Next concrete step:** a gate classifier (risk and confidence per action) in the agent, read
-  against the mode at each action. In main, CDP `Fetch.enable` for non-GET requests on the site
-  window, with destructive ones held at `requestPaused` while the gate modal is open, released by
-  `continueRequest` or `failRequest`. Log `gate.requested` and `gate.decided` events. Then let
-  the crawler click destructive controls *through* the gate, instead of skipping them as in P4.
+- **Current:** P9 — the fix pipeline, verification, PRs, the preview branch, and
+  undo/redo/retry (§9). Acceptance: at least 5 verified PRs on the demo/chat mirror; Autonomous
+  opens a PR without asking; one deliberately failing fix is rolled back, then retried; undo
+  closes a PR; a merged PR's undo opens a revert PR.
+- **Constraints for P9:**
+  - Work only in `.fitts-worktrees/`.
+  - Muse Code in WSL isn't logged in (NEEDS-ALLEN 1), so use the in-process Wonder fixer
+    fallback. That allows at most one real Wonder fix job; dev fixes use Spark contributor.
+  - Test PRs against a LOCAL bare git repo with `FITTS_GH_DRY_RUN=1`. No real `gh`, and no
+    pushes.
+  - Write `scripts/real-pr-check.md` for Allen.
+- **Next concrete step:** read §9 fully, then build `agent/fix/`: worktree per fix, the source
+  locator (`data-fitts-src`), the fixer (in-process: read file → model edit → write), the
+  verify step (re-run the finding's probe on the live dev server from the worktree), and the
+  git and gh layer behind an interface with a dry-run backend.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P8: permission gate + Fetch interception + modes | see `git log --grep "P8:"` | Live (e2e on demo/chat): `DELETE /api/conversations/12` from Fitts tapping "Delete conversation" is held at CDP Fetch; the gate modal shows it; the server hasn't received it; "Don't do it" fails it and conversation 12 survives. Unit: Ask every action asks before each tap; Plan only never clicks or types; Dangerous mode releases on localhost only. |
 | P7: real interview + theme-fit | see `git log --grep "P7:"` | Live (`tests/bench/p7.bench.ts`, under $0.01): on demo/chat the first answer filled For ("Family messaging for grandparents") and Who ("Older adults, grandparents"); on demo/hartwell theme-fit said `fits: false` with 3 directions. The recorded fixtures replay in unit tests. |
 | P6: reviewers, aggregator, evidence check, suggestions lane | see `git log --grep "P6:"` | `pnpm bench:chat` (real panel, Economy plus contributor, about $0.026 a run): recall 20/25 (80%), 2 false positives at severity ≥2, on two runs. Offline (probes only): 18/25 and 0. The aggregator, evidence check and rubric are unit-tested (`tests/agent/review.test.ts`), and the scorer too (`tests/bench/score.test.ts`). |
 | P5: deterministic probes | see `git log --grep "P5:"` | All 18 probe-detectable planted issues on demo/chat are caught by their probe in the live crawl (e2e reads `probe.result` from the run log). Each in-page probe passes and fails on fixture pages in real Chromium (`tests/e2e/probes.spec.ts`). The analyses are unit-tested (`packages/probes/tests`, `tests/agent/probes.test.ts`). |

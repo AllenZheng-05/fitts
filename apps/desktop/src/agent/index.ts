@@ -306,6 +306,9 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
     case 'answerQuestion':
       run.answer(String(args[0]), String(args[1]));
       return true;
+    case 'respondGate':
+      run.respondGate(String(args[0]), args[1] as 'deny' | 'other' | 'allow');
+      return true;
     case 'pickDirection':
       run.pickDirection(String(args[0]));
       return true;
@@ -391,6 +394,15 @@ port.on('message', (e: { data: MainMessage }) => {
         if (list.at(-1) !== path) visited.set(projectId, [...list, path].slice(-20));
       }
       if (status === 'failed') realRuns.get(projectId)?.siteDown();
+    } else if (message.kind === 'siteHeld') {
+      const run = realRuns.get(message.projectId);
+      // Only Fitts's own actions are held; with no run to ask, the write doesn't go out.
+      if (run) run.held(message.held);
+      else
+        siteRpc
+          .for(message.projectId)
+          .release(message.held.id, false)
+          .catch(() => undefined);
     } else if (message.kind === 'siteResult') {
       siteRpc.resolve(
         message.id,

@@ -1444,3 +1444,50 @@ screencast fallback is needed.
 - **The unit test's fake app gained a third page.** With it, the back-mid-flow probe finds a
   real "no back or cancel" problem there, so that crawl now ends on its own with one finding,
   instead of on the nothing-found card.
+
+## Phase 2 — P8: the permission gate, Fetch interception and modes
+
+- **Enforcement is at the network, in main.** Each site window enables CDP `Fetch` for XHR and
+  Fetch requests at the Request stage (alongside the P5 Network recorder on the same debugger).
+  - GET, HEAD and OPTIONS always pass.
+  - **A write is held** only while Fitts itself is acting (a traced click or typing), and only
+    if it is: a DELETE; a write to a payment-like path (pay, checkout, purchase, billing,
+    charge, subscribe); or any write while Fitts taps a control named like a destructive one
+    (the §13 name list).
+  - Held requests go to the agent (`siteHeld`), which answers with a `release` op:
+    `continueRequest` or `failRequest('BlockedByClient')`.
+  - **The user's own clicks are never held,** while driving or otherwise. The gate guards
+    Fitts's actions, not the user's.
+  - A held request with no run to ask is failed. A run that's disposed with one held fails it.
+- **The crawler now taps destructive controls through the gate.** P4 skipped them ("needs your
+  OK first"). The tap happens, its write waits at the network, and the gate modal shows the
+  real request (`DELETE /api/conversations/12`).
+  - A purely client-side delete with no request isn't caught. Accepted for now: the spec's
+    enforcement is the network, which holds even when the click was misclassified.
+  - The modal's Phase 1 copy ("I want to tap…") reads slightly early, since the tap has
+    happened and the request is what's held. The modal's "I'm holding" row shows exactly that.
+- **The gate's answers:**
+  - **Allow once** sends the request.
+  - **Don't do it** and **Test something else** fail it.
+  - Each answer is logged (`gate.requested`, then `gate.decided` with the decision) and
+    acknowledged in chat with the Phase 1 lines. Nothing else happens while the gate is open:
+    activity is `waiting-on-user`, and `waitingFor` is `gate`.
+- **Dangerous mode** releases held writes without asking, with "Dangerous mode is on, so I
+  tapped …". It only does this when the run's origin is localhost (localhost, 127.0.0.1, ::1 or
+  `*.localhost`). Anywhere else it asks like every other mode.
+- **Modes are read at each action:**
+  - **Plan only:** never clicks or types. Each control is marked "Plan only: looked, didn't
+    touch", and Fitts says once that it's only looking. Navigation and probes still run.
+  - **Ask every action:** a blocking question before each tap or typing ("Can I tap NEXT?",
+    Go ahead / Skip it). "Skip it" marks the control skipped. A question still open when the
+    user takes the wheel, presses ⌘. or stops the run resolves as Skip, so the loop can't hang.
+  - **Ask when unsure:** acts. The confidence check (< 0.6 asks) waits until the crawl has a
+    confidence signal; the explorer and the Spark tool loop have none yet.
+  - **Autonomous:** acts.
+- **Fix and PR rules per mode** belong to the fix pipeline (P9).
+- **Acceptance:**
+  - **Live (e2e on demo/chat):** the gate showed "Delete conversation" on /contacts/grandma
+    holding `DELETE /api/conversations/12`. The server hadn't received it before the answer.
+    "Don't do it" failed it, and conversation 12 still exists.
+  - **Unit (RealRun):** Ask every action asks before each tap, Plan only never clicks or
+    types, Allow once sends, and Dangerous mode sends on localhost but asks elsewhere.

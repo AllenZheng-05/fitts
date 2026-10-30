@@ -38,6 +38,7 @@ void app.whenReady().then(() => {
   host.onStep = (projectId, runId, step) => void sites.shot(projectId, runId, step);
   host.siteOps = (projectId, op) => sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
+  sites.onHeld = (projectId, held) => host.siteHeld(projectId, held);
   host.start();
   registerKeys(secrets, host);
   projects.register();

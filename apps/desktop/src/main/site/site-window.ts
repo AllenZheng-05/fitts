@@ -4,7 +4,7 @@
 import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
 import PROBES from '@fitts/probes/page.js?raw';
 import type { ProbeItem, SiteInput, SiteNav, SiteRect, SiteStatus } from '@fitts/schema';
-import type { AxSnapshot, OpTrace } from '../../agent/protocol';
+import type { AxSnapshot, HeldRequest, OpTrace } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 
 /** Isolated world for Fitts's scripts (refs, rects); the page can't see them. */
@@ -38,6 +38,8 @@ export class SiteWindow {
     private readonly baseUrl: string,
     private readonly onFrame: (jpeg: Buffer, width: number, height: number) => void,
     private readonly onStatus: (status: Partial<SiteStatus>) => void,
+    /** A write from Fitts's action, held for the gate (§13). */
+    private readonly onHeld: (held: HeldRequest) => void = () => undefined,
   ) {
     this.origin = new URL(baseUrl).origin;
     const ses = session.fromPartition(`persist:fitts-site-${projectId}`);
@@ -79,6 +81,8 @@ export class SiteWindow {
 
   private requests = new Map<string, RequestRecord>();
   private drained: RequestRecord[] = [];
+  /** Each record's CDP network id (held requests are matched by it). */
+  private readonly networkIds = new WeakMap<RequestRecord, string>();
   /** The control being used right now, so requests can be traced back to it. */
   private acting: string | undefined;
   /** Endpoints whose big JSON body was already counted. */
@@ -92,7 +96,21 @@ export class SiteWindow {
       return; // Already attached (devtools open): no network probe for this window.
     }
     void dbg.sendCommand('Network.enable').catch(() => undefined);
+    // The gate's network enforcement (§13): API calls pause here; writes from Fitts's own
+    // actions that look destructive wait for the user's answer.
+    void dbg
+      .sendCommand('Fetch.enable', {
+        patterns: [
+          { urlPattern: '*', resourceType: 'XHR', requestStage: 'Request' },
+          { urlPattern: '*', resourceType: 'Fetch', requestStage: 'Request' },
+        ],
+      })
+      .catch(() => undefined);
     dbg.on('message', (_e, method: string, params: Record<string, unknown>) => {
+      if (method === 'Fetch.requestPaused') {
+        this.paused(params);
+        return;
+      }
       const id = typeof params['requestId'] === 'string' ? params['requestId'] : '';
       if (method === 'Network.requestWillBeSent') {
         const req = params['request'] as { url: string; method: string };
@@ -111,6 +129,7 @@ export class SiteWindow {
           ...(this.acting ? { ref: this.acting } : {}),
         };
         this.requests.set(id, record);
+        this.networkIds.set(record, id);
         this.drained.push(record);
         if (this.drained.length > 2000) this.drained.shift();
       } else if (method === 'Network.responseReceived') {
@@ -144,6 +163,39 @@ export class SiteWindow {
         }
       }
     });
+  }
+
+  /** Fitts is acting (a traced click or typing): only its writes can be held. */
+  private gating = false;
+  /** The current click's control is named like a destructive one (delete, pay, …). */
+  private destructiveAct = false;
+  /** Held requests: Fetch id → network id. */
+  private readonly held = new Map<string, string>();
+
+  private paused(params: Record<string, unknown>): void {
+    const id = typeof params['requestId'] === 'string' ? params['requestId'] : '';
+    const networkId = typeof params['networkId'] === 'string' ? params['networkId'] : '';
+    const req = params['request'] as { url: string; method: string };
+    if (!this.gating || !destructiveRequest(req.method, req.url, this.destructiveAct)) {
+      void this.wc.debugger
+        .sendCommand('Fetch.continueRequest', { requestId: id })
+        .catch(() => undefined);
+      return;
+    }
+    this.held.set(id, networkId);
+    this.onHeld({ id, method: req.method, url: req.url });
+  }
+
+  /** The gate's answer: send the held request, or fail it as if the network refused. */
+  async release(id: string, allow: boolean): Promise<void> {
+    if (!this.held.has(id)) return;
+    this.held.delete(id);
+    await this.wc.debugger
+      .sendCommand(
+        allow ? 'Fetch.continueRequest' : 'Fetch.failRequest',
+        allow ? { requestId: id } : { requestId: id, errorReason: 'BlockedByClient' },
+      )
+      .catch(() => undefined);
   }
 
   /** Requests since the last drain (the agent analyzes them per route). */
@@ -425,6 +477,21 @@ export class SiteWindow {
   private async traced(
     ref: string,
     act: () => Promise<SiteRect | null>,
+    destructive = false,
+  ): Promise<{ op: 'action'; path: string; navigated: boolean; trace: OpTrace }> {
+    this.gating = true;
+    this.destructiveAct = destructive;
+    try {
+      return await this.tracedInner(ref, act);
+    } finally {
+      this.gating = false;
+      this.destructiveAct = false;
+    }
+  }
+
+  private async tracedInner(
+    ref: string,
+    act: () => Promise<SiteRect | null>,
   ): Promise<{ op: 'action'; path: string; navigated: boolean; trace: OpTrace }> {
     const before = this.path();
     const armed = await this.probes<boolean>('P.feedbackArm(); return true;').catch(() => false);
@@ -440,8 +507,12 @@ export class SiteWindow {
     const mine = () =>
       this.drained.filter((r) => r.startMs >= t0 && (r.type === 'Fetch' || r.type === 'XHR'));
     const deadline = Date.now() + 10_000;
-    while (mine().some((r) => r.endMs === null) && Date.now() < deadline)
-      await new Promise((r) => setTimeout(r, 100));
+    // A request held for the gate isn't waited on: the user answers it later.
+    const waiting = () => {
+      const held = new Set(this.held.values());
+      return mine().some((r) => r.endMs === null && !held.has(this.networkIds.get(r) ?? ''));
+    };
+    while (waiting() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
     const feedback = armed
       ? await this.probes<Feedback>('return P.feedbackRead(F);').catch(() => null)
       : null;
@@ -450,8 +521,8 @@ export class SiteWindow {
   }
 
   /** A real click at the element's center, after scrolling it into view. */
-  click(ref: string) {
-    return this.traced(ref, () => this.clickAt(ref));
+  click(ref: string, destructive = false) {
+    return this.traced(ref, () => this.clickAt(ref), destructive);
   }
 
   private async clickAt(ref: string): Promise<SiteRect> {
@@ -534,4 +605,22 @@ export function longestArray(body: string): number {
     // Not JSON.
   }
   return 0;
+}
+
+/** §13: DELETE; a POST to a payment path; any write from a control named like a destructive one. */
+export function destructiveRequest(
+  method: string,
+  url: string,
+  destructiveControl: boolean,
+): boolean {
+  const m = method.toUpperCase();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(m)) return false;
+  if (m === 'DELETE' || destructiveControl) return true;
+  let path = url;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    // Keep the raw string.
+  }
+  return /\b(pay|payment|checkout|purchase|billing|charge|subscribe)\b/i.test(path);
 }
