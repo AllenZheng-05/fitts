@@ -9,6 +9,7 @@ import {
   type RunState,
   type SiteRect,
   type SiteStatus,
+  type VoiceEvent,
 } from '@fitts/schema';
 
 const bridge: FittsBridge = {
@@ -71,6 +72,32 @@ const bridge: FittsBridge = {
       const listener = (_e: unknown, status: SiteStatus) => handler(status);
       ipcRenderer.on(IPC.siteStatus, listener);
       return () => ipcRenderer.removeListener(IPC.siteStatus, listener);
+    },
+  },
+  voice: {
+    start: (mode, projectId) =>
+      ipcRenderer.invoke(IPC.voiceStart, mode, projectId) as Promise<{
+        ok: boolean;
+        reason?: string;
+      }>,
+    audio: (pcm) => ipcRenderer.send(IPC.voiceAudioIn, pcm),
+    end: () => ipcRenderer.send(IPC.voiceEnd),
+    cancel: () => ipcRenderer.send(IPC.voiceCancel),
+    speak: (text, voiceId, projectId) =>
+      ipcRenderer.invoke(IPC.voiceSpeak, text, voiceId, projectId) as Promise<{
+        ok: boolean;
+        id: number;
+      }>,
+    stopSpeaking: () => ipcRenderer.send(IPC.voiceStopSpeaking),
+    onEvent: (handler) => {
+      const listener = (_e: unknown, event: VoiceEvent) => handler(event);
+      ipcRenderer.on(IPC.voiceEvent, listener);
+      return () => ipcRenderer.removeListener(IPC.voiceEvent, listener);
+    },
+    onAudio: (handler) => {
+      const listener = (_e: unknown, id: number, pcm: ArrayBuffer) => handler(id, pcm);
+      ipcRenderer.on(IPC.voiceAudio, listener);
+      return () => ipcRenderer.removeListener(IPC.voiceAudio, listener);
     },
   },
 };

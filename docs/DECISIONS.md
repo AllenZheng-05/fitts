@@ -1621,3 +1621,54 @@ screencast fallback is needed.
 - **The Done screen has no Finding panel** (Phase 1 design), so the outline and mockup are
   seen during the audit. PR images (`--attach`) use the step shot. Attaching the outline is
   part of the real-PR check.
+
+## Phase 2 — P11: voice
+
+- **The split.** Main holds the sockets and the keys (`main/voice/`, inside the network
+  boundary). Its `TranscribeSession` speaks the V5 protocol: the key in the first JSON frame,
+  binary PCM, `endStream`, and the `keywords: ["Fitts"]` bias. Its `SpeechStream` uses
+  ElevenLabs Flash v2.5 stream-input with `pcm_24000`.
+  - The renderer captures the mic: a 24 kHz AudioContext (Chromium resamples), and a worklet
+    that batches 100ms s16le frames sent over IPC. It plays Fitts's voice through Web Audio.
+  - IPC is used instead of the spec's MessagePort: frames are small (4.8 KB each), and site
+    frames already go over IPC the same way.
+- **Mic permission.** The default session grants `media` only when every requested media type
+  is audio; everything else is denied. Site windows have their own sessions, which deny
+  everything. macOS's `askForMediaAccess` isn't wired yet (macOS is unverified).
+- **The worklet loads from a file.** Vite inlined it as a `data:` URL, which the CSP
+  (`script-src 'self'`) blocks, so mic capture failed silently. It's imported with
+  `?url&no-inline`.
+- **Tap to talk.** The first tap opens a PUSH_TO_TALK session and the mic, and partials show in
+  the message box (`micPartial`). The second tap ends the stream and sends the final text with
+  `spoken: true`. The final is the server's `speechComplete`, else the last partial, with an 8s
+  safety timeout.
+  - With no session (offline e2e, no Meta key, no mic, a denied permission), the button sends
+    Phase 1's canned transcript, so every Phase 1 test holds.
+- **Always listening.** One ENDPOINTING session while `talkMode` is `wake`, restarted every 55
+  minutes (before the 60-minute cap). Each finished turn goes through `parseVoiceCommand`:
+  - only utterances starting with Fitts (or Fitz, Fits, Fritz, optionally after "hey" or "ok")
+    count;
+  - "Fitts, stop" (or "stop it", "hold on", "pause") calls `stopAction`;
+  - any other "Fitts, …" is sent as a spoken message;
+  - a bare "stop" or "wait" does nothing.
+- **Barge-in.** Transcribe's `speechStart` event cuts Fitts off, with an 80ms fade.
+- **Speaking.** `speech.ts` keeps Phase 1's queue, cut-off, highlight and pulse. Only the
+  backend changed: ElevenLabs when Settings › Voice is "Fitts (ElevenLabs)", main has the key,
+  and the run isn't offline; otherwise `speechSynthesis`.
+  - A failed stream (bad voice, plan limits, network) falls back to the system voice for the
+    rest of the lines, instead of going quiet.
+  - The voice ID is a new Settings field, shown when ElevenLabs is chosen. Empty means
+    ElevenLabs' default voice.
+- **The live ElevenLabs check found that the account can't stream yet.** The free plan
+  refuses library voices via the API, and the account has none of its own. That needs Allen
+  (NEEDS-ALLEN 2); the fallback covers it meanwhile. Transcribe was verified live in V5.
+- **Costs.** Main reports stt seconds (from the bytes streamed) and tts characters. The agent
+  records them in the ledger against the active project's run (§11 prices: $0.18 an hour,
+  $0.00011 a character).
+- **Tests without a network or a real mic.**
+  - `tests/main/voice.test.ts`: the V5 protocol against a local WebSocket server.
+  - `tests/unit/voice-command.test.ts`: the "Fitts, …" rules.
+  - `tests/e2e/voice.spec.ts`: Chromium's fake audio device through the real capture path to a
+    local Transcribe server (`FITTS_TRANSCRIBE_URL`, which lets voice run in an otherwise
+    offline e2e), with partials in the box and the final sent as SPOKEN.
+  - What needs ears and a real mic is in `scripts/voice-check.md`.

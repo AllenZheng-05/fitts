@@ -1,26 +1,55 @@
 import type { RunState } from '@fitts/schema';
 import { useEffect, useRef } from 'react';
+import { listen, type Listening } from '../../lib/voice/session';
 import { cannedTranscript } from '../../mock/voice';
 import { sendFromComposer } from '../../state/actions';
 import { useUi } from '../../state/ui';
 
 /**
- * The mic button (§7.5): one tap starts listening, the next sends what was heard. Phase 1
- * has no speech-to-text, so the mock sends a canned transcript for the moment.
+ * The mic button (§7.5, SPEC-phase2 §14): one tap opens a Transcribe session and the mic, and
+ * partials show in the message box; the next tap ends it and sends the final text, spoken. With
+ * no session (offline, no key, no mic) it sends the moment's canned transcript, as in Phase 1.
  */
 export function useMicToggle(run: RunState | undefined) {
   const runRef = useRef(run);
+  const session = useRef<Listening | 'pending' | null>(null);
   useEffect(() => {
     runRef.current = run;
   });
+  useEffect(
+    () => () => {
+      const s = session.current;
+      if (s && s !== 'pending') s.cancel();
+    },
+    [],
+  );
   return () => {
     const ui = useUi.getState();
+    const current = runRef.current;
     if (!ui.micListening) {
-      ui.set({ micListening: true });
+      ui.set({ micListening: true, micPartial: '' });
+      if (!current) return;
+      session.current = 'pending';
+      void listen('PUSH_TO_TALK', current.projectId, {
+        partial: (text) => useUi.getState().set({ micPartial: text }),
+      }).then((l) => {
+        if (session.current !== 'pending') return l?.cancel();
+        session.current = l;
+      });
       return;
     }
     ui.set({ micListening: false });
-    const current = runRef.current;
-    if (current) sendFromComposer(current.projectId, cannedTranscript(current), { spoken: true });
+    const s = session.current;
+    session.current = null;
+    if (!current) return;
+    if (s && s !== 'pending') {
+      void s.finish().then((text) => {
+        useUi.getState().set({ micPartial: '' });
+        if (text.trim()) sendFromComposer(current.projectId, text.trim(), { spoken: true });
+      });
+      return;
+    }
+    useUi.getState().set({ micPartial: '' });
+    sendFromComposer(current.projectId, cannedTranscript(current), { spoken: true });
   };
 }

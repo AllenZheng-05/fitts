@@ -60,6 +60,14 @@ export class RunHost {
     this.send({ kind: 'siteHeld', projectId, held });
   }
 
+  /** Speech in and out, for the cost ledger (§11). */
+  voiceUsage(
+    projectId: string,
+    usage: { task: 'stt'; seconds: number } | { task: 'tts'; chars: number },
+  ): void {
+    if (projectId) this.send({ kind: 'voiceUsage', projectId, usage });
+  }
+
   /** Called when a run starts a new step (main saves a step shot for rewind). */
   onStep: ((projectId: string, runId: string, step: number) => void) | undefined;
   private readonly pending = new Map<number, (r: { ok: boolean; message: string }) => void>();

@@ -6,6 +6,7 @@ import { buildAppMenu } from './menu';
 import { RunHost } from './run-host';
 import { Secrets } from './secrets';
 import { FixHost } from './fix/fix-host';
+import { VoiceHost } from './voice';
 import { SiteManager } from './site/manager';
 import { ProjectStore } from './store/projects';
 import { createMainWindow, ICON_PATH } from './window';
@@ -21,10 +22,13 @@ registerAssetScheme();
 if (process.platform === 'win32') app.setAppUserModelId('app.fitts.desktop');
 
 void app.whenReady().then(() => {
-  // Phase 1 simulates mic and notification permission states; nothing real is granted.
-  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) =>
-    callback(false),
-  );
+  // The app's own page may use the microphone, audio only (SPEC-phase2 §14); nothing else is
+  // ever granted. Site windows have their own sessions, which deny everything.
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback, details) => {
+    const types = (details as { mediaTypes?: string[] }).mediaTypes ?? [];
+    callback(permission === 'media' && types.length > 0 && types.every((t) => t === 'audio'));
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media');
 
   // The window icon covers Windows and Linux; the macOS dock takes its own.
   app.dock?.setIcon(ICON_PATH);
@@ -44,6 +48,10 @@ void app.whenReady().then(() => {
       : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.onHeld = (projectId, held) => host.siteHeld(projectId, held);
+  new VoiceHost(
+    (name) => secrets.get(name),
+    (projectId, usage) => host.voiceUsage(projectId, usage),
+  ).register();
   host.start();
   registerKeys(secrets, host);
   projects.register();

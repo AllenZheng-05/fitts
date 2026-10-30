@@ -21,13 +21,19 @@ Then rerun the real-model V6 check (about $0.01):
 pnpm verify:v6
 ```
 
-## 2. Create the ElevenLabs "Fitts" voice (10 min) — P11
+## 2. Create the ElevenLabs "Fitts" voice, then the voice check (15 min) — P11
 
-**Why:** `ELEVENLABS_VOICE_ID` is not set in `.env.local`. Without it, Fitts speaks with a
-default ElevenLabs voice.
+**Why:** Fitts can't speak with ElevenLabs yet. The account has no voices of its own, and on the
+free plan the API refuses library voices ("Free users cannot use library voices via the API").
+Until a voice exists, Fitts falls back to the system voice, as designed. Listening also needs
+your mic.
 
-1. In ElevenLabs › Voices, create or pick the "Fitts" voice and copy its voice ID.
-2. Add `ELEVENLABS_VOICE_ID=<id>` to `.env.local`, or paste it in Settings › Voice.
+1. In ElevenLabs › Voices, create the "Fitts" voice (a voice design or a clone) and copy its ID.
+   `pnpm tsx scripts/verify/p11-voices.ts` lists the account's voices.
+2. Add `ELEVENLABS_VOICE_ID=<id>` to `.env.local`, then run
+   `pnpm tsx scripts/verify/p11-tts.ts`. It should print `ok: true`.
+3. Paste the ID in Settings › Voice & appearance › ElevenLabs voice ID.
+4. Follow `scripts/voice-check.md`: mic, speakers, barge-in, always listening, fallback.
 
 ## 3. Create and push the two demo mirror repos (5 min) — P0 acceptance, needed before P9
 

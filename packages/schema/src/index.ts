@@ -26,6 +26,36 @@ export interface FittsBridge {
   keys?: KeysBridge;
   /** The user's site: dev server, offscreen window, frames, input, CDP queries (§5). */
   site?: SiteBridge;
+  /** Transcribe (the mic) and ElevenLabs (Fitts's voice), held by main (§14). */
+  voice?: VoiceBridge;
+}
+
+/** Push to talk for the mic button; endpointing for "Always listening" (V5). */
+export type TalkSessionMode = 'PUSH_TO_TALK' | 'ENDPOINTING';
+
+/** What main tells the renderer about a voice session or a spoken line (§14). */
+export type VoiceEvent =
+  | { kind: 'partial'; text: string }
+  | { kind: 'final'; text: string }
+  /** The user started talking (barge-in). */
+  | { kind: 'speech' }
+  | { kind: 'error'; text: string }
+  | { kind: 'closed' }
+  | { kind: 'spoken'; id: number }
+  | { kind: 'speakError'; id: number; text: string };
+
+export interface VoiceBridge {
+  /** Opens a Transcribe session; `ok: false` (offline, no key) means use the fallback. */
+  start(mode: TalkSessionMode, projectId: string): Promise<{ ok: boolean; reason?: string }>;
+  /** 24 kHz s16le mono PCM. */
+  audio(pcm: ArrayBuffer): void;
+  end(): void;
+  cancel(): void;
+  /** Streams one line with ElevenLabs; `ok: false` means use the OS voice. */
+  speak(text: string, voiceId: string, projectId: string): Promise<{ ok: boolean; id: number }>;
+  stopSpeaking(): void;
+  onEvent(handler: (event: VoiceEvent) => void): () => void;
+  onAudio(handler: (id: number, pcm: ArrayBuffer) => void): () => void;
 }
 
 /** What Fitts finds in a project folder (SPEC-phase2 §4.1; the Phase 1 mock's shape). */
@@ -209,6 +239,14 @@ export const IPC = {
   siteElementAt: 'fitts:site-element-at',
   siteFrame: 'fitts:site-frame',
   siteStatus: 'fitts:site-status',
+  voiceStart: 'fitts:voice-start',
+  voiceAudioIn: 'fitts:voice-audio-in',
+  voiceEnd: 'fitts:voice-end',
+  voiceCancel: 'fitts:voice-cancel',
+  voiceEvent: 'fitts:voice-event',
+  voiceSpeak: 'fitts:voice-speak',
+  voiceAudio: 'fitts:voice-audio',
+  voiceStopSpeaking: 'fitts:voice-stop-speaking',
 } as const;
 
 export type Mode = 'plan' | 'ask-every' | 'ask-unsure' | 'autonomous' | 'dangerous';

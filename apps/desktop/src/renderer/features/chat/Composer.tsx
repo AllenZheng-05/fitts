@@ -23,6 +23,7 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
   const pointingAt = useUi((s) => s.draftPointingAt);
   const pointing = useUi((s) => s.pointing);
   const listening = useUi((s) => s.micListening);
+  const micPartial = useUi((s) => s.micPartial);
   const talkMode = useSettings((s) => s.talkMode);
   const toggleMic = useMicToggle(run);
   const engine = getEngine();
@@ -86,7 +87,7 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
           id={MESSAGE_BOX_ID}
           type="text"
           autoComplete="off"
-          value={listening ? copy.composer.listening : draft}
+          value={listening ? micPartial || copy.composer.listening : draft}
           readOnly={listening}
           placeholder={auditing ? copy.composer.placeholderRun : copy.composer.placeholderInterview}
           onChange={(e) => useUi.getState().set({ draft: e.target.value })}

@@ -34,6 +34,8 @@ interface UiState {
   draftPointingAt: string | null;
   /** Hold-to-talk is held: "Listening…" (§7.5). */
   micListening: boolean;
+  /** What Transcribe has heard so far, shown in the message box (SPEC-phase2 §14). */
+  micPartial: string;
   /** Site-view toggles during the audit (§6.4). */
   highlightsOn: boolean;
   beforeAfter: boolean;
@@ -92,6 +94,7 @@ export const useUi = create<UiState>((set, get) => ({
   draft: '',
   draftPointingAt: null,
   micListening: false,
+  micPartial: '',
   highlightsOn: true,
   beforeAfter: false,
   redesignCompare: true,

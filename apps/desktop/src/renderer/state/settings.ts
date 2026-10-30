@@ -27,6 +27,8 @@ interface SettingsState {
   contributorMode: boolean;
   speaksAloud: boolean;
   voice: VoiceName;
+  /** The ElevenLabs "Fitts" voice (SPEC-phase2 §14); empty uses ElevenLabs' default. */
+  voiceId: string;
   talkMode: TalkMode;
   shapesOn: boolean;
   shapeMovement: ShapeMovement;
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS = {
   contributorMode: false,
   speaksAloud: false,
   voice: 'system' as VoiceName,
+  voiceId: '',
   talkMode: 'button' as TalkMode,
   shapesOn: true,
   shapeMovement: 'gentle' as ShapeMovement,

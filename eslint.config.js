@@ -18,6 +18,8 @@ export default tseslint.config(
       'docs/**',
       '.fitts-dev/**',
       '**/.fitts-worktrees/**',
+      // An AudioWorklet module: plain JS loaded by URL, outside every tsconfig.
+      'apps/desktop/src/renderer/lib/voice/pcm-worklet.js',
     ],
   },
   js.configs.recommended,

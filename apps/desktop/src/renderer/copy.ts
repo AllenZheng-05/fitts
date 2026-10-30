@@ -595,6 +595,9 @@ export const copy = {
     speaksAloud: 'Fitts speaks out loud',
     voice: 'Voice',
     voices: { elevenlabs: 'Fitts (ElevenLabs)', system: 'System voice (no key)' },
+    voiceId: 'ElevenLabs voice ID',
+    voiceIdHint:
+      'The "Fitts" voice in your ElevenLabs account. Leave it empty for the default voice.',
     preview: 'Preview',
     previewLine: "Hi, I'm Fitts.",
     talkMode: 'How you talk to Fitts',

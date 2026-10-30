@@ -15,6 +15,7 @@ import { RedesignLayout } from '../redesign/RedesignLayout';
 import { DoneLayout } from '../summary/DoneLayout';
 import { ChatPanel } from '../chat/ChatPanel';
 import { useFittsVoice } from '../chat/useFittsVoice';
+import { useWakeListening } from '../chat/useWakeListening';
 import { ReadyBar } from '../chat/ReadyBar';
 import { SiteView } from '../site-view/SiteView';
 import { DangerBanner } from './DangerBanner';
@@ -28,6 +29,7 @@ export function Workspace() {
   const run = useActiveRun();
   useWorkspaceShortcuts(run);
   useFittsVoice();
+  useWakeListening(run);
 
   // A project opened at launch has no run yet: start its interview (SPEC §4).
   useEffect(() => {

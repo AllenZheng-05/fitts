@@ -129,6 +129,12 @@ export type MainMessage =
   | { kind: 'siteStatus'; status: SiteStatus }
   /** A write Fitts's action sent was held for the gate (§13: Fetch interception). */
   | { kind: 'siteHeld'; projectId: string; held: HeldRequest }
+  /** Speech in and out, for the cost ledger (§11): stt seconds, tts characters. */
+  | {
+      kind: 'voiceUsage';
+      projectId: string;
+      usage: { task: 'stt'; seconds: number } | { task: 'tts'; chars: number };
+    }
   | { kind: 'siteResult'; id: number; ok: true; result: SiteOpResult }
   | { kind: 'siteResult'; id: number; ok: false; error: string };
 

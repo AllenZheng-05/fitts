@@ -32,6 +32,7 @@ import { themeFit } from './review/themefit';
 import { interviewTurn } from './interview/interview';
 import { runFixer } from './fix/fixer';
 import { Media } from './llm/media';
+import { voiceEntry } from './llm/voice-cost';
 import type { AgentMessage, MainMessage } from './protocol';
 import { SiteRpc } from './site-client';
 
@@ -437,6 +438,9 @@ port.on('message', (e: { data: MainMessage }) => {
         if (list.at(-1) !== path) visited.set(projectId, [...list, path].slice(-20));
       }
       if (status === 'failed') realRuns.get(projectId)?.siteDown();
+    } else if (message.kind === 'voiceUsage') {
+      const runId = (realRuns.get(message.projectId)?.state ?? raw.get(message.projectId))?.runId;
+      if (runId) ledger.record(voiceEntry(runId, message.projectId, message.usage));
     } else if (message.kind === 'siteHeld') {
       const run = realRuns.get(message.projectId);
       // Only Fitts's own actions are held; with no run to ask, the write doesn't go out.

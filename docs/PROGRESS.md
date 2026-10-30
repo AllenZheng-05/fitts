@@ -5,26 +5,23 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P11 — voice (§14).
-  - **Already written, not yet wired:** `main/voice/transcribe.ts` (V5 WebSocket),
-    `main/voice/tts.ts` (ElevenLabs stream-input) and `renderer/lib/voice-command.ts`
-    ("Fitts, …" parsing).
-- **Next concrete steps:**
-  1. Voice IPC in main (start, audio, end, cancel, speak, stop) and a preload bridge.
-  2. Grant mic permission for the app page only.
-  3. Renderer: an AudioWorklet capture at 24 kHz s16le, and a real mic toggle (canned
-     transcript when there's no key or the run is offline, so Phase 1 e2e stays).
-  4. Always-listening wake words, and barge-in on `speechStart`.
-  5. `speech.ts` backend: ElevenLabs PCM through Web Audio, falling back to speechSynthesis.
-  6. Ledger usage for stt and tts.
-  7. Unit tests with a local fake WebSocket server, and a manual script (mic and speakers) in
-     NEEDS-ALLEN.
+- **Current:** P12 — live-site verification, replay, packaging, README, self-audit.
+- **Next concrete steps:** read §5–6 (hosting and verification), §12.3 (replay) and §16
+  (packaging). Then:
+  1. `agent/verify-site/`: DNS TXT and file verification with fixtures. GitHub Pages "through
+     the host" needs gh, so it's NEEDS-ALLEN.
+  2. `ReplayRunEngine`, plus a bundled `replays/demo-chat.ndjson` from a recorded run.
+  3. electron-builder for Windows (local `--dir` build only; publishing is deferred), and a CI
+     workflow file (not pushed).
+  4. README and `.env.example`.
+  5. A self-audit of Fitts's own Settings screen.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P11: voice | see `git log --grep "P11:"` | e2e with Chromium's fake mic: worklet → main → a local Transcribe server; partials in the message box; final sent as SPOKEN. Unit: the V5 protocol, and the "Fitts, …" rules (bare stop or wait do nothing). ElevenLabs: the client is built, but the live check shows the account can't stream yet (free plan, no voices), so it falls back to the system voice (NEEDS-ALLEN 2). Manual mic and speaker check: `scripts/voice-check.md`. |
 | P10: SAM + Muse Image | see `git log --grep "P10:"` | Live (`tests/bench/p10.bench.ts`, about $0.10): demo/chat findings got SAM outlines (11), and the Finding panel showed the outline and a real Muse Image mockup; hartwell's 3 directions got mockups. Screenshots are in `.fitts-dev/bench/p10-*.png`. |
 | P9: fix pipeline + verification + PRs + preview + undo/redo/retry | see `git log --grep "P9:"` | Live (`tests/bench/p9.bench.ts`, a mirror clone with a local bare origin, `FITTS_GH_DRY_RUN=1`, Autonomous): 8 verified dry-run PRs without asking. The sabotaged fix rolled back, then the retry verified it (PR #9). Undo closed a PR; undo of a merged PR opened a revert PR. Unit and integration: `tests/agent/fix.test.ts`, `tests/main/fix-host.test.ts` (a real git repo). |
 | P8: permission gate + Fetch interception + modes | see `git log --grep "P8:"` | Live (e2e on demo/chat): `DELETE /api/conversations/12` from Fitts tapping "Delete conversation" is held at CDP Fetch; the gate modal shows it; the server hasn't received it; "Don't do it" fails it and conversation 12 survives. Unit: Ask every action asks before each tap; Plan only never clicks or types; Dangerous mode releases on localhost only. |

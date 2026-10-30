@@ -244,6 +244,15 @@ function VoiceTab() {
             {copy.settings.preview}
           </Button>
         </div>
+        {s.voice === 'elevenlabs' && (
+          <TextField
+            label={copy.settings.voiceId}
+            hint={copy.settings.voiceIdHint}
+            mono
+            value={s.voiceId}
+            onChange={(e) => s.set({ voiceId: e.target.value.trim() })}
+          />
+        )}
         <Select
           label={copy.settings.talkMode}
           size="lg"

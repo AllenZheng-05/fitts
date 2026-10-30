@@ -18,12 +18,15 @@ interface LaunchOptions {
   /** Reuse a user-data folder from an earlier launch. */
   userData?: string;
   env?: Record<string, string>;
+  /** Extra Chromium switches (for example a fake mic). */
+  args?: string[];
 }
 
 /** Launches the built app with a throwaway user-data folder. */
 export async function launchApp({
   userData,
   env: extra = {},
+  args = [],
 }: LaunchOptions = {}): Promise<LaunchedApp> {
   const dir = userData ?? mkdtempSync(join(tmpdir(), 'fitts-e2e-'));
   // Shells spawned by VS Code inherit ELECTRON_RUN_AS_NODE=1, which turns Electron into
@@ -41,7 +44,7 @@ export async function launchApp({
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] ??= value;
   }
   const app = await electron.launch({
-    args: [resolve(__dirname, '../../../out/main/index.js')],
+    args: [resolve(__dirname, '../../../out/main/index.js'), ...args],
     env,
   });
   const page = await app.firstWindow();
