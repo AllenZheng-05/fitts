@@ -1491,3 +1491,88 @@ screencast fallback is needed.
     "Don't do it" failed it, and conversation 12 still exists.
   - **Unit (RealRun):** Ask every action asks before each tap, Plan only never clicks or
     types, Allow once sends, and Dangerous mode sends on localhost but asks elsewhere.
+
+## Phase 2 — P9: fix pipeline, verification, PRs, preview branch, undo/redo/retry
+
+- **The split.** Everything privileged is main's `FixHost` (`main/fix/`): worktrees, file access
+  inside them, the worktree's dev server and a hidden verification window, commits, PRs and the
+  preview branch. The fixer's model calls stay in the agent (`agent/fix/`, inside the
+  `agent/llm/` network boundary), and they reach files only through FixHost over the
+  existing site RPC (`{ op: 'fix', call }`).
+- **Fixes need a project that is its own git repo.** `git rev-parse --show-toplevel` must be
+  the project folder. A folder inside another repo (demo/chat inside the fitts monorepo, as in
+  every e2e test) gets no fixes, so Fitts can never create branches in a repo the user didn't
+  open. Real runs and the P9 bench use the standalone mirror.
+- **Worktrees and dependencies.**
+  - Each job gets `git worktree add <root>/.fitts-worktrees/<runId>/<findingId> -b
+    fitts/<heuristic>-<slug> HEAD`. Taken names get `-2`, `-3`.
+  - `.fitts-worktrees/` goes in `.git/info/exclude`.
+  - Dependencies: `pnpm install --offline --frozen-lockfile`; if that fails, a junction to the
+    project's own `node_modules`.
+  - The mirror export now commits its `pnpm-lock.yaml`. It used to commit before the lockfile
+    existed, so clones couldn't install frozen.
+- **The fixer is the in-process fallback, since Muse Code isn't logged in.** It's a tool loop
+  with read_file, search, apply_patch (one exact excerpt, which must occur once; CRLF files
+  are handled) and done, for up to 14 steps. Paths are confined to the worktree, and `.git`
+  and `node_modules` are off limits.
+  - The task file follows §9.2: the finding, the evidence, the plugin's source hint, the
+    constraints, the check, and on retry the rollback reason.
+  - The model follows the router's `fix` job: Wonder on Quality, Spark on Economy. Dev runs
+    use Economy with contributor pricing.
+- **Verification** (§9.2: the exit code never counts).
+  - The worktree's dev server runs on 5181+. A Vite `dev` script has its own `--port` and
+    `--strictPort` replaced, because the mirror pins 5173.
+  - A hidden window on the finding's route runs the page probes, a Tab focus sweep, the
+    360/768/1280 sweep, and the broken hrefs for link findings.
+  - **Pass** = the finding's probe no longer reports its problem (same probe and title), and
+    no problem at severity ≥2 appears that the run's own probes didn't already see on that
+    route.
+  - Verifications run one at a time: worktree servers share the project's dependency cache.
+- **What gets fixed automatically.** Only findings whose check verification can re-run: the
+  page probes, focus-visible, viewport-sweep and links.
+  - Trace findings (network, feedback timing, error messages, back mid-flow, labels) and
+    reviewer-only findings aren't fixed automatically. Verifying them would mean replaying the
+    flow, and a fix with no check would be "verified" without proof.
+  - They stay open, with the reasons and suggested fixes in the findings.
+- **Modes (§9.3).**
+  - **Plan only:** says what it would fix.
+  - **Autonomous and Dangerous:** start every fixable finding right away, and open each PR as
+    soon as it verifies.
+  - **The Ask modes:** post the approval card. Approving, or Fix it on one finding, covers
+    the PR.
+  - A fix started in Autonomous after which the mode changed asks ("Can I open a pull request
+    for …?") before its PR.
+- **PRs.** The `gh` backend pushes the branch and runs `gh pr create --body-file`.
+  - With `FITTS_GH_DRY_RUN=1`, the dry-run backend pushes to the repo's own `origin` (a local
+    bare repo in tests) and keeps `.fitts-worktrees/dry-run-prs.json` as the PR registry.
+  - The PR body has the heuristic and severity, the problem, the fix, the evidence, the
+    verification and the repro, with no attribution footer.
+  - The commit message is `<title> (Fitts: <heuristic> sev <n>)`, with no trailers.
+  - The body file is written next to the worktree, never inside it.
+  - `--attach` screenshots and the gh-version fallback (`.fitts/pr-assets/`) are part of the
+    real-PR check (`scripts/real-pr-check.md`, NEEDS-ALLEN 4). After-screenshots aren't
+    captured yet.
+- **Undo, redo, retry (§9.4).**
+  - **Undo** of an open PR closes it and deletes its branch ("Undone · PR #n closed"). Undo of
+    a merged PR creates `fitts/revert-<n>` from the fix branch with `git revert`, and opens it
+    as a PR ("Revert PR #m opened").
+  - **Retry** of a rolled-back change re-runs the job with the reason added, and keeps the
+    change's id. **Retry** of an undone change re-opens a PR from its branch (redo).
+- **FINALIZE.** Once the approval is answered and every job has settled, verified branches are
+  merged into `fitts/preview-<runId>` in a worktree, and Done follows.
+  - Serving the preview on :5180 for the Done view's preview pane is deferred to P12. The
+    branch exists, and Fitts says so in chat.
+  - Done's line reports verified fixes, PRs and rollbacks, like the Phase 1 copy.
+- **Rollback check.** `FITTS_SABOTAGE_FIX=<n>` (dev and tests only) makes the nth fix job make
+  no change, so it rolls back ("no change made: deliberately skipped (rollback check)"). The
+  bench then retries it.
+- **Live result** (`tests/bench/p9.bench.ts`: a throwaway clone of the demo/chat mirror with a
+  local bare origin, Autonomous, Economy with contributor pricing; 5.4 minutes).
+  - **Verified:** 8 fixes, each with a dry-run PR: font families, focus outline, spacing,
+    placeholder contrast, tap target, "(null)", icon-button names, cut-off text.
+  - **Rolled back and retried:** the sabotaged text-contrast fix, verified on retry as PR #9.
+  - **A genuine rollback:** the /help link. The 404 comes from the server middleware, and the
+    fixer's change didn't fix it, so verification refused it.
+  - **Undo:** an open PR's undo closed it. Undoing a PR marked merged opened revert PR #10.
+  - **Diffs** are small and targeted, and commits have no trailers. Quality varies (see Known
+    issues).

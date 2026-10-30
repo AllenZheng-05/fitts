@@ -5,27 +5,19 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P9 — the fix pipeline, verification, PRs, the preview branch, and
-  undo/redo/retry (§9). Acceptance: at least 5 verified PRs on the demo/chat mirror; Autonomous
-  opens a PR without asking; one deliberately failing fix is rolled back, then retried; undo
-  closes a PR; a merged PR's undo opens a revert PR.
-- **Constraints for P9:**
-  - Work only in `.fitts-worktrees/`.
-  - Muse Code in WSL isn't logged in (NEEDS-ALLEN 1), so use the in-process Wonder fixer
-    fallback. That allows at most one real Wonder fix job; dev fixes use Spark contributor.
-  - Test PRs against a LOCAL bare git repo with `FITTS_GH_DRY_RUN=1`. No real `gh`, and no
-    pushes.
-  - Write `scripts/real-pr-check.md` for Allen.
-- **Next concrete step:** read §9 fully, then build `agent/fix/`: worktree per fix, the source
-  locator (`data-fitts-src`), the fixer (in-process: read file → model edit → write), the
-  verify step (re-run the finding's probe on the live dev server from the worktree), and the
-  git and gh layer behind an interface with a dry-run backend.
+- **Current:** P10 — SAM 3.1 and Muse Image (§10). Acceptance: the Finding panel shows the
+  SAM outline and a real mockup; hartwell redesign directions use Muse Image.
+- **Next concrete step:** read §10, then add `agent/llm/` clients for SAM (V3 verified the
+  endpoint) and Muse Image edits (V4). Store results as `fitts-asset://` assets
+  (`finding.assets.mask` and `.mockup`), and generate mockups for the 3 theme-fit directions.
+  Record fixtures once.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P9: fix pipeline + verification + PRs + preview + undo/redo/retry | see `git log --grep "P9:"` | Live (`tests/bench/p9.bench.ts`, a mirror clone with a local bare origin, `FITTS_GH_DRY_RUN=1`, Autonomous): 8 verified dry-run PRs without asking. The sabotaged fix rolled back, then the retry verified it (PR #9). Undo closed a PR; undo of a merged PR opened a revert PR. Unit and integration: `tests/agent/fix.test.ts`, `tests/main/fix-host.test.ts` (a real git repo). |
 | P8: permission gate + Fetch interception + modes | see `git log --grep "P8:"` | Live (e2e on demo/chat): `DELETE /api/conversations/12` from Fitts tapping "Delete conversation" is held at CDP Fetch; the gate modal shows it; the server hasn't received it; "Don't do it" fails it and conversation 12 survives. Unit: Ask every action asks before each tap; Plan only never clicks or types; Dangerous mode releases on localhost only. |
 | P7: real interview + theme-fit | see `git log --grep "P7:"` | Live (`tests/bench/p7.bench.ts`, under $0.01): on demo/chat the first answer filled For ("Family messaging for grandparents") and Who ("Older adults, grandparents"); on demo/hartwell theme-fit said `fits: false` with 3 directions. The recorded fixtures replay in unit tests. |
 | P6: reviewers, aggregator, evidence check, suggestions lane | see `git log --grep "P6:"` | `pnpm bench:chat` (real panel, Economy plus contributor, about $0.026 a run): recall 20/25 (80%), 2 false positives at severity ≥2, on two runs. Offline (probes only): 18/25 and 0. The aggregator, evidence check and rubric are unit-tested (`tests/agent/review.test.ts`), and the scorer too (`tests/bench/score.test.ts`). |
@@ -46,6 +38,13 @@ See [NEEDS-ALLEN.md](NEEDS-ALLEN.md).
 About $0.13 of the $25 session cap: `.fitts-dev/spend.json` (scripts) plus `.fitts-dev/agent-spend.ndjson` (the app's own calls, including `bench:chat`).
 
 ## Known issues
+
+- Fix quality varies. For example, the "(null)" fix reads the right key but shows the contact's
+  id, not their name, and the tap-target fix uses an inline style. Every fix passes its probe
+  and the regression check; Wonder (the Quality profile) should do better than Spark
+  contributor. Trace and reviewer-only findings aren't fixed automatically (see DECISIONS P9).
+- The preview branch isn't served on :5180 yet (P12), and after-screenshots aren't captured
+  for PRs yet.
 
 - Until P9 adds fixes, the Run summary's math line counts every open finding as one of the
   "suggestions without enough evidence" (Phase 1's meaning of open). P9 should count shown,

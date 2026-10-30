@@ -5,6 +5,7 @@ import { registerKeys } from './keys-ipc';
 import { buildAppMenu } from './menu';
 import { RunHost } from './run-host';
 import { Secrets } from './secrets';
+import { FixHost } from './fix/fix-host';
 import { SiteManager } from './site/manager';
 import { ProjectStore } from './store/projects';
 import { createMainWindow, ICON_PATH } from './window';
@@ -36,7 +37,11 @@ void app.whenReady().then(() => {
   const projects = new ProjectStore(userData);
   const sites = new SiteManager(userData, (id) => projects.get(id));
   host.onStep = (projectId, runId, step) => void sites.shot(projectId, runId, step);
-  host.siteOps = (projectId, op) => sites.run(projectId, op);
+  const fixes = new FixHost((id) => projects.get(id));
+  host.siteOps = async (projectId, op) =>
+    op.op === 'fix'
+      ? { op: 'fix', value: await fixes.call(projectId, op.call) }
+      : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.onHeld = (projectId, held) => host.siteHeld(projectId, held);
   host.start();

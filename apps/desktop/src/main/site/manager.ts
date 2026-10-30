@@ -161,6 +161,8 @@ export class SiteManager {
       case 'release':
         await win.release(request.id, request.allow);
         return { op: 'released' };
+      case 'fix':
+        throw new Error('Fix calls go to the FixHost');
     }
   }
 

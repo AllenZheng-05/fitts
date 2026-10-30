@@ -2,7 +2,7 @@
 // operation on the project's site window (and, from P8, through the permission gate).
 import type { PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
 import type { ProbeItem } from '@fitts/schema';
-import type { AgentMessage, AxSnapshot, OpTrace, SiteOp, SiteOpResult } from './protocol';
+import type { AgentMessage, AxSnapshot, FixCall, OpTrace, SiteOp, SiteOpResult } from './protocol';
 
 export interface ActionResult {
   path: string;
@@ -31,6 +31,8 @@ export interface Site {
   network(): Promise<RequestRecord[]>;
   /** The gate's answer for a held request (§13). */
   release(id: string, allow: boolean): Promise<void>;
+  /** The fix pipeline's privileged half in main (§9). */
+  fix(call: FixCall): Promise<unknown>;
 }
 
 export class SiteRpc {
@@ -95,6 +97,7 @@ export class SiteRpc {
       release: async (id, allow) => {
         await expect({ op: 'release', id, allow }, 'released');
       },
+      fix: async (call) => (await expect({ op: 'fix', call }, 'fix')).value,
     };
   }
 }

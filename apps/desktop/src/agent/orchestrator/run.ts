@@ -19,7 +19,8 @@ import { Coverage, DESTRUCTIVE, routeOf } from '../crawler/coverage';
 import { copy } from '../../renderer/copy';
 import { format } from '../../renderer/lib/format';
 import { ProbeRunner } from '../crawler/probes';
-import { aggregate } from '../review/aggregate';
+import { aggregateWithChecks, type Check } from '../review/aggregate';
+import { FixPipeline, type Fixer } from '../fix/pipeline';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
 import type { Direction, ThemeFit } from '../review/themefit';
 
@@ -42,6 +43,8 @@ export interface RunDeps {
   actionDelayMs?: number;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
+  /** The fixer (§9.2): without one (no key, offline), findings aren't fixed. */
+  fixer?: Fixer;
   /** Theme-fit (§8.3), asked once after the first 3 routes. */
   themeFit?: (
     input: { brief: RunState['brief']; shots: string[]; inventory: string[] },
@@ -76,6 +79,13 @@ export class RealRun {
   private readonly retried = new Set<string>();
   /** What the reviewer panel gets for each route, and when Fitts was first there. */
   private themeAsked = false;
+  /** The fix pipeline (§9), once findings exist and the project is its own git repo. */
+  private pipeline: FixPipeline | undefined;
+  private checks = new Map<string, Check>();
+  /** An approval card is open, or fixes are running: the run finishes when they settle. */
+  private fixPhase = false;
+  private approvalId: string | undefined;
+  private finalized = false;
   /** The open "Can I …?" question (Ask every action), resolved false if the run moves on. */
   private pendingAsk: ((ok: boolean) => void) | undefined;
   /** The request the gate modal is holding, and the action that sent it (§13). */
@@ -283,7 +293,130 @@ export class RealRun {
     await this.probes.finish();
     if (this.finished) return;
     await this.review();
-    if (!this.finished) this.crawlComplete();
+    if (this.finished) return;
+    if (!(await this.offerFixes())) this.crawlComplete();
+  }
+
+  // ── Fixes (§9) ────────────────────────────────────────────────────────────
+
+  /**
+   * After the review: fixable findings in a project that is its own git repo get fixed, per
+   * mode. Plan only says what it would fix; Autonomous and Dangerous start right away; the Ask
+   * modes post the approval card. Returns false when there's nothing to fix here.
+   */
+  private async offerFixes(): Promise<boolean> {
+    const fixer = this.deps.fixer;
+    if (!fixer) return false;
+    const shown = this.state.findings
+      .filter((f) => f.lane !== 'suggestion' && f.status === 'open')
+      .map((f) => f.id);
+    let available = false;
+    try {
+      available = ((await this.deps.site.fix({ fn: 'available' })) as { ok: boolean }).ok;
+    } catch {
+      available = false;
+    }
+    if (!available || this.finished) return false;
+    this.pipeline = new FixPipeline(
+      {
+        state: () => this.state,
+        emit: (events) => this.emit(events),
+        say: (text) => this.say(text),
+        id: () => this.id(),
+        ask: (text) => this.ask(text),
+        baseline: (route) => this.probes.results.filter((r) => r.route === route),
+        costOf: (id) => this.deps.ledger.findingCost(id),
+        idle: () => this.fixesSettled(),
+      },
+      this.deps.site,
+      fixer,
+      this.checks,
+    );
+    const fixable = this.pipeline.fixable(shown);
+    if (fixable.length === 0) return false;
+    const mode = this.state.mode;
+    if (mode === 'plan') {
+      this.say(format(copy.fitts.planOnlyFixes, { n: fixable.length }));
+      return false;
+    }
+    this.fixPhase = true;
+    this.emit([{ type: 'now.changed' }]);
+    if (mode === 'autonomous' || mode === 'dangerous') {
+      this.say(
+        `Fixing ${fixable.length} of these now. Each one is checked before its pull request opens.`,
+      );
+      this.pipeline.start(fixable);
+      return true;
+    }
+    const serious = this.state.findings.filter(
+      (f) => fixable.includes(f.id) && f.severity >= 3,
+    ).length;
+    const id = this.id();
+    this.approvalId = id;
+    this.emit([
+      { type: 'chat.item', item: { id, type: 'approval.batch', findingIds: fixable, serious } },
+      { type: 'waiting.changed', waitingFor: 'approval' },
+    ]);
+    this.setActivity('waiting-on-user');
+    return true;
+  }
+
+  /** Approve the batch, or "Fix it" on one finding (§9.3: approving covers its PR). */
+  approveFixes(findingIds: string[]): void {
+    if (!this.pipeline) return;
+    if (this.approvalId) {
+      const item = this.state.chat.find((c) => c.id === this.approvalId);
+      if (item?.type === 'approval.batch')
+        this.emit([{ type: 'chat.item.updated', item: { ...item, answer: findingIds.join(',') } }]);
+      this.approvalId = undefined;
+      this.emit([{ type: 'waiting.changed' }]);
+      if (!this.finished) this.setActivity('acting');
+    }
+    this.fixPhase = true;
+    this.pipeline.start(findingIds);
+    if (!this.pipeline.busy) this.fixesSettled();
+  }
+
+  dismissFinding(findingId: string): void {
+    const f = this.state.findings.find((x) => x.id === findingId);
+    if (!f) return;
+    this.emit([
+      { type: 'finding.updated', finding: { ...f, status: 'dismissed' } },
+      {
+        type: 'overlay.set',
+        overlays: {
+          ...this.state.overlays,
+          problems: this.state.overlays.problems.filter((p) => p.ref !== f.elementRef),
+        },
+      },
+    ]);
+    this.say(copy.fitts.dismissFollowUp);
+  }
+
+  retryChange(changeId: string): void {
+    this.pipeline?.retry(changeId);
+  }
+
+  undoChange(changeId: string): void {
+    void this.pipeline
+      ?.undo(changeId)
+      .catch((e: unknown) => this.say(`I couldn’t undo that: ${(e as Error).message}`));
+  }
+
+  /** Every fix has settled: FINALIZE (preview branch, then Done), once. */
+  private fixesSettled(): void {
+    if (this.approvalId || this.pipeline?.busy || this.finalized || !this.fixPhase) return;
+    this.finalized = true;
+    void (async () => {
+      try {
+        const branch = await this.pipeline?.preview();
+        if (branch)
+          this.say(`Every verified fix is merged into ${branch} so you can try them together.`);
+      } catch {
+        // The preview branch is a convenience; Done doesn't wait on it.
+      }
+      this.finish();
+    })();
   }
 
   /** A route's first visit: its screenshot and controls, for the reviewer panel. */
@@ -497,7 +630,7 @@ export class RealRun {
         }
       }
     }
-    const findings = aggregate({
+    const { findings, checks } = aggregateWithChecks({
       runId: this.state.runId,
       probes: this.probes.results,
       reviews,
@@ -506,6 +639,7 @@ export class RealRun {
         return { stepIndex: p?.stepIndex ?? 0, atMs: p?.atMs ?? 0 };
       },
     });
+    this.checks = checks;
     this.post(findings);
   }
 
@@ -750,8 +884,17 @@ export class RealRun {
       { type: 'phase.changed', phase: 'done' },
       { type: 'activity.changed', activity: 'idle' },
     ]);
+    const changes = this.state.changes;
+    const verified = changes.filter((c) => c.status === 'verified').length;
+    const prs = changes.filter((c) => c.status === 'verified' && c.prNumber !== undefined).length;
+    const rolled = changes.filter((c) => c.status === 'rolled-back').length;
     this.say(
-      `All done. I opened ${this.coverage.stateRoutes().length} pages and tried ${done} controls.`,
+      changes.length > 0
+        ? `All done. I verified ${verified} ${verified === 1 ? 'fix' : 'fixes'} and opened ${prs} pull ${prs === 1 ? 'request' : 'requests'}.` +
+            (rolled > 0
+              ? ` ${rolled} ${rolled === 1 ? 'change' : 'changes'} didn’t pass my checks, so I rolled ${rolled === 1 ? 'it' : 'them'} back. Want me to try again with a different approach?`
+              : '')
+        : `All done. I opened ${this.coverage.stateRoutes().length} pages and tried ${done} controls.`,
     );
     this.kick();
   }

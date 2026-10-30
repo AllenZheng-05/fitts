@@ -44,7 +44,8 @@ Then clone each one somewhere outside the monorepo (for example `~/code/fitts-de
 run `pnpm install` there, and add that folder in Fitts. That's the project real runs open PRs
 against.
 
-## 4. Live check of `gh pr create --attach` (V8) (5 min, needs a GitHub repo)
+## 4. Real PRs on GitHub, including `--attach` (V8) (15 min, after item 3)
 
-**Why:** it publishes to GitHub. The flag exists in gh 2.102.0. This is folded into the real-PR
-checklist that P9 adds (`scripts/real-pr-check.md`).
+**Why:** it publishes to GitHub. P9 is verified end to end with dry-run PRs against a local bare
+repo (`tests/bench/p9.bench.ts`). Opening real PRs, View PR, and undo against GitHub need you.
+Follow `scripts/real-pr-check.md`.

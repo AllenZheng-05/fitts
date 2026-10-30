@@ -28,7 +28,7 @@ interface Template {
 }
 
 /** Plain-language findings for each probe's failures (§7 → §8.2). */
-function template(probe: ProbeName, item: ProbeItem): Template {
+export function template(probe: ProbeName, item: ProbeItem): Template {
   const m = item.measured;
   switch (probe) {
     case 'contrast':
@@ -278,7 +278,24 @@ const similar = (a: string, b: string) => {
   return shared / Math.max(1, Math.min(x.size, y.size)) >= 0.5;
 };
 
-export function aggregate({ runId, probes, reviews, stepOf }: AggregateInput): Finding[] {
+/** How a fix for a probe finding is verified (§9.2): the same probe, the same problem. */
+export interface Check {
+  probe: ProbeName;
+  title: string;
+  routes: string[];
+  /** For broken links: the hrefs that must load afterwards. */
+  hrefs: string[];
+}
+
+export function aggregate(input: AggregateInput): Finding[] {
+  return aggregateWithChecks(input).findings;
+}
+
+/** Findings, plus the check that verifies a fix for each probe finding (reviewer-only: none). */
+export function aggregateWithChecks({ runId, probes, reviews, stepOf }: AggregateInput): {
+  findings: Finding[];
+  checks: Map<string, Check>;
+} {
   const clusters: Cluster[] = [];
   const byEvidence = new Map<string, Cluster[]>();
 
@@ -374,7 +391,22 @@ export function aggregate({ runId, probes, reviews, stepOf }: AggregateInput): F
   }
 
   // 4. Findings: severity rubric, then the evidence check.
-  return merged.map((c, n) => toFinding(c, n, runId, stepOf));
+  const findings = merged.map((c, n) => toFinding(c, n, runId, stepOf));
+  const checks = new Map<string, Check>();
+  merged.forEach((c, n) => {
+    const f = findings[n];
+    if (!f || !c.probe || !c.template) return;
+    checks.set(f.id, {
+      probe: c.probe,
+      title: c.template.title,
+      routes: [...c.routes],
+      hrefs:
+        c.probe === 'links'
+          ? c.items.map((i) => i.measured.split(' ')[0] ?? '').filter(Boolean)
+          : [],
+    });
+  });
+  return { findings, checks };
 }
 
 function median(values: number[]): number {
@@ -434,6 +466,7 @@ function toFinding(
     agreement: { agreeing: who.length, total: PANEL_SIZE, who },
     evidence,
     ...(c.refs[0] ? { elementRef: c.refs[0] } : {}),
+    ...sourceOf(c.items),
     stepIndex: at.stepIndex,
     atMs: at.atMs,
     status: 'open',
@@ -448,3 +481,22 @@ function toFinding(
       : {}),
   };
 }
+
+/** `data-fitts-src` from the Fitts plugin ("src/pages/Compose.tsx:118:9"): high confidence. */
+function sourceOf(items: ProbeItem[]): Pick<Finding, 'source'> | Record<string, never> {
+  const src = items.find((i) => i.src)?.src;
+  const m = src ? /^(.+?):(\d+)(?::(\d+))?$/.exec(src) : null;
+  if (!m?.[1]) return {};
+  return {
+    source: {
+      file: m[1],
+      line: Number(m[2]),
+      ...(m[3] ? { col: Number(m[3]) } : {}),
+      confidence: 'plugin',
+    },
+  };
+}
+
+/** A probe item's problem as the aggregator names it (fix verification compares these). */
+export const titleOf = (probe: ProbeName, item: ProbeItem) => template(probe, item).title;
+export const impactOf = (probe: ProbeName, item: ProbeItem) => template(probe, item).severity;

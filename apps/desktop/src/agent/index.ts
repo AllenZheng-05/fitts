@@ -30,6 +30,7 @@ import { RealRun } from './orchestrator/run';
 import { ReviewerPanel } from './review/reviewers';
 import { themeFit } from './review/themefit';
 import { interviewTurn } from './interview/interview';
+import { runFixer } from './fix/fixer';
 import type { AgentMessage, MainMessage } from './protocol';
 import { SiteRpc } from './site-client';
 
@@ -202,6 +203,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
     onTrouble: () => runRef.current?.apiTrouble(),
   });
   const useModel = online() && process.env['FITTS_CRAWL_BRAIN'] !== 'explorer';
+  let fixJobs = 0;
   const callCtx = () => ({
     runId: from.runId,
     projectId,
@@ -247,6 +249,31 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       },
       onEconomy: () => profiles.set(projectId, 'economy'),
       ...(panel ? { panel } : {}),
+      ...(online()
+        ? {
+            fixer: (
+              task: string,
+              tools: Parameters<typeof runFixer>[4],
+              opts: { findingId: string; onStep: (line: string) => void },
+            ) => {
+              // Dev and tests only (P9's rollback check): the Nth fix job makes no change.
+              fixJobs += 1;
+              if (Number(process.env['FITTS_SABOTAGE_FIX'] ?? '0') === fixJobs)
+                return Promise.resolve({
+                  patched: 0,
+                  summary: 'deliberately skipped (rollback check)',
+                });
+              return runFixer(
+                runCaller,
+                callCtx(),
+                modelFor('fix', profile(), { contributor, baseten: Boolean(keys.baseten) }).model,
+                task,
+                tools,
+                opts,
+              );
+            },
+          }
+        : {}),
       ...(online()
         ? {
             themeFit: (input: Parameters<typeof themeFit>[3], signal?: AbortSignal) =>
@@ -305,6 +332,18 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
       return true;
     case 'answerQuestion':
       run.answer(String(args[0]), String(args[1]));
+      return true;
+    case 'approveFixes':
+      run.approveFixes(Array.isArray(args[0]) ? (args[0] as string[]) : []);
+      return true;
+    case 'dismissFinding':
+      run.dismissFinding(String(args[0]));
+      return true;
+    case 'retryChange':
+      run.retryChange(String(args[0]));
+      return true;
+    case 'undoChange':
+      run.undoChange(String(args[0]));
       return true;
     case 'respondGate':
       run.respondGate(String(args[0]), args[1] as 'deny' | 'other' | 'allow');

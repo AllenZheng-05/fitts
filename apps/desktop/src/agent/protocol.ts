@@ -54,7 +54,36 @@ export type SiteOp =
   | { op: 'links'; hrefs: string[] }
   | { op: 'network' }
   /** The gate's answer for a held request (§13): send it, or fail it. */
-  | { op: 'release'; id: string; allow: boolean };
+  | { op: 'release'; id: string; allow: boolean }
+  /** The fix pipeline's privileged half, in main (§9). */
+  | { op: 'fix'; call: FixCall };
+
+/** Calls to main's FixHost (§9): worktrees, files inside them, verification, git and PRs. */
+export type FixCall =
+  | { fn: 'available' }
+  | { fn: 'prepare'; runId: string; findingId: string; branch: string }
+  | { fn: 'read'; job: string; path: string }
+  | { fn: 'search'; job: string; text: string }
+  | { fn: 'patch'; job: string; path: string; find: string; replace: string }
+  | { fn: 'diff'; job: string }
+  | { fn: 'verify'; job: string; route: string; hrefs: string[] }
+  | { fn: 'commit'; job: string; message: string }
+  | { fn: 'discard'; job: string }
+  | { fn: 'prOpen'; job: string; title: string; body: string }
+  | { fn: 'prClose'; pr: number; branch: string }
+  | { fn: 'prMerged'; pr: number }
+  | { fn: 'revert'; runId: string; pr: number; branch: string; title: string; body: string }
+  | { fn: 'preview'; runId: string; branches: string[] };
+
+/** The page probes on a fix's worktree server (§9.2 verification). */
+export interface VerifyResult {
+  ok: boolean;
+  error?: string;
+  results: PageProbeResult[];
+  focus: ProbeItem[];
+  viewport: ProbeItem[];
+  links: Record<string, number>;
+}
 
 /** What an action caused: page feedback, the requests it started, and the target's box. */
 export interface OpTrace {
@@ -74,7 +103,8 @@ export type SiteOpResult =
   | { op: 'value'; value: string | null }
   | { op: 'links'; statuses: Record<string, number> }
   | { op: 'network'; requests: RequestRecord[] }
-  | { op: 'released' };
+  | { op: 'released' }
+  | { op: 'fix'; value: unknown };
 
 /** A request paused at `Fetch.requestPaused`, waiting for the gate. */
 export interface HeldRequest {

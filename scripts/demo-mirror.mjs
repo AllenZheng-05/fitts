@@ -58,6 +58,12 @@ for (const { dir, repo } of DEMOS) {
   ts.compilerOptions = { ...base, ...ts.compilerOptions };
   writeFileSync(join(out, 'tsconfig.json'), JSON.stringify(ts, null, 2) + '\n');
   writeFileSync(join(out, '.gitignore'), 'node_modules/\ndist/\n.fitts-worktrees/\n');
+  // A committed lockfile, so clones (and Fitts's fix worktrees) install the same versions.
+  execFileSync('pnpm', ['install', '--lockfile-only', '--offline', '--ignore-workspace'], {
+    cwd: out,
+    stdio: 'ignore',
+    shell: process.platform === 'win32',
+  });
 
   git(out, 'add', '-A');
   const dirty = git(out, 'status', '--porcelain');

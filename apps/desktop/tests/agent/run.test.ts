@@ -80,6 +80,7 @@ function fakeSite(over: Partial<Site> = {}) {
     value: () => Promise.resolve(null),
     links: () => Promise.resolve({}),
     network: () => Promise.resolve([]),
+    fix: () => Promise.reject(new Error('no fixes in this fake')),
     release: (id, allow) => {
       log.push(`release ${id} ${allow ? 'allow' : 'deny'}`);
       return Promise.resolve();
