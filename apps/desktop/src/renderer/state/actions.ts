@@ -1,6 +1,8 @@
 // UI actions that touch several stores. Every change to a run still goes through RunEngine.
 import type { Mode, Project } from '@fitts/schema';
-import { getEngine } from './engine';
+import { copy } from '../copy';
+import { bridge } from '../lib/bridge';
+import { getEngine, getReplayEngine, setReplaying } from './engine';
 import { useProjects } from './projects';
 import { useRunStore } from './run-store';
 import { useSettings } from './settings';
@@ -121,3 +123,26 @@ export function sendFromComposer(projectId: string, text: string, { spoken = fal
 
 /** A voice command needs "Fitts" first: "Fitts, stop" counts, "stop" alone does not (§7.5). */
 export const isFittsCommand = (text: string) => /^fitts\b/i.test(text.trim());
+
+/** Welcome's "Watch a recorded run" (SPEC-phase2 §12.3): no keys, no site, no agent. */
+export async function openReplay(): Promise<boolean> {
+  const opened = await bridge().replay?.open();
+  if (!opened) return false;
+  const last = [...opened.events].reverse().find((e) => e.event.type === 'run.started');
+  const brief = last?.event.type === 'run.started' ? last.event.state.brief : {};
+  const projects = useProjects.getState();
+  const project: Project = {
+    id: opened.projectId,
+    name: copy.replay.projectName,
+    kind: 'live',
+    url: copy.replay.url,
+    brief,
+    createdAt: new Date().toISOString(),
+    replay: { runId: opened.runId },
+  };
+  if (!projects.projects.some((p) => p.id === project.id)) projects.addProject(project);
+  setReplaying(true);
+  getReplayEngine().play(opened.projectId, opened.events, 4);
+  useUi.getState().openProject(opened.projectId);
+  return true;
+}

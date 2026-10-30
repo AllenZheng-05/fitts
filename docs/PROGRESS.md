@@ -5,22 +5,21 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P12 — live-site verification, replay, packaging, README, self-audit.
-- **Next concrete steps:** read §5–6 (hosting and verification), §12.3 (replay) and §16
-  (packaging). Then:
-  1. `agent/verify-site/`: DNS TXT and file verification with fixtures. GitHub Pages "through
-     the host" needs gh, so it's NEEDS-ALLEN.
-  2. `ReplayRunEngine`, plus a bundled `replays/demo-chat.ndjson` from a recorded run.
-  3. electron-builder for Windows (local `--dir` build only; publishing is deferred), and a CI
-     workflow file (not pushed).
-  4. README and `.env.example`.
-  5. A self-audit of Fitts's own Settings screen.
+- **Phase 2 build is complete through P12.** Every milestone is committed and green. What's
+  left needs Allen: see [NEEDS-ALLEN.md](NEEDS-ALLEN.md), in priority order.
+- **If work resumes,** the best next steps in the repo are:
+  1. Add margin to the P6 bench with the deferred Wonder aggregator pass.
+  2. Fix trace findings automatically (replay the flow during verification).
+  3. Serve the preview branch on :5180.
+  4. Slim the asar (renderer libraries to devDependencies).
+  5. Add the 1× replay toggle.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P12: replay, live-site verification, packaging, README, self-audit | see `git log --grep "P12:"` | Judge replay: e2e with no keys (bundled recorded run, 4×, real step shots, Stop jumps to Done), and the packaged `Fitts.exe` plays it too (`tests/bench/packaged.bench.ts`). DNS and file verification unit-tested (fake resolver, local HTTP server); live sites open only after a re-check. electron-builder Windows build is local; the CI workflow is written, not pushed. Self-audit: Settings passes Fitts's accessibility probes after fixing one small target. GitHub Pages live, the installer, the release and macOS CI are NEEDS-ALLEN. |
 | P11: voice | see `git log --grep "P11:"` | e2e with Chromium's fake mic: worklet → main → a local Transcribe server; partials in the message box; final sent as SPOKEN. Unit: the V5 protocol, and the "Fitts, …" rules (bare stop or wait do nothing). ElevenLabs: the client is built, but the live check shows the account can't stream yet (free plan, no voices), so it falls back to the system voice (NEEDS-ALLEN 2). Manual mic and speaker check: `scripts/voice-check.md`. |
 | P10: SAM + Muse Image | see `git log --grep "P10:"` | Live (`tests/bench/p10.bench.ts`, about $0.10): demo/chat findings got SAM outlines (11), and the Finding panel showed the outline and a real Muse Image mockup; hartwell's 3 directions got mockups. Screenshots are in `.fitts-dev/bench/p10-*.png`. |
 | P9: fix pipeline + verification + PRs + preview + undo/redo/retry | see `git log --grep "P9:"` | Live (`tests/bench/p9.bench.ts`, a mirror clone with a local bare origin, `FITTS_GH_DRY_RUN=1`, Autonomous): 8 verified dry-run PRs without asking. The sabotaged fix rolled back, then the retry verified it (PR #9). Undo closed a PR; undo of a merged PR opened a revert PR. Unit and integration: `tests/agent/fix.test.ts`, `tests/main/fix-host.test.ts` (a real git repo). |
@@ -41,7 +40,7 @@ See [NEEDS-ALLEN.md](NEEDS-ALLEN.md).
 
 ## Spend so far (USD)
 
-About $0.13 of the $25 session cap: `.fitts-dev/spend.json` (scripts) plus `.fitts-dev/agent-spend.ndjson` (the app's own calls, including `bench:chat`).
+About $0.64 of the $25 session cap: `.fitts-dev/spend.json` (scripts) plus `.fitts-dev/agent-spend.ndjson` (the app's own calls, including `bench:chat`).
 
 ## Known issues
 

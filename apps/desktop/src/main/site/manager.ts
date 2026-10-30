@@ -23,6 +23,13 @@ export class SiteManager {
   private readonly live = new Map<string, Live>();
   /** Status changes also go to the agent (site-down, live projects). */
   onStatus: ((status: SiteStatus) => void) | undefined;
+  /** The ownership re-check before a live site opens (§4.2), set by main. */
+  recheck:
+    | ((
+        domain: string,
+        verification: Project['verification'],
+      ) => Promise<{ ok: boolean; message: string }>)
+    | undefined;
   /** A write from Fitts's action held for the gate goes to the agent (§13). */
   onHeld: ((projectId: string, held: HeldRequest) => void) | undefined;
 
@@ -55,6 +62,7 @@ export class SiteManager {
       return;
     }
     const project = this.projectFor(projectId);
+    if (project?.kind === 'live' && !project.replay) return this.openLive(projectId, project);
     const folder = project?.kind === 'local' ? project.folder : undefined;
     if (!project || !folder || !existsSync(folder)) {
       this.broadcast(IPC.siteStatus, { projectId, status: 'unavailable' } satisfies SiteStatus);
@@ -169,6 +177,46 @@ export class SiteManager {
       case 'rects':
         return { op: 'rects', rects: await win.rects(request.refs) };
     }
+  }
+
+  /**
+   * A live site (§4.2: audit-only): no dev server, and never opened until its ownership is
+   * re-checked. The window only follows the verified origin.
+   */
+  private async openLive(projectId: string, project: Project): Promise<void> {
+    let url: URL;
+    try {
+      url = new URL(/^https?:\/\//.test(project.url) ? project.url : `https://${project.url}`);
+    } catch {
+      this.broadcast(IPC.siteStatus, { projectId, status: 'unavailable' } satisfies SiteStatus);
+      return;
+    }
+    const server = new DevServer('', '', 0);
+    const live: Live = { server, status: { projectId, status: 'starting' } };
+    this.live.set(projectId, live);
+    this.status(projectId, { status: 'starting', url: url.origin });
+    const ok = (await this.recheck?.(url.hostname, project.verification)) ?? {
+      ok: false,
+      message: '',
+    };
+    if (this.live.get(projectId) !== live) return;
+    if (!ok.ok) {
+      this.status(projectId, {
+        status: 'failed',
+        log: [ok.message || 'Ownership couldn’t be confirmed.'],
+      });
+      return;
+    }
+    const win = new SiteWindow(
+      projectId,
+      url.origin,
+      (jpeg, w, h) => this.broadcast(IPC.siteFrame, projectId, jpeg, w, h),
+      (patch) => this.status(projectId, patch),
+      (held) => this.onHeld?.(projectId, held),
+    );
+    live.window = win;
+    await win.load(url.pathname || '/').catch(() => undefined);
+    this.status(projectId, { status: 'running' });
   }
 
   close(projectId: string): void {

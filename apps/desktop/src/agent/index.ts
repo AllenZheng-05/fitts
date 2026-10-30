@@ -33,6 +33,7 @@ import { interviewTurn } from './interview/interview';
 import { runFixer } from './fix/fixer';
 import { Media } from './llm/media';
 import { voiceEntry } from './llm/voice-cost';
+import { domainOf, verifyDns, verifyFile } from './verify-site/verify';
 import type { AgentMessage, MainMessage } from './protocol';
 import { SiteRpc } from './site-client';
 
@@ -438,6 +439,14 @@ port.on('message', (e: { data: MainMessage }) => {
         if (list.at(-1) !== path) visited.set(projectId, [...list, path].slice(-20));
       }
       if (status === 'failed') realRuns.get(projectId)?.siteDown();
+    } else if (message.kind === 'verifySite') {
+      const domain = domainOf(message.domain);
+      const check = !domain
+        ? Promise.resolve({ ok: false, message: 'That doesn’t look like a domain.' })
+        : message.method === 'dns'
+          ? verifyDns(domain, message.token)
+          : verifyFile(domain, message.token);
+      void check.then((r) => send({ kind: 'verifyResult', id: message.id, ...r }));
     } else if (message.kind === 'voiceUsage') {
       const runId = (realRuns.get(message.projectId)?.state ?? raw.get(message.projectId))?.runId;
       if (runId) ledger.record(voiceEntry(runId, message.projectId, message.usage));

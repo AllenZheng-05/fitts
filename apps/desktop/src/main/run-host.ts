@@ -90,6 +90,19 @@ export class RunHost {
     });
   }
 
+  /** A live-site ownership check, run by the agent's verify-site module (§4.2). */
+  verifySite(
+    method: 'dns' | 'file',
+    domain: string,
+    token: string,
+  ): Promise<{ ok: boolean; message: string }> {
+    const id = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.pending.set(id, resolve);
+      this.send({ kind: 'verifySite', id, method, domain, token });
+    });
+  }
+
   start(): void {
     ipcMain.on(IPC.engineCall, (_e, call: unknown) => {
       if (isEngineCall(call)) this.send({ kind: 'call', call });
@@ -165,6 +178,7 @@ export class RunHost {
         return;
       }
       case 'keyResult':
+      case 'verifyResult':
         this.pending.get(m.id)?.({ ok: m.ok, message: m.message });
         this.pending.delete(m.id);
         return;

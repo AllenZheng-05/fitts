@@ -8,6 +8,8 @@ import { SegmentedControl } from '../../components/SegmentedControl';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
 import { VERIFY_MS, VERIFY_TOKEN } from '../../mock/detect';
+import type { SiteVerification } from '@fitts/schema';
+import { bridge } from '../../lib/bridge';
 import { CONNECT_MS, DNS_RECORD_NAME, HOSTS, hostOf, type Host } from '../../mock/hosting';
 import { useToasts } from '../../state/toasts';
 
@@ -28,14 +30,20 @@ export function LiveVerify({
 }: {
   url: string;
   onUrl: (url: string) => void;
-  onVerifiedChange: (verified: boolean) => void;
+  /** How the site was verified (for the re-check before each run), or null. */
+  onVerifiedChange: (verification: Omit<SiteVerification, 'verifiedAt'> | null) => void;
 }) {
   const [method, setMethod] = useState<Method>('host');
   const [connection, setConnection] = useState<Connection>(null);
   // DNS and file checks: which domain passed, so editing the URL undoes it.
   const [checkedDomain, setCheckedDomain] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  /** Why the last real check failed, in Fitts's words. */
+  const [problem, setProblem] = useState<string | null>(null);
   const domain = hostOf(url);
+  const verifier = bridge().verify;
+  // Phase 1's fixed token stays for the mock; real checks use this domain's own token.
+  const token = verifier ? tokenFor(domain) : VERIFY_TOKEN;
 
   const connected = connection?.status === 'connected' ? connection.host : null;
   const hostedSite = connected?.sites.find((site) => site.domain === domain);
@@ -43,25 +51,77 @@ export function LiveVerify({
     domain !== '' &&
     (method === 'host' ? hostedSite !== undefined : checkedDomain === domain && !checking);
 
-  useEffect(() => onVerifiedChange(verified), [verified, onVerifiedChange]);
+  const hostId = connected?.id;
+  useEffect(
+    () =>
+      onVerifiedChange(
+        !verified
+          ? null
+          : method === 'host'
+            ? { method, ...(hostId ? { host: hostId } : {}) }
+            : { method, token },
+      ),
+    [verified, method, hostId, token, onVerifiedChange],
+  );
 
   useEffect(() => {
     if (connection?.status !== 'connecting') return;
-    const timer = setTimeout(
-      () => setConnection({ host: connection.host, status: 'connected' }),
-      CONNECT_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [connection]);
+    let cancelled = false;
+    const done = (host: Host) => {
+      if (!cancelled) setConnection({ host, status: 'connected' });
+    };
+    // GitHub Pages is real when the GitHub CLI is there (§4.2); the other hosts are mocked.
+    if (connection.host.id === 'github-pages' && verifier) {
+      void verifier.githubPages().then((res) => {
+        if (res === null) return done(connection.host);
+        if ('error' in res) {
+          if (!cancelled) {
+            setProblem(res.error);
+            setConnection(null);
+          }
+          return;
+        }
+        done({ ...connection.host, sites: res.sites });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const timer = setTimeout(() => done(connection.host), CONNECT_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [connection, verifier]);
 
   useEffect(() => {
-    if (!checking) return;
-    const timer = setTimeout(() => {
+    if (!checking || (method !== 'dns' && method !== 'file')) return;
+    let cancelled = false;
+    const pass = () => {
+      if (cancelled) return;
       setChecking(false);
       setCheckedDomain(domain);
-    }, VERIFY_MS);
-    return () => clearTimeout(timer);
-  }, [checking, domain]);
+    };
+    if (!verifier) {
+      const timer = setTimeout(pass, VERIFY_MS);
+      return () => clearTimeout(timer);
+    }
+    void verifier.check(method, domain, token).then((res) => {
+      if (cancelled) return;
+      if (res.offline) {
+        setTimeout(pass, VERIFY_MS);
+        return;
+      }
+      if (res.ok) pass();
+      else {
+        setChecking(false);
+        setProblem(res.message);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [checking, domain, method, token, verifier]);
 
   const check = (
     <div className="flex items-center gap-2">
@@ -70,6 +130,7 @@ export function LiveVerify({
         disabled={!domain || checking}
         onClick={() => {
           setCheckedDomain(null);
+          setProblem(null);
           setChecking(true);
         }}
       >
@@ -80,6 +141,11 @@ export function LiveVerify({
         <Chip tone="mint" role="status">
           {copy.addProject.verified}
         </Chip>
+      )}
+      {problem && !checking && (
+        <span role="status" className="text-[13px] text-ink-2">
+          {problem}
+        </span>
       )}
     </div>
   );
@@ -158,7 +224,7 @@ export function LiveVerify({
             </dd>
             <dt className="font-semibold">{copy.addProject.dnsValue}</dt>
             <dd>
-              <CopyValue value={VERIFY_TOKEN} label={copy.addProject.copyToken} />
+              <CopyValue value={token} label={copy.addProject.copyToken} />
             </dd>
           </dl>
           {check}
@@ -169,7 +235,7 @@ export function LiveVerify({
         <div className={PANEL}>
           <p className="text-[14px] leading-normal">{copy.addProject.verifyIntro}</p>
           <span className="font-mono text-[13px]">{copy.addProject.verifyPath}</span>
-          <CopyValue value={VERIFY_TOKEN} label={copy.addProject.copyToken} />
+          <CopyValue value={token} label={copy.addProject.copyToken} />
           {check}
         </div>
       )}
@@ -256,4 +322,23 @@ function CopyValue({ value, label }: { value: string; label: string }): ReactNod
       />
     </div>
   );
+}
+
+/** A random token per domain, kept on this machine, so each site proves itself with its own. */
+function tokenFor(domain: string): string {
+  if (!domain) return '';
+  const KEY = 'fitts.verifyTokens';
+  let all: Record<string, string> = {};
+  try {
+    all = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, string>;
+  } catch {
+    all = {};
+  }
+  const existing = all[domain];
+  if (existing) return existing;
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const token = `fitts-verify=${[...bytes].map((b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('')}`;
+  all[domain] = token;
+  localStorage.setItem(KEY, JSON.stringify(all));
+  return token;
 }

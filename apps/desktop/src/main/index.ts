@@ -7,6 +7,8 @@ import { RunHost } from './run-host';
 import { Secrets } from './secrets';
 import { FixHost } from './fix/fix-host';
 import { VoiceHost } from './voice';
+import { registerReplay } from './replay';
+import { recheck, registerVerify } from './verify-site';
 import { SiteManager } from './site/manager';
 import { ProjectStore } from './store/projects';
 import { createMainWindow, ICON_PATH } from './window';
@@ -48,6 +50,11 @@ void app.whenReady().then(() => {
       : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.onHeld = (projectId, held) => host.siteHeld(projectId, held);
+  registerReplay(userData);
+  const check = (method: 'dns' | 'file', domain: string, token: string) =>
+    host.verifySite(method, domain, token);
+  registerVerify(check);
+  sites.recheck = (domain, verification) => recheck(domain, verification, check);
   new VoiceHost(
     (name) => secrets.get(name),
     (projectId, usage) => host.voiceUsage(projectId, usage),

@@ -1,0 +1,44 @@
+# Packaging (SPEC-phase2 §16). Unsigned builds: Windows NSIS x64 (built and tested locally),
+# macOS dmg and Linux AppImage (built in CI). Releases publish to GitHub on a v* tag; nothing
+# publishes from a local build.
+appId: app.fitts.desktop
+productName: Fitts
+copyright: Copyright © 2026 Allen Zheng
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**
+  - package.json
+  # The window icon (main/window.ts resolves it next to out/).
+  - resources/icon.png
+extraResources:
+  # The judges' recorded run (§12.3).
+  - from: resources/replays
+    to: replays
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Fitts-Setup-${version}.${ext}
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.developer-tools
+  icon: resources/icon.png
+  identity: null
+linux:
+  target: [AppImage]
+  category: Development
+  icon: resources/icon.png
+publish:
+  provider: github
+  owner: AllenZheng-05
+  repo: fitts
+  releaseType: release

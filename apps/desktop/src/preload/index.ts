@@ -74,6 +74,22 @@ const bridge: FittsBridge = {
       return () => ipcRenderer.removeListener(IPC.siteStatus, listener);
     },
   },
+  verify: {
+    check: (method, domain, token) =>
+      ipcRenderer.invoke(IPC.verifyCheck, method, domain, token) as Promise<{
+        ok: boolean;
+        message: string;
+        offline?: boolean;
+      }>,
+    githubPages: () =>
+      ipcRenderer.invoke(IPC.verifyPages) as ReturnType<
+        NonNullable<FittsBridge['verify']>['githubPages']
+      >,
+  },
+  replay: {
+    open: () =>
+      ipcRenderer.invoke(IPC.replayOpen) as ReturnType<NonNullable<FittsBridge['replay']>['open']>,
+  },
   voice: {
     start: (mode, projectId) =>
       ipcRenderer.invoke(IPC.voiceStart, mode, projectId) as Promise<{

@@ -25,6 +25,11 @@ export const copy = {
     done: 'Done',
     completed: 'completed',
   },
+  replay: {
+    projectName: 'demo/chat · recorded run',
+    url: 'Recorded run',
+    chip: 'Replay · {n}× speed',
+  },
   status: {
     micOn: 'Mic on',
     costDuring: 'Spent {spent} of {cap}',
@@ -82,6 +87,8 @@ export const copy = {
     openHint: 'Add a key that works and a project folder to continue.',
     liveLead: "Don't have the code here?",
     liveLink: 'Audit a live site instead',
+    replayLead: 'No keys yet?',
+    replayLink: 'Watch a recorded run',
     liveNeedsKey: 'Add a key that works first.',
     backTitle: 'Welcome back, {name}',
     backOpen: 'Open',

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getEngine } from './engine';
+import { getEngine, getReplayEngine, setReplaying } from './engine';
 import { useProjects } from './projects';
 import { useRunStore } from './run-store';
 import { useSettings } from './settings';
@@ -123,8 +123,13 @@ export const useUi = create<UiState>((set, get) => ({
   openProject: (projectId) => {
     useProjects.getState().setLastOpen(projectId);
     useRunStore.getState().setActiveProject(projectId);
+    // A recorded run plays on the replay engine; every other project on the real one (§12.3).
+    const replay = useProjects.getState().projects.find((p) => p.id === projectId)?.replay;
+    setReplaying(Boolean(replay));
     const engine = getEngine();
-    if (!engine.getState(projectId)) {
+    if (replay && !getReplayEngine().getState(projectId)) {
+      void import('./actions').then((a) => a.openReplay());
+    } else if (!engine.getState(projectId)) {
       engine.startInterview(projectId);
       engine.setMode(projectId, useSettings.getState().defaultMode);
     }

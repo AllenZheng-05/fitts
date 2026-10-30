@@ -1,0 +1,68 @@
+# Build and test on every push; package on all three platforms and publish a GitHub Release on a
+# v* tag (SPEC-phase2 §16). Unsigned builds. The macOS job also runs the first-launch e2e spec
+# against the built app, since the macOS-only UI (hiddenInset title bar, traffic lights,
+# ⌘ labels) is otherwise unverified.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fitts/probes build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - name: First-launch e2e on macOS (the macOS-only UI)
+        if: matrix.os == 'macos-latest'
+        run: pnpm --filter @fitts/desktop test:e2e -- tests/e2e/launch.spec.ts
+        env:
+          FITTS_OFFLINE: '1'
+          FITTS_NO_DEV_KEYS: '1'
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fitts/desktop build
+      - run: pnpm --filter @fitts/desktop exec electron-builder ${{ matrix.target }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'

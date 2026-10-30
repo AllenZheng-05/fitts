@@ -5,13 +5,21 @@ import { bridge } from '../lib/bridge';
 import { profileFor } from '../mock/profiles';
 import { IpcRunEngine } from './ipc-engine';
 import { MockRunEngine } from './mock-engine';
+import { ReplayRunEngine } from './replay-engine';
 import { useProjects } from './projects';
 import { useSettings } from './settings';
 
 export type { RunEngine };
-export type EngineKind = 'ipc' | 'mock';
+export type EngineKind = 'ipc' | 'mock' | 'replay';
 
 let mock: MockRunEngine | undefined;
+let replay: ReplayRunEngine | undefined;
+
+/** Replay mode's engine (§12.3): plays a recorded run, needs no keys. */
+export function getReplayEngine(): ReplayRunEngine {
+  replay ??= new ReplayRunEngine();
+  return replay;
+}
 let ipc: IpcRunEngine | undefined;
 
 const briefFor = (id: string) => useProjects.getState().projects.find((p) => p.id === id)?.brief;
@@ -50,7 +58,16 @@ export function onEngineKindChange(fn: (k: EngineKind) => void): () => void {
   return () => kindListeners.delete(fn);
 }
 
+/** Replay while a recorded run is open; back to the real engine when you leave it. */
+export function setReplaying(on: boolean): void {
+  const next: EngineKind = on ? 'replay' : getIpcEngine() ? 'ipc' : 'mock';
+  if (kind === next || (!on && kind === 'mock')) return;
+  kind = next;
+  for (const l of kindListeners) l(kind);
+}
+
 export function getEngine(): RunEngine {
+  if (kind === 'replay') return getReplayEngine();
   return (kind === 'ipc' && getIpcEngine()) || getMockEngine();
 }
 

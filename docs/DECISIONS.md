@@ -1672,3 +1672,81 @@ screencast fallback is needed.
     local Transcribe server (`FITTS_TRANSCRIBE_URL`, which lets voice run in an otherwise
     offline e2e), with partials in the box and the final sent as SPOKEN.
   - What needs ears and a real mic is in `scripts/voice-check.md`.
+
+## Phase 2 — P12: replay, live-site verification, packaging, README, self-audit
+
+- **Replay for judges (§12.3).**
+  - **The recording.** `tests/bench/record-replay.bench.ts` recorded one real run of the
+    demo/chat mirror: interview, crawl, review, media, 10 fixes with dry-run PRs, Done. It's
+    bundled as `apps/desktop/resources/replays/demo-chat/`: the log, 52 step shots, and the
+    outlines, mockups and direction pictures, 2.5 MB in all. It was checked for secrets (the
+    only matches were "mask-" and "ask-unsure") and machine paths.
+  - **Opening it.** Main copies the recording into userData under the project id
+    `replay-demo-chat`, rewriting ids in the log, so `fitts-asset://` serves its images
+    unchanged.
+  - **Playback.** `ReplayRunEngine` plays the events through the shared reducer at recorded
+    timing. It starts at 4× (the header says "Replay · 4× speed"), and any pause longer than 3s
+    plays as 3s. Every action is a no-op except stopping (Stop run, ⌘.), which jumps to the end.
+  - **The site view** shows the current step's shot.
+  - **The project.** The replay project is `kind: 'live'` with `replay` set: no dev server,
+    no fixes, no agent. Opening it from the project list later plays the recording again.
+  - **The Welcome link,** "Watch a recorded run", needs no keys. 1× isn't offered in the UI
+    yet (the engine supports it).
+- **Live-site verification (§4.2).**
+  - **DNS and file checks** run in `agent/verify-site/`, inside the network boundary: a TXT
+    record at `_fitts-verify.<domain>`, or `/.well-known/fitts-verify.txt`, or a
+    `<meta name="fitts-verify">` tag. Bare and `fitts-verify=` tokens both count.
+  - **Tokens** are random per domain, kept in the renderer's storage; Phase 1 had one fixed
+    mock token.
+  - **GitHub Pages** is listed with read-only `gh api` calls through main's spawner (repos with
+    Pages, then each repo's cname or github.io URL). It wasn't run live, because it touches
+    GitHub (NEEDS-ALLEN).
+  - **Vercel, Netlify and Cloudflare** stay mocked (first on the cut list): no OAuth apps
+    could be registered.
+  - **Stored per project:** the method, host and token (`SiteVerification`).
+- **Live sites now actually open.** Before P12, nothing opened a live-site project: only local
+  projects got a site window. Main now opens live projects in the offscreen window with no dev
+  server, after re-checking ownership:
+  - DNS and file are re-run with the stored token;
+  - GitHub Pages is re-listed;
+  - mocked hosts keep their recorded verification;
+  - a project with no verification never opens.
+
+  A failed re-check shows the site-down state with the reason. Fixes stay unavailable (no
+  folder). The window follows only the verified origin; adding the `www.` variant is left to
+  do.
+- **Offline e2e keeps Phase 1's mock verification.** Main answers "offline" and the dialog
+  passes after its delay. That bypass exists only when `FITTS_OFFLINE=1`, which only tests set.
+- **Packaging (§16).**
+  - electron-builder 26.17.0 (a month-old release): appId `app.fitts.desktop`, unsigned NSIS
+    x64 for Windows, dmg (arm64 and x64) and AppImage in CI, publishing to GitHub Releases.
+  - The replay ships as an extra resource; the icon goes inside the app files.
+  - **Built and smoke-tested locally:** `pnpm dist:dir` gives `release/win-unpacked/Fitts.exe`,
+    and `tests/bench/packaged.bench.ts` launches it with a fresh profile and plays the replay
+    without keys.
+  - The asar is 187 MB because electron-builder copies every production dependency, including
+    renderer libraries Vite already bundled. Moving those to devDependencies would slim it;
+    that's left as a follow-up rather than risk the build now.
+  - The NSIS installer is buildable (`pnpm dist:win`). Installing it and publishing a release
+    are Allen's (NEEDS-ALLEN).
+- **CI** (`.github/workflows/build.yml`, written, not pushed):
+  - every push: typecheck, lint and unit tests on Windows, macOS and Linux;
+  - macOS also runs the first-launch e2e spec, the smoke test §16 asks for;
+  - a `v*` tag packages each OS and publishes the release.
+  - "Try it on our demo" (copying the bundled demos to a temp folder) isn't built; the replay
+    covers the no-setup path.
+- **The README** is rewritten for people installing or evaluating Fitts: try it, install
+  (SmartScreen and Gatekeeper steps), what it does, develop, and status.
+  - `.env.example` already exists (Allen's commit); a deny rule keeps this session from reading
+    `.env*` files, so the README also lists the variables.
+- **The self-audit** (`tests/e2e/self-audit.spec.ts`) runs Fitts's own probe bundle on its
+  Settings screen, injected the way Fitts probes any site (isolated world 1001; the app's CSP
+  rightly blocks inline scripts).
+  - **It found one real problem:** a 138×20px link-button inside a sentence (Settings › Open
+    weights › "add a Baseten key"). It now has a 24px tap area.
+  - **Passing:** contrast, target size, button and link names, leaks and focus visibility all
+    pass and are asserted.
+  - **Reported, not asserted:** look-and-feel notes from the Phase 1 design. Seven font sizes
+    (the guideline is six); spacing at 9, 11 and 18px.
+- **The dev replay path** resolves next to `out/` (`__dirname`), not `app.getAppPath()`, which
+  is `out/main` when Electron starts with a script. P3's `devRepoRoot` had the same issue.

@@ -1,3 +1,4 @@
+import type { SiteVerification } from '@fitts/schema';
 import { FolderOpen, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/Button';
@@ -33,7 +34,10 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
   const [plugin, setPlugin] = useState(true);
   const [devCommand, setDevCommand] = useState<string | null>(null);
   const [url, setUrl] = useState('');
-  const [verified, setVerified] = useState(false);
+  const [verification, setVerification] = useState<Omit<SiteVerification, 'verifiedAt'> | null>(
+    null,
+  );
+  const verified = verification !== null;
 
   const detection = useDetection(folder);
   const suggested =
@@ -55,7 +59,12 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
       });
       addAndOpenProject(project);
     } else {
-      addAndOpenProject(projectFromUrl(url.trim(), shownName));
+      addAndOpenProject({
+        ...projectFromUrl(url.trim(), shownName),
+        ...(verification
+          ? { verification: { ...verification, verifiedAt: new Date().toISOString() } }
+          : {}),
+      });
     }
   };
 
@@ -152,7 +161,7 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
                     placeholder={copy.addProject.urlPlaceholder}
                     onChange={(e) => setUrl(e.target.value)}
                   />
-                  <LiveVerify url={url} onUrl={setUrl} onVerifiedChange={setVerified} />
+                  <LiveVerify url={url} onUrl={setUrl} onVerifiedChange={setVerification} />
                   {nameField}
                 </>
               ),

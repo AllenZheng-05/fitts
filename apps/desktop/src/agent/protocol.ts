@@ -129,6 +129,8 @@ export type MainMessage =
   | { kind: 'siteStatus'; status: SiteStatus }
   /** A write Fitts's action sent was held for the gate (§13: Fetch interception). */
   | { kind: 'siteHeld'; projectId: string; held: HeldRequest }
+  /** A live-site ownership check (§4.2): DNS or the file/meta tag. */
+  | { kind: 'verifySite'; id: number; method: 'dns' | 'file'; domain: string; token: string }
   /** Speech in and out, for the cost ledger (§11): stt seconds, tts characters. */
   | {
       kind: 'voiceUsage';
@@ -142,5 +144,6 @@ export type AgentMessage =
   | { kind: 'ready' }
   | { kind: 'events'; batch: EngineEvents }
   | { kind: 'keyResult'; id: number; ok: boolean; message: string }
+  | { kind: 'verifyResult'; id: number; ok: boolean; message: string }
   | { kind: 'site'; id: number; projectId: string; request: SiteOp }
   | { kind: 'error'; message: string };

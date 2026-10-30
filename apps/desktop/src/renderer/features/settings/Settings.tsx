@@ -191,7 +191,7 @@ function RunTab() {
             {copy.settings.openWeightsNeedsKey}{' '}
             <button
               type="button"
-              className="text-cobalt-ink underline hover:text-cobalt-deep"
+              className="inline-flex min-h-6 items-center text-cobalt-ink underline hover:text-cobalt-deep"
               onClick={() => useUi.setState({ settingsTab: 'keys' })}
             >
               {copy.settings.addBaseten}

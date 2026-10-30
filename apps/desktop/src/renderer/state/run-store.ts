@@ -1,7 +1,15 @@
 import type { RunState } from '@fitts/schema';
 import { create } from 'zustand';
 import { DEMO_CHAT } from '../mock/fixtures/projects';
-import { getEngineKind, getIpcEngine, getMockEngine, type EngineKind } from './engine';
+import {
+  getEngine,
+  getEngineKind,
+  getIpcEngine,
+  getMockEngine,
+  getReplayEngine,
+  onEngineKindChange,
+  type EngineKind,
+} from './engine';
 import { useProjects } from './projects';
 
 interface RunStore {
@@ -35,6 +43,17 @@ const mirror = (source: EngineKind) => (projectId: string, state: RunState) => {
 };
 getMockEngine().subscribeAll(mirror('mock'));
 getIpcEngine()?.subscribeAll(mirror('ipc'));
+getReplayEngine().subscribeAll(mirror('replay'));
+// Switching engines (into or out of a replay): show what the new engine knows right away.
+onEngineKindChange(() => {
+  const engine = getEngine();
+  const runs: Record<string, RunState> = {};
+  for (const p of useProjects.getState().projects) {
+    const s = engine.getState(p.id);
+    if (s) runs[p.id] = s;
+  }
+  useRunStore.setState({ runs });
+});
 
 /** Dev only: forget every run (the Scenario panel does this before loading one). */
 export function clearRuns() {

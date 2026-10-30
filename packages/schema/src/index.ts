@@ -28,6 +28,16 @@ export interface FittsBridge {
   site?: SiteBridge;
   /** Transcribe (the mic) and ElevenLabs (Fitts's voice), held by main (§14). */
   voice?: VoiceBridge;
+  /** Live-site ownership checks (§4.2): DNS, a file or meta tag, GitHub Pages via gh. */
+  verify?: VerifyBridge;
+  /** The bundled recorded run for judges (§12.3): no keys needed. */
+  replay?: {
+    open(): Promise<{
+      projectId: string;
+      runId: string;
+      events: { ts: number; event: RunEvent }[];
+    } | null>;
+  };
 }
 
 /** Push to talk for the mic button; endpointing for "Always listening" (V5). */
@@ -247,6 +257,9 @@ export const IPC = {
   voiceSpeak: 'fitts:voice-speak',
   voiceAudio: 'fitts:voice-audio',
   voiceStopSpeaking: 'fitts:voice-stop-speaking',
+  replayOpen: 'fitts:replay-open',
+  verifyCheck: 'fitts:verify-check',
+  verifyPages: 'fitts:verify-pages',
 } as const;
 
 export type Mode = 'plan' | 'ask-every' | 'ask-unsure' | 'autonomous' | 'dangerous';
@@ -271,10 +284,12 @@ export interface Project {
   brief: Brief;
   lastRunId?: string;
   createdAt: string;
-  /** SPEC-phase2 §12.2: how a live site proved ownership. */
-  verification?: { method: 'host' | 'dns' | 'file'; host?: string; verifiedAt: string };
+  /** SPEC-phase2 §12.2: how a live site proved ownership (re-checked before each run, §4.2). */
+  verification?: SiteVerification;
   /** SPEC-phase2 §12.2: where the site view opens (demo/chat uses /compose). */
   startPath?: string;
+  /** SPEC-phase2 §12.3: a bundled recorded run, played back (no site, no keys). */
+  replay?: { runId: string };
 }
 
 export interface Brief {
@@ -595,3 +610,22 @@ export interface FindingDraft {
 }
 
 export { default as FINDING_DRAFTS_FORMAT } from './finding.schema.json';
+
+/** How a live site proved it's the user's (§4.2). `token` is what DNS or the file must hold. */
+export interface SiteVerification {
+  method: 'host' | 'dns' | 'file';
+  host?: string;
+  token?: string;
+  verifiedAt: string;
+}
+
+export interface VerifyBridge {
+  /** Checks the DNS TXT record or the file/meta tag. `offline` (e2e) means "not checked". */
+  check(
+    method: 'dns' | 'file',
+    domain: string,
+    token: string,
+  ): Promise<{ ok: boolean; message: string; offline?: boolean }>;
+  /** Your GitHub Pages sites, via the GitHub CLI; null offline (e2e). */
+  githubPages(): Promise<{ sites: { name: string; domain: string }[] } | { error: string } | null>;
+}

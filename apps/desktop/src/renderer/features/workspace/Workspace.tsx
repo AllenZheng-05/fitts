@@ -37,9 +37,11 @@ export function Workspace() {
   }, [run, project]);
 
   // The project's real site (SPEC-phase2 §5): main starts its dev server and site window.
+  // A live site opens too, after main re-checks that it's yours (§4.2); never a replay.
+  const siteId = project && !project.replay ? project.id : null;
   useEffect(() => {
-    if (project?.kind === 'local') openLiveSite(project.id);
-  }, [project?.id, project?.kind]);
+    if (siteId) openLiveSite(siteId);
+  }, [siteId]);
 
   const name = project?.name ?? projectId;
   return (

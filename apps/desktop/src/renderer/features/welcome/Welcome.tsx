@@ -12,7 +12,7 @@ import { checkKey, storeKey } from '../../lib/keys';
 import { useDetection } from '../../lib/use-detection';
 import { KEY_CHECK_MS, projectFromFolder } from '../../mock/detect';
 import { LAST_RUN_CAPTIONS, MOCK_USER } from '../../mock/fixtures/projects';
-import { addAndOpenProject } from '../../state/actions';
+import { addAndOpenProject, openReplay } from '../../state/actions';
 import { useProjects } from '../../state/projects';
 import { useRunStore } from '../../state/run-store';
 import { useSettings, type UserMode } from '../../state/settings';
@@ -225,6 +225,18 @@ function SetupCard() {
           </span>
         )}
       </p>
+      {bridge().replay && (
+        <p className="-mt-2 text-[13px] text-ink-2">
+          {copy.welcome.replayLead}{' '}
+          <button
+            type="button"
+            onClick={() => void openReplay()}
+            className="font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
+          >
+            {copy.welcome.replayLink}
+          </button>
+        </p>
+      )}
     </section>
   );
 }

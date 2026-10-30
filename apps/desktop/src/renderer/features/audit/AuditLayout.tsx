@@ -8,6 +8,7 @@ import { format, formatClock } from '../../lib/format';
 import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine, recordUserClick } from '../../state/engine';
 import { useLiveSite } from '../../state/live-site';
+import { useProject } from '../../state/projects';
 import { useAuditOnly } from '../../state/projects';
 import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
@@ -52,6 +53,8 @@ function AuditSiteView({ run }: { run: RunState }) {
   const testingRoute = run.routes.find((r) => r.status === 'testing')?.path;
   // On the live site the real crawler drives navigation itself (SPEC-phase2 §6.1).
   const live = Boolean(useLiveSite(run.projectId));
+  // A recorded run (§12.3): its step shots stand in for the site.
+  const replaying = Boolean(useProject(run.projectId)?.replay);
   useEffect(() => {
     if (driving || live) return;
     const target =
@@ -142,8 +145,8 @@ function AuditSiteView({ run }: { run: RunState }) {
       }
       panel={<FindingPanel run={run} />}
       shot={
-        rewound
-          ? `fitts-asset://${run.projectId}/${run.runId}/shots/${run.rewindStep ?? 0}.jpg`
+        rewound || replaying
+          ? `fitts-asset://${run.projectId}/${run.runId}/shots/${rewound ? (run.rewindStep ?? 0) : Math.max(1, run.step)}.jpg`
           : undefined
       }
       contentInsetRight={findingOpen ? FINDING_PANEL_INSET : undefined}
