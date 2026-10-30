@@ -143,6 +143,18 @@ export class SiteManager {
         return win.press(request.key);
       case 'back':
         return win.back();
+      case 'probes':
+        return { op: 'probes', results: await win.runProbes(request.names) };
+      case 'focus':
+        return { op: 'items', items: await win.focusSweep() };
+      case 'viewport':
+        return { op: 'items', items: await win.viewportSweep() };
+      case 'value':
+        return { op: 'value', value: await win.value(request.ref) };
+      case 'links':
+        return { op: 'links', statuses: await win.links(request.hrefs) };
+      case 'network':
+        return { op: 'network', requests: win.drainNetwork() };
     }
   }
 

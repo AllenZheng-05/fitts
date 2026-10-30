@@ -1,17 +1,33 @@
 // The agent's only way to touch the user's site: RPC to main (SPEC-phase2 §1). Main runs each
 // operation on the project's site window (and, from P8, through the permission gate).
-import type { AgentMessage, AxSnapshot, SiteOp, SiteOpResult } from './protocol';
+import type { PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
+import type { ProbeItem } from '@fitts/schema';
+import type { AgentMessage, AxSnapshot, OpTrace, SiteOp, SiteOpResult } from './protocol';
+
+export interface ActionResult {
+  path: string;
+  navigated: boolean;
+  /** Feedback and requests the action caused (clicks and typing). */
+  trace?: OpTrace;
+}
 
 export interface Site {
   snapshot(): Promise<AxSnapshot>;
   screenshot(): Promise<{ jpegBase64: string; width: number; height: number }>;
-  navigate(path: string): Promise<{ path: string; navigated: boolean }>;
-  click(ref: string): Promise<{ path: string; navigated: boolean }>;
-  type(ref: string, text: string): Promise<{ path: string; navigated: boolean }>;
-  press(key: string): Promise<{ path: string; navigated: boolean }>;
-  back(): Promise<{ path: string; navigated: boolean }>;
+  navigate(path: string): Promise<ActionResult>;
+  click(ref: string): Promise<ActionResult>;
+  type(ref: string, text: string): Promise<ActionResult>;
+  press(key: string): Promise<ActionResult>;
+  back(): Promise<ActionResult>;
   health(): Promise<{ up: boolean; log: string[] }>;
   restart(): Promise<boolean>;
+  // Probes (§7)
+  probes(names: PageProbeName[]): Promise<PageProbeResult[]>;
+  focusSweep(): Promise<ProbeItem[]>;
+  viewportSweep(): Promise<ProbeItem[]>;
+  value(ref: string): Promise<string | null>;
+  links(hrefs: string[]): Promise<Record<string, number>>;
+  network(): Promise<RequestRecord[]>;
 }
 
 export class SiteRpc {
@@ -41,22 +57,18 @@ export class SiteRpc {
 
   /** A typed facade for one project. */
   for(projectId: string): Site {
-    const action = async (request: SiteOp) => {
+    const expect = async <K extends SiteOpResult['op']>(request: SiteOp, op: K) => {
       const r = await this.request(projectId, request);
-      if (r.op !== 'action') throw new Error('unexpected site result');
-      return { path: r.path, navigated: r.navigated };
+      if (r.op !== op) throw new Error('unexpected site result');
+      return r as Extract<SiteOpResult, { op: K }>;
+    };
+    const action = async (request: SiteOp): Promise<ActionResult> => {
+      const r = await expect(request, 'action');
+      return { path: r.path, navigated: r.navigated, ...(r.trace ? { trace: r.trace } : {}) };
     };
     return {
-      snapshot: async () => {
-        const r = await this.request(projectId, { op: 'snapshot' });
-        if (r.op !== 'snapshot') throw new Error('unexpected site result');
-        return r.snapshot;
-      },
-      screenshot: async () => {
-        const r = await this.request(projectId, { op: 'screenshot' });
-        if (r.op !== 'screenshot') throw new Error('unexpected site result');
-        return r;
-      },
+      snapshot: async () => (await expect({ op: 'snapshot' }, 'snapshot')).snapshot,
+      screenshot: () => expect({ op: 'screenshot' }, 'screenshot'),
       navigate: (path) => action({ op: 'navigate', path }),
       click: (ref) => action({ op: 'click', ref }),
       type: (ref, text) => action({ op: 'type', ref, text }),
@@ -70,6 +82,12 @@ export class SiteRpc {
         const r = await this.request(projectId, { op: 'restart' });
         return r.op === 'restart' && r.up;
       },
+      probes: async (names) => (await expect({ op: 'probes', names }, 'probes')).results,
+      focusSweep: async () => (await expect({ op: 'focus' }, 'items')).items,
+      viewportSweep: async () => (await expect({ op: 'viewport' }, 'items')).items,
+      value: async (ref) => (await expect({ op: 'value', ref }, 'value')).value,
+      links: async (hrefs) => (await expect({ op: 'links', hrefs }, 'links')).statuses,
+      network: async () => (await expect({ op: 'network' }, 'network')).requests,
     };
   }
 }

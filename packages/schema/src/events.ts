@@ -9,6 +9,7 @@ import type {
   Finding,
   GateRequest,
   Mode,
+  ProbeResult,
   RunActivity,
   RunPhase,
   RunState,
@@ -59,6 +60,8 @@ export type RunEvent =
   | { type: 'cost'; cost: RunState['cost'] }
   /** One model call's ledger entry (for reports); `cost` carries the running totals. */
   | { type: 'ledger.entry'; entry: CostEvent }
+  /** A probe's result (§7); evidence for reviewers. `RunState` doesn't hold it. */
+  | { type: 'probe.result'; result: ProbeResult }
   | { type: 'overlay.set'; overlays: RunState['overlays'] }
   | { type: 'rewind.set'; step?: number }
   /** Anything else; `unset` lists keys to delete (JSON drops `undefined` values). */
@@ -191,6 +194,7 @@ export function reduce(s: RunState | undefined, e: RunEvent): RunState | undefin
     }
     case 'error':
     case 'ledger.entry':
+    case 'probe.result':
       return s;
   }
 }

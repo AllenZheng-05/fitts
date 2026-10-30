@@ -1,6 +1,6 @@
 // The real audit (SPEC-phase2 §6): CRAWL as a step loop over the user's live site, with the
 // coverage gate, stop/pause/queue, take the wheel, and edge states from real conditions.
-// Probes (P5), reviewers (P6), the gate (P8) and fixes (P9) plug into this loop later.
+// Probes (P5) run alongside it; reviewers (P6), the gate (P8) and fixes (P9) plug into this loop later.
 import {
   reduce,
   type ChatItem,
@@ -15,6 +15,7 @@ import type { AxSnapshot } from '../protocol';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
 import { Coverage, routeOf } from '../crawler/coverage';
+import { ProbeRunner } from '../crawler/probes';
 
 /** api-trouble retries on its own after this long (§6.3). */
 export const API_RETRY_MS = 12_000;
@@ -40,6 +41,7 @@ const LOGIN = /\b(log ?in|sign ?in)\b|\/(login|signin|sign-in|auth)\b/i;
 export class RealRun {
   state: RunState;
   readonly coverage: Coverage;
+  readonly probes: ProbeRunner;
   private items = 0;
   private finished = false;
   private wake: (() => void) | undefined;
@@ -50,12 +52,18 @@ export class RealRun {
   /** A failed action's control, so a stubborn element can't loop forever. */
   private failures = 0;
   private lastRoutes = '';
+  /** Controls that showed an error, tried again once the crawl next arrives on their route. */
+  private readonly retryOn = new Map<string, Set<string>>();
+  private readonly retried = new Set<string>();
 
   constructor(
     from: RunState,
     private readonly deps: RunDeps,
   ) {
     this.coverage = new Coverage(deps.origin);
+    this.probes = new ProbeRunner(deps.site, from.runId, (result) =>
+      this.emit([{ type: 'probe.result', result }]),
+    );
     this.state = {
       ...from,
       phase: 'audit',
@@ -208,16 +216,22 @@ export class RealRun {
       this.coverage.setStatus(snap.path, 'testing');
       this.syncCoverage();
       if (this.loginWall(snap)) continue;
+      await this.probes.onPage(snap);
+      if (this.blocked() || this.finished) continue;
 
+      const here = routeOf(snap.path);
+      const empty = this.probes.emptySubmit(snap, this.coverage.untried(here));
       let action: Action;
       try {
-        action = await this.deps.brain.next({
-          snapshot: snap,
-          coverage: this.coverage,
-          brief: this.state.brief,
-          history: this.history,
-          signal: this.abort.signal,
-        });
+        action = empty
+          ? { kind: 'click', ...empty, why: `Trying ${empty.name} with the form empty` }
+          : await this.deps.brain.next({
+              snapshot: snap,
+              coverage: this.coverage,
+              brief: this.state.brief,
+              history: this.history,
+              signal: this.abort.signal,
+            });
       } catch (e) {
         if ((e as { name?: string }).name === 'AbortError') continue;
         throw e;
@@ -227,6 +241,9 @@ export class RealRun {
       await this.perform(action, snap.path);
       this.deliverQueued();
     }
+    if (this.finished) return;
+    this.emit([{ type: 'now.changed', nowText: 'Checking links and network' }]);
+    await this.probes.finish();
     if (!this.finished) this.crawlComplete();
   }
 
@@ -283,6 +300,20 @@ export class RealRun {
             ? await this.deps.site.click(action.ref)
             : await this.deps.site.type(action.ref, action.text);
         this.coverage.markTried(from, action.ref);
+        const errored = await this.probes.afterAction(action, from, result);
+        const key = `${routeOf(from)} ${action.ref}`;
+        if (errored && !this.retried.has(key)) {
+          // A form that failed may work once its earlier steps are filled in (a person would
+          // go back, fill them, and try again).
+          this.retried.add(key);
+          const set = this.retryOn.get(routeOf(from)) ?? new Set<string>();
+          this.retryOn.set(routeOf(from), set.add(action.ref));
+        }
+        const arrived = routeOf(result.path);
+        if (result.navigated && arrived !== routeOf(from)) {
+          for (const ref of this.retryOn.get(arrived) ?? []) this.coverage.retry(arrived, ref);
+          this.retryOn.delete(arrived);
+        }
         this.history.push(`${label}${result.navigated ? ` → ${result.path}` : ''}`);
         if (this.coverage.routeDone(from)) this.coverage.setStatus(from, 'done');
       }

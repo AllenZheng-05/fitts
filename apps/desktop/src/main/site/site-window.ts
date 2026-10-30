@@ -1,8 +1,10 @@
 // The user's site in a hidden offscreen window (SPEC-phase2 §5.1), streamed to the renderer as
 // JPEG frames. No preload; sandboxed; a session per project; every permission denied. Fitts's
 // own queries (element boxes, refs) run in an isolated world, never the page's.
-import type { SiteInput, SiteNav, SiteRect, SiteStatus } from '@fitts/schema';
-import type { AxSnapshot } from '../../agent/protocol';
+import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
+import PROBES from '@fitts/probes/page.js?raw';
+import type { ProbeItem, SiteInput, SiteNav, SiteRect, SiteStatus } from '@fitts/schema';
+import type { AxSnapshot, OpTrace } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 
 /** Isolated world for Fitts's scripts (refs, rects); the page can't see them. */
@@ -70,6 +72,155 @@ export class SiteWindow {
       });
     wc.on('did-navigate', pushHistory);
     wc.on('did-navigate-in-page', pushHistory);
+    this.recordNetwork();
+  }
+
+  // ── Network (the network and feedback-timing probes, §7) ──────────────────────
+
+  private requests = new Map<string, RequestRecord>();
+  private drained: RequestRecord[] = [];
+  /** The control being used right now, so requests can be traced back to it. */
+  private acting: string | undefined;
+  /** Endpoints whose big JSON body was already counted. */
+  private readonly parsed = new Set<string>();
+
+  private recordNetwork(): void {
+    const dbg = this.wc.debugger;
+    try {
+      dbg.attach('1.3');
+    } catch {
+      return; // Already attached (devtools open): no network probe for this window.
+    }
+    void dbg.sendCommand('Network.enable').catch(() => undefined);
+    dbg.on('message', (_e, method: string, params: Record<string, unknown>) => {
+      const id = typeof params['requestId'] === 'string' ? params['requestId'] : '';
+      if (method === 'Network.requestWillBeSent') {
+        const req = params['request'] as { url: string; method: string };
+        const type = typeof params['type'] === 'string' ? params['type'] : 'Other';
+        // API calls and pages only: the dev server's module requests would crowd them out.
+        if (!this.allowed(req.url) || !['Fetch', 'XHR', 'Document'].includes(type)) return;
+        const record: RequestRecord = {
+          url: req.url,
+          method: req.method,
+          route: this.path().split('?')[0] ?? '/',
+          type,
+          status: 0,
+          startMs: Date.now(),
+          endMs: null,
+          bytes: 0,
+          ...(this.acting ? { ref: this.acting } : {}),
+        };
+        this.requests.set(id, record);
+        this.drained.push(record);
+        if (this.drained.length > 2000) this.drained.shift();
+      } else if (method === 'Network.responseReceived') {
+        const r = this.requests.get(id);
+        if (!r) return;
+        const res = params['response'] as { status: number; headers: Record<string, string> };
+        r.status = res.status;
+        const h = Object.fromEntries(
+          Object.entries(res.headers).map(([k, v]) => [k.toLowerCase(), v]),
+        );
+        if (h['cache-control']) r.cacheControl = h['cache-control'];
+        if (h['etag']) r.etag = h['etag'];
+      } else if (method === 'Network.loadingFinished' || method === 'Network.loadingFailed') {
+        const r = this.requests.get(id);
+        if (!r) return;
+        r.endMs = Date.now();
+        r.bytes = Number(params['encodedDataLength'] ?? 0);
+        this.requests.delete(id);
+        // Big JSON: count its longest array (the payload probe, #12 on demo/chat).
+        const api = r.type === 'Fetch' || r.type === 'XHR';
+        const endpoint = r.url.split('?')[0] ?? r.url;
+        if (method === 'Network.loadingFinished' && api && r.bytes > 100_000) {
+          if (this.parsed.has(endpoint)) return;
+          this.parsed.add(endpoint);
+          void dbg
+            .sendCommand('Network.getResponseBody', { requestId: id })
+            .then((b: { body: string; base64Encoded: boolean }) => {
+              if (!b.base64Encoded) r.arrayItems = longestArray(b.body);
+            })
+            .catch(() => undefined);
+        }
+      }
+    });
+  }
+
+  /** Requests since the last drain (the agent analyzes them per route). */
+  drainNetwork(): RequestRecord[] {
+    const out = this.drained.filter((r) => r.endMs !== null);
+    this.drained = this.drained.filter((r) => r.endMs === null);
+    return out;
+  }
+
+  // ── Probes (§7): the bundled IIFE, in the isolated world ─────────────────────
+
+  private async probes<T>(body: string): Promise<T> {
+    const has = await this.evaluate<boolean>('return !!window.__fittsProbes;');
+    if (!has) await this.wc.executeJavaScriptInIsolatedWorld(WORLD, [{ code: PROBES }]);
+    return this.evaluate<T>(`const P = window.__fittsProbes; ${body}`);
+  }
+
+  runProbes(names: PageProbeName[]): Promise<PageProbeResult[]> {
+    return this.probes<PageProbeResult[]>(`return P.run(${JSON.stringify(names)}, F);`);
+  }
+
+  /** Tabs through the page with real key presses; flags focus with no visible change. */
+  async focusSweep(): Promise<ProbeItem[]> {
+    const count = await this.probes<number>('return P.focusStart();');
+    const items: ProbeItem[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < Math.min(count, 25); i++) {
+      this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+      this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+      await new Promise((r) => setTimeout(r, 40));
+      const res = await this.probes<ProbeItem | null | 'none'>('return P.focusCheck(F);');
+      if (res === 'none') break;
+      if (res) {
+        if (seen.has(res.ref)) break;
+        seen.add(res.ref);
+        items.push(res);
+      }
+    }
+    await this.evaluate('document.activeElement && document.activeElement.blur(); return true;');
+    return items;
+  }
+
+  /** 360, 768 and 1280px wide: sideways scrolling and cut-off text. */
+  async viewportSweep(): Promise<ProbeItem[]> {
+    const [w0 = 1024, h0 = 700] = this.win.getContentSize();
+    const items: ProbeItem[] = [];
+    try {
+      for (const width of [360, 768, 1280]) {
+        this.win.setContentSize(width, h0);
+        await new Promise((r) => setTimeout(r, 300));
+        items.push(...(await this.probes<ProbeItem[]>(`return P.overflow(F, ${width});`)));
+      }
+    } finally {
+      this.win.setContentSize(w0, h0);
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return items;
+  }
+
+  value(ref: string): Promise<string | null> {
+    return this.probes<string | null>(`return P.valueOf(${JSON.stringify(ref)}, F);`);
+  }
+
+  /** HEAD (then GET) each same-origin link from the page itself; returns the status codes. */
+  links(hrefs: string[]): Promise<Record<string, number>> {
+    const same = hrefs
+      .filter((h) => this.allowed(new URL(h, this.baseUrl).toString()))
+      .slice(0, 100);
+    return this.evaluate<Record<string, number>>(`
+      const out = {};
+      return Promise.all(${JSON.stringify(same)}.map(async (h) => {
+        try {
+          let r = await fetch(h, { method: 'HEAD', redirect: 'follow', cache: 'no-store' });
+          if (r.status === 405) r = await fetch(h, { cache: 'no-store' });
+          out[h] = r.status;
+        } catch { out[h] = 0; }
+      })).then(() => out);`);
   }
 
   private allowed(url: string): boolean {
@@ -267,8 +418,43 @@ export class SiteWindow {
     return { op: 'action', path, navigated: path !== before };
   }
 
+  /**
+   * Runs an action with the feedback probe armed: settles, waits (up to 10s) for the API calls
+   * it started, then reads what changed on screen (§7 feedback-timing, error-message, network).
+   */
+  private async traced(
+    ref: string,
+    act: () => Promise<SiteRect | null>,
+  ): Promise<{ op: 'action'; path: string; navigated: boolean; trace: OpTrace }> {
+    const before = this.path();
+    const armed = await this.probes<boolean>('P.feedbackArm(); return true;').catch(() => false);
+    const t0 = Date.now();
+    this.acting = ref;
+    let rect: SiteRect | null;
+    try {
+      rect = await act();
+    } finally {
+      this.acting = undefined;
+    }
+    const result = await this.settle(before);
+    const mine = () =>
+      this.drained.filter((r) => r.startMs >= t0 && (r.type === 'Fetch' || r.type === 'XHR'));
+    const deadline = Date.now() + 10_000;
+    while (mine().some((r) => r.endMs === null) && Date.now() < deadline)
+      await new Promise((r) => setTimeout(r, 100));
+    const feedback = armed
+      ? await this.probes<Feedback>('return P.feedbackRead(F);').catch(() => null)
+      : null;
+    const requests = mine().map((r) => ({ ...r }));
+    return { ...result, trace: { feedback, requests, ...(rect ? { rect } : {}) } };
+  }
+
   /** A real click at the element's center, after scrolling it into view. */
-  async click(ref: string) {
+  click(ref: string) {
+    return this.traced(ref, () => this.clickAt(ref));
+  }
+
+  private async clickAt(ref: string): Promise<SiteRect> {
     const before = this.path();
     const rect = await this.evaluate<SiteRect | null>(`
       const el = F.find(${JSON.stringify(ref)});
@@ -282,11 +468,15 @@ export class SiteWindow {
     this.wc.sendInputEvent({ type: 'mouseMove', x, y });
     this.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
     this.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
-    return this.settle(before);
+    return rect;
   }
 
   /** Focuses the field, clears it, and types like a person (char events). */
-  async type(ref: string, text: string) {
+  type(ref: string, text: string) {
+    return this.traced(ref, () => this.typeInto(ref, text));
+  }
+
+  private async typeInto(ref: string, text: string): Promise<null> {
     const before = this.path();
     const ok = await this.evaluate<boolean>(`
       const el = F.find(${JSON.stringify(ref)});
@@ -298,8 +488,12 @@ export class SiteWindow {
     if (!ok) throw new Error(`No field ${ref} on ${before}`);
     this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
     this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
-    for (const ch of text) this.wc.sendInputEvent({ type: 'char', keyCode: ch });
-    return this.settle(before);
+    for (const ch of text) {
+      this.wc.sendInputEvent({ type: 'char', keyCode: ch });
+      // About 25 characters a second: per-keystroke requests show up at a person's pace.
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    return null;
   }
 
   async press(key: string) {
@@ -327,4 +521,17 @@ export class SiteWindow {
   destroy(): void {
     if (!this.win.isDestroyed()) this.win.destroy();
   }
+}
+
+/** The longest JSON array in a body: top level or one level down. */
+export function longestArray(body: string): number {
+  try {
+    const v = JSON.parse(body) as unknown;
+    if (Array.isArray(v)) return v.length;
+    if (v && typeof v === 'object')
+      return Math.max(0, ...Object.values(v).map((x) => (Array.isArray(x) ? x.length : 0)));
+  } catch {
+    // Not JSON.
+  }
+  return 0;
 }

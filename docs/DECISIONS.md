@@ -1247,3 +1247,75 @@ screencast fallback is needed.
   "Hand back to Fitts", because names match by case-insensitive substring. The test was handing
   the wheel back itself, which looked like the crawl kept going while the user drove. The
   unit test (`tests/agent/run.test.ts`) confirmed the run itself was correct.
+
+## Phase 2 — P5: deterministic probes
+
+- **Package shape.** `packages/probes` holds two parts:
+  - `src/page.ts`: the in-page probes, bundled with axe-core into `dist/page.js` by esbuild. The
+    file is gitignored and built by the desktop `dev`, `build` and `test:e2e` scripts.
+  - `src/analyze.ts`: pure analysis with no DOM, shared with the agent.
+
+  Main imports the bundle with `?raw` and injects it into isolated world 1001 once per page,
+  next to the existing ref helper. Both workspace packages are bundled into main and the agent,
+  not externalized.
+- **Results are evidence, not findings yet.** Each probe emits a `probe.result` event with a
+  `ProbeResult` (`evidenceId` `<runId>-ev<n>`, probe, route, pass, items). The reducer ignores
+  it, like `ledger.entry`. P6's reviewers cite these ids, and the aggregator turns probe
+  failures into findings. P5 posts nothing to chat.
+- **When each probe runs:**
+  - **On a route's first visit:** contrast, target-size, button-name, link-name,
+    placeholder-leak, font-inventory, spacing and web-vitals (one axe pass for the three axe
+    rules), then focus-visible and viewport-sweep.
+  - **After every click or typing:** feedback-timing, error-message and fitts-id.
+  - **After moving on from a page where something was typed:** back-mid-flow.
+  - **When the crawl ends:** links, network and label-consistency.
+- **Contrast also checks placeholders.** axe doesn't, and people read them (#8). The color
+  comes from the author's `::placeholder` rules, not computed style.
+- **Target size is measured directly:** under 24px fails, under 44px counts as "comfortable".
+  axe's spacing exception would pass demo/chat's 28×20 Send link. Inline links in a sentence
+  and checkboxes inside labels are exempt.
+- **Spacing counts only the site's own declared px values** that some visible element uses.
+  Browser defaults (an h1's 0.67em margin, a button's 6px padding) would flag every site. It
+  fails at 3 or more distinct off-grid values; 1 and 2px hairlines don't count.
+- **Focus-visible uses real Tab presses from main**, not `el.focus()`. After the crawler's mouse
+  clicks, programmatic focus wouldn't match `:focus-visible`, so sites that style it correctly
+  would fail. Each focused element is compared with how it looked unfocused. The sweep stops
+  when focus wraps around, and blurs at the end.
+- **Network goes through a CDP debugger on the site window.** It records only Fetch, XHR and
+  Document requests (the dev server's module loads would crowd them out), tagged with the
+  route and the control in use. Each big JSON endpoint's body is parsed once to count its
+  longest array.
+- **Click and type ops are traced.** They arm a MutationObserver first; after the 450ms settle
+  they wait (up to 10s) for the API calls they started, then read what appeared: loading
+  indicators, live-region text, generic error text. Typing is paced at 40ms a character, so
+  per-keystroke requests show up as they would for a person.
+- **The feedback rules:**
+  - A request over 1s with no loading indicator by 1s fails.
+  - A successful POST/PUT/PATCH/DELETE from a click with no confirmation fails.
+    "Confirmation" is a live region, or short text starting with sent, saved and the like. Page
+    content that happens to say "thanks" doesn't count.
+  - A click that changed nothing on screen, didn't navigate and sent no request fails.
+- **Empty submit (error-message).** On a form's first visit, Fitts taps its submit-like control
+  (Next, Send, Save, Create, Add, …) with every field empty before typing anything. Search
+  fields are excluded.
+- **Retry after an error.** A control whose action showed an error is tried once more, the
+  next time the crawl reaches its page through a click (by then the earlier steps are filled
+  in). That's how demo/chat's Send gets both the empty-text error (#14) and a successful send
+  with no confirmation (#3).
+- **Label consistency is deterministic for now.** It uses forward actions (clicks that
+  navigated) whose labels are action words, and flags:
+  - two different labels on one page that go to the same place;
+  - three or more labels for one flow's forward step;
+  - seed-synonym pairs across the site.
+
+  Lists of names (contacts) are ignored. Spark clustering is left to P6's reviewers.
+- **Links are checked from the page itself.** Same-origin HEAD requests (GET when HEAD gets
+  405) run from the isolated world. No new network code in the agent or main, so CLAUDE.md's
+  network-call rule holds.
+- **web-vitals uses PerformanceObserver** (LCP and CLS, buffered), not the `web-vitals`
+  package. INP needs real interactions over time and is left out. This probe is on the cut list.
+- **Fitts ID** is computed from the previous click to a main action's target (a click that
+  navigates or has a submit-like label). It fails above 4 bits.
+- **What probes don't catch on demo/chat:** #6, #18, #21, #22 and #25 are for reviewers (P6),
+  #15 needs a trace reviewer, and #16 is the gate (P8). All 18 probe-detectable planted issues
+  are asserted in `site-live.spec.ts`, read from the run log.

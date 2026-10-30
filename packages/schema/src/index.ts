@@ -499,3 +499,45 @@ export type EdgeStateAnswer<K extends EdgeStateKind = EdgeStateKind> =
   (typeof EDGE_STATE_ANSWERS)[K][number];
 
 export * from './events';
+
+// ── Probes (SPEC-phase2 §7) ─────────────────────────────────────────────────
+
+export type ProbeName =
+  | 'contrast'
+  | 'target-size'
+  | 'fitts-id'
+  | 'font-inventory'
+  | 'spacing'
+  | 'label-consistency'
+  | 'feedback-timing'
+  | 'back-mid-flow'
+  | 'error-message'
+  | 'placeholder-leak'
+  | 'focus-visible'
+  | 'button-name'
+  | 'link-name'
+  | 'links'
+  | 'network'
+  | 'web-vitals'
+  | 'viewport-sweep';
+
+/** One element (or request) a probe measured. `measured` and `expected` are plain language. */
+export interface ProbeItem {
+  ref: string;
+  selector: string;
+  measured: string;
+  expected: string;
+  /** `data-fitts-src` of the element or its nearest stamped ancestor. */
+  src?: string;
+}
+
+/** A probe's result on one route; reviewers cite it by `evidenceId` (P6). */
+export interface ProbeResult {
+  evidenceId: string;
+  probe: ProbeName;
+  route: string;
+  pass: boolean;
+  items: ProbeItem[];
+  /** One plain sentence ("3 font families: georgia, system-ui, trebuchet ms"). */
+  summary?: string;
+}

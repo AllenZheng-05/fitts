@@ -66,6 +66,12 @@ function fakeSite(over: Partial<Site> = {}) {
       up = true;
       return Promise.resolve(true);
     },
+    probes: () => Promise.resolve([]),
+    focusSweep: () => Promise.resolve([]),
+    viewportSweep: () => Promise.resolve([]),
+    value: () => Promise.resolve(null),
+    links: () => Promise.resolve({}),
+    network: () => Promise.resolve([]),
     ...over,
   };
   return site;

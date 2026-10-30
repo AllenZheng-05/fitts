@@ -92,6 +92,18 @@ export class Coverage {
     if (c) c.tried = true;
   }
 
+  /** Untries a control (and reopens its route), so the crawl uses it again. */
+  retry(path: string, ref: string): void {
+    const route = this.routes.get(routeOf(path));
+    const c = route?.controls.get(ref);
+    if (!route || !c) return;
+    c.tried = false;
+    if (route.status === 'done') {
+      route.status = 'queued';
+      delete route.label;
+    }
+  }
+
   skip(path: string, ref: string, reason: string): void {
     const c = this.routes.get(routeOf(path))?.controls.get(ref);
     if (c) c.skipped = reason;

@@ -1,6 +1,7 @@
 // Phase 2 P2: the real demo/chat streams into the workspace from an offscreen window.
 import { expect, test, type Page } from '@playwright/test';
-import { resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { launchApp, type LaunchedApp } from './helpers/launch';
 
 const DEMO = resolve(__dirname, '../../../../demo/chat');
@@ -158,7 +159,61 @@ test('the real crawl reaches every route and tries every primary control (covera
   await expect(
     page.getByText('Controls tried · ' + s.controlsTried.done + ' of ' + s.controlsTried.total),
   ).toBeVisible();
+
+  // P5: each probe catches its planted issue (demo/chat PLANTED.md), read from the run log.
+  const probes = probeResults();
+  const failing = (probe: string) => probes.filter((r) => r.probe === probe && !r.pass);
+  const refs = (probe: string) => failing(probe).flatMap((r) => r.items.map((i) => i.ref));
+  const said = (probe: string) =>
+    failing(probe)
+      .flatMap((r) => r.items.map((i) => i.measured))
+      .join(' | ');
+  expect(refs('placeholder-leak')).toContain('compose-to'); // #1
+  expect(refs('label-consistency')).toEqual(
+    expect.arrayContaining(['compose-next', 'compose-create', 'compose-send']),
+  ); // #2
+  expect(said('feedback-timing')).toMatch(/"Send Text" saved with no confirmation/); // #3
+  expect(failing('back-mid-flow').map((r) => r.route)).toContain('/compose/recipient'); // #4, #5
+  expect(said('back-mid-flow')).toMatch(/no back or cancel control/);
+  expect(refs('target-size')).toContain('compose-send'); // #7
+  expect(refs('contrast')).toContain('compose-body'); // #8
+  expect(failing('contrast').map((r) => r.route)).toContain('/'); // #9
+  expect(said('network')).toMatch(/requests for 10 characters typed/); // #10
+  expect(said('network')).toMatch(/\/api\/search fetched \d+ times, no Cache-Control or ETag/); // #11
+  expect(said('network')).toMatch(/\/api\/search returns 1\.\d MB, 20,000 items/); // #12
+  expect(said('feedback-timing')).toMatch(/wait with no loading indicator/); // #13
+  expect(refs('error-message')).toContain('compose-error'); // #14
+  expect(refs('button-name')).toEqual(expect.arrayContaining(['thread-call', 'thread-video'])); // #17
+  expect(failing('font-inventory').length).toBeGreaterThan(0); // #19
+  expect(failing('spacing').length).toBeGreaterThan(0); // #20
+  expect(failing('focus-visible').length).toBeGreaterThan(0); // #23
+  expect(refs('links')).toContain('inbox-help'); // #24
+  expect(probes.every((r) => /^run-\d+-ev\d+$/.test(r.evidenceId))).toBe(true);
 });
+
+interface LoggedProbe {
+  evidenceId: string;
+  probe: string;
+  route: string;
+  pass: boolean;
+  items: { ref: string; measured: string }[];
+}
+
+/** Every probe.result in demo/chat's run logs. */
+function probeResults(): LoggedProbe[] {
+  const runs = join(launched.userData, 'projects', 'demo-chat', 'runs');
+  const out: LoggedProbe[] = [];
+  for (const run of readdirSync(runs)) {
+    const file = join(runs, run, 'events.ndjson');
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      if (!line.includes('"probe.result"')) continue;
+      const { event } = JSON.parse(line) as { event: { result: LoggedProbe } };
+      out.push(event.result);
+    }
+  }
+  return out;
+}
 
 test('take the wheel on the live site pauses the crawl and logs clicks by name; rewind shows a stored step shot', async () => {
   test.setTimeout(120_000);
