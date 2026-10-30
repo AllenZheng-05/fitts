@@ -541,3 +541,18 @@ export interface ProbeResult {
   /** One plain sentence ("3 font families: georgia, system-ui, trebuchet ms"). */
   summary?: string;
 }
+
+/** One reviewer's finding draft (finding.schema.json, SPEC-phase2 §8.1). */
+export interface FindingDraft {
+  title: string;
+  finding: string;
+  fix: string;
+  heuristic: Heuristic | null;
+  lens: Lens;
+  severity: number;
+  elementRef: string | null;
+  evidenceIds: string[];
+  evidence: string[];
+}
+
+export { default as FINDING_DRAFTS_FORMAT } from './finding.schema.json';

@@ -1319,3 +1319,72 @@ screencast fallback is needed.
 - **What probes don't catch on demo/chat:** #6, #18, #21, #22 and #25 are for reviewers (P6),
   #15 needs a trace reviewer, and #16 is the gate (P8). All 18 probe-detectable planted issues
   are asserted in `site-live.spec.ts`, read from the run log.
+
+## Phase 2 — P6: reviewers, aggregator, evidence check, suggestions lane
+
+- **Prompts and schema.**
+  - Each persona's prompt lives in `docs/prompts/reviewers/`: `novice`, `power-user`,
+    `accessibility`, `visual-design` and `trust`, with `_shared.md` appended to each. The agent
+    imports them with `?raw`, so the docs are the prompts.
+  - Persona names match Phase 1's `agreement.who`: Novice, Power user, Accessibility, Visual
+    design, plus Trust & ethics. Probe evidence shows as "Probe".
+  - Drafts follow `packages/schema/src/finding.schema.json` (strict JSON schema).
+- **Evidence ids.** Each route offers `<route>#shot` (the screenshot from the first visit),
+  `<route>#snapshot` (its controls), `<route>#trace` (what Fitts did there) and P5's probe ids.
+  A draft that cites none of them is dropped. A ref that isn't on the page becomes null, and
+  severity is clamped to 1–4.
+- **When the panel runs.** It reviews every visited route after the crawl and probes finish:
+  5 personas in parallel, 2 routes at a time. Findings arrive together at the end, not as each
+  route finishes. That keeps the crawl and the panel from competing for the site window, and
+  keeps the run's events in a clean order. Streaming per route can come later without changing
+  the aggregator.
+- **The aggregator is deterministic; the model aggregator call is deferred.**
+  - Every probe item gets a plain-language template. Findings group by probe plus title across
+    all routes, so "same issue, several screens" becomes one finding with `locations`.
+  - Reviewer drafts join the probe finding they cite (same element, then a similar title),
+    then a draft cluster on the same route (same element or similar title). Drafts about a page
+    that a broken link leads to join that link's finding.
+  - One vote per persona per finding.
+  - Wonder's ±1 severity adjustment and its cross-route merging aren't wired yet. The
+    deterministic rules met the bench, and every extra model call adds variance and cost.
+- **Severity rubric.** Impact comes from the probe template, or the reviewers' median. It goes
+  up one for 3+ screens (frequency) and up one for 3+ agreeing reviewers when impact is at
+  least 2 (persistence), capped at 4.
+  - Probe impacts were tuned on the offline bench: cut-off text is 1, sideways scrolling 2, a
+    no-op button 1, LCP 1.
+  - Uncached repeats count only when they waste at least 200 KB. A small JSON endpoint
+    refetched on each visit isn't worth a finding.
+- **The evidence check.** A finding is *grounded* if it has a probe result, or cites the trace
+  or the snapshot. A screenshot alone isn't grounded: it's the reviewer's opinion of a picture.
+  - **Shown:** grounded and (a probe finding, or 2 of 5 reviewers agree).
+  - **Suggestion:** everything else. Suggestions are created (`lane: 'suggestion'`), counted on
+    Done and listed in the report, but get no chat card and no pin, and the tray filters them
+    out.
+- **Posting.** Every finding is a `finding.created` event. Shown ones also get a `finding` chat
+  item and a numbered pin, as the Phase 1 scenario's `report()` does. Fix approval cards are
+  P9.
+- **Panel models.** The roster comes from `reviewerRoster(profile)` each time it runs, so
+  "Switch to Economy" applies to the next route reviewed. Baseten's chat-completions client
+  gets the text only, no screenshot, and its `json_schema` drops the Responses-style `type`
+  field.
+- **`pnpm bench:chat`.**
+  - It's a separate Playwright config (`playwright.bench.config.ts`) that launches the built
+    app with the developer's keys (main's dev fallback to .env.local).
+  - It runs one real audit of demo/chat on Economy with contributor pricing, a $2 cap and the
+    explorer crawl, then scores the run log against `tests/bench/planted.ts` and prints recall
+    and precision.
+  - Matching is a maximum one-to-one matching on place (route, locations or ref) plus problem
+    words. `BENCH_OFFLINE=1` scores the probes alone, for free.
+  - Findings are kept in `.fitts-dev/bench/` for tuning.
+- **Results.**
+  - **Offline (probes only):** recall 18/25, 0 false positives.
+  - **Live, two runs:** recall 20/25 (80%) with 2 false positives each time, about $0.026 a run.
+    The reviewers added #21 and #22.
+  - Both runs meet the P6 bar exactly, with no margin. The false positives are plausible,
+    unplanted issues ("Can't tell who is selected" on the compose chips, "Search gives no
+    guidance"), and which one appears varies by run.
+  - The panel misses #6, #15, #16, #18 and #25. #16 is the gate's (P8), and #15 needs a trace
+    of the form clearing.
+- **Fix in the build.** Bundling the new shared code put Rolldown's CJS helper inside the agent
+  entry, so main loaded `agent.js` and crashed at launch. `preserveEntrySignatures: 'strict'`
+  keeps shared code in chunks.

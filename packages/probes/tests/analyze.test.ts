@@ -154,6 +154,8 @@ describe('network', () => {
   it('passes cached repeats and small payloads', () => {
     const list = [req({ cacheControl: 'max-age=60' }), req({ cacheControl: 'max-age=60' })];
     expect(networkProblems(list, [])).toEqual([]);
+    // Uncached but tiny: not worth a finding.
+    expect(networkProblems([req({}), req({})], [])).toEqual([]);
   });
 });
 

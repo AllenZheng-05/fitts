@@ -156,8 +156,9 @@ test('the real crawl reaches every route and tries every primary control (covera
   expect(s.routes.every((r) => r.status === 'done')).toBe(true);
   expect(s.controlsTried.total).toBeGreaterThan(30);
   expect(s.controlsTried.done).toBe(s.controlsTried.total);
+  // P6: probe findings end the run on the Run summary, which reports the coverage.
   await expect(
-    page.getByText('Controls tried · ' + s.controlsTried.done + ' of ' + s.controlsTried.total),
+    page.getByText(new RegExp(`I opened \\d+ pages and tried ${s.controlsTried.total} controls`)),
   ).toBeVisible();
 
   // P5: each probe catches its planted issue (demo/chat PLANTED.md), read from the run log.

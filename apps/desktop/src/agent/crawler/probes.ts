@@ -240,6 +240,9 @@ export class ProbeRunner {
     }
 
     const label = labelConsistency(this.forward, [...this.labels.values()]);
-    this.add('label-consistency', '/', label);
+    const first = label[0]?.ref;
+    const where =
+      this.forward.find((f) => f.ref === first)?.route ?? this.labels.get(first ?? '')?.route;
+    this.add('label-consistency', where ?? '/', label);
   }
 }

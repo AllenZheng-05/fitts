@@ -200,6 +200,8 @@ export function networkProblems(requests: RequestRecord[], traces: ActionTrace[]
   for (const [url, list] of byEndpoint) {
     if (list.length < 2) continue;
     if (list.some((r) => r.cacheControl || r.etag)) continue;
+    // Small repeats are cheap; flag the ones that waste real data (200 KB or more).
+    if (list.reduce((a, r) => a + r.bytes, 0) < 200_000) continue;
     const path = new URL(url).pathname;
     items.push(
       site(

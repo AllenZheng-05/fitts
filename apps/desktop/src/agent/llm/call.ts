@@ -164,7 +164,13 @@ export function basetenClient(apiKey: string): LlmClient {
             max_tokens: Math.max(2000, req.maxOutputTokens ?? 4000),
             ...(tools ? { tools } : {}),
             ...(req.format
-              ? { response_format: { type: 'json_schema', json_schema: req.format } as never }
+              ? {
+                  // Chat completions take { name, schema, strict } (no `type` inside).
+                  response_format: {
+                    type: 'json_schema',
+                    json_schema: { ...(req.format as Record<string, unknown>), type: undefined },
+                  } as never,
+                }
               : {}),
           },
           req.signal ? { signal: req.signal } : {},

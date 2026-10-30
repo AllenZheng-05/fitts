@@ -5,20 +5,20 @@ CLAUDE.md and the relevant SPEC-phase2 sections, before continuing.
 
 ## Current milestone and next step
 
-- **Current:** P6 — reviewers, aggregator, evidence check and the suggestions lane (§8).
-  Acceptance: `pnpm bench:chat` reports recall ≥ 80% and at most 2 false positives at
-  severity ≥ 2.
-- **Next concrete step:** the five reviewer prompts in `docs/prompts/reviewers/*.md` and
-  `packages/schema/finding.schema.json`. Then the reviewer runner (per route, 5 in parallel, at
-  most 2 routes in flight), which takes the screenshot, the `probe.result` evidence from P5,
-  the trimmed AX snapshot, the brief and the traces. Record its fixtures once with Spark in
-  contributor mode on demo/chat.
+- **Current:** P7 — the real interview and theme-fit (§6.2, §8.3). Acceptance: the real
+  interview fills the brief (For and Who from the first answer on demo/chat); on demo/hartwell,
+  theme-fit returns `fits: false` with 3 directions.
+- **Next concrete step:** `docs/prompts/interview.md` (Fitts's voice rules embedded) and an
+  `agent/interview/` module behind `startInterview` and `sendMessage` while the phase is
+  interview. Replace the stub interview for live projects. Use structured output to fill brief
+  fields, and record its fixtures once with Spark contributor.
 
 ## Done
 
 | Milestone | Commit | Acceptance |
 |---|---|---|
 | Step 0: tag `phase1-prototype`, Phase 2 CLAUDE.md, progress log | 6bfad23 | done |
+| P6: reviewers, aggregator, evidence check, suggestions lane | see `git log --grep "P6:"` | `pnpm bench:chat` (real panel, Economy plus contributor, about $0.026 a run): recall 20/25 (80%), 2 false positives at severity ≥2, on two runs. Offline (probes only): 18/25 and 0. The aggregator, evidence check and rubric are unit-tested (`tests/agent/review.test.ts`), and the scorer too (`tests/bench/score.test.ts`). |
 | P5: deterministic probes | see `git log --grep "P5:"` | All 18 probe-detectable planted issues on demo/chat are caught by their probe in the live crawl (e2e reads `probe.result` from the run log). Each in-page probe passes and fails on fixture pages in real Chromium (`tests/e2e/probes.spec.ts`). The analyses are unit-tested (`packages/probes/tests`, `tests/agent/probes.test.ts`). |
 | P4: crawler + coverage gate + run controls + edge-state triggers | see `git log --grep "P4:"` | The real crawl (explorer brain, offline) reaches all 8 Phase 1 demo/chat routes (plus /help) and tries or skips every primary control, over 30 of them (e2e). Take the wheel stops stepping (e2e and unit). ⌘. aborts the model call in flight (unit). site-down, login-wall, api-trouble and budget fire from real conditions (unit, `tests/agent/run.test.ts`). |
 | P3: LLM client, ledger, router, budgets | see `git log --grep "P3:"` | one Spark, one Wonder and one Baseten call each in the ledger (script and in-app); cost events live; the 80% and 100% cards fire with a $0.10 cap (e2e). 117 e2e pass. |
@@ -33,9 +33,17 @@ See [NEEDS-ALLEN.md](NEEDS-ALLEN.md).
 
 ## Spend so far (USD)
 
-About $0.08 of the $25 session cap. `.fitts-dev/spend.json` is the source of truth.
+About $0.13 of the $25 session cap: `.fitts-dev/spend.json` (scripts) plus `.fitts-dev/agent-spend.ndjson` (the app's own calls, including `bench:chat`).
 
 ## Known issues
+
+- Until P9 adds fixes, the Run summary's math line counts every open finding as one of the
+  "suggestions without enough evidence" (Phase 1's meaning of open). P9 should count shown,
+  unfixed findings separately from the suggestion lane.
+
+- P6 meets the bench bar with no margin (20/25, exactly 2 false positives). Reviewer variance
+  decides which plausible unplanted issue shows up. The deferred Wonder aggregator pass, or
+  better prompts for #6, #18 and #25, would add margin.
 
 - `muse` in WSL isn't logged in. Fixes use the in-process Wonder fallback until it is.
 - Windows paths passed into WSL as arguments lose their backslashes. Convert `C:` paths to

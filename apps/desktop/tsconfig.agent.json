@@ -16,6 +16,7 @@
     "src/renderer/state/mock-engine.ts",
     "src/renderer/state/script.ts",
     "src/renderer/copy.ts",
-    "src/renderer/lib/format.ts"
+    "src/renderer/lib/format.ts",
+    "src/main/raw.d.ts"
   ]
 }

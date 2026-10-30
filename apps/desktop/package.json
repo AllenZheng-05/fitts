@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.agent.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test"
+    "test:e2e": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test",
+    "bench:chat": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test -c playwright.bench.config.ts"
   },
   "dependencies": {
     "@fitts/probes": "workspace:*",

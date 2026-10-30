@@ -4,6 +4,7 @@
 import {
   reduce,
   type ChatItem,
+  type Finding,
   type EdgeStateKind,
   type Mode,
   type RunEvent,
@@ -16,6 +17,8 @@ import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
 import { Coverage, routeOf } from '../crawler/coverage';
 import { ProbeRunner } from '../crawler/probes';
+import { aggregate } from '../review/aggregate';
+import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
 
 /** api-trouble retries on its own after this long (§6.3). */
 export const API_RETRY_MS = 12_000;
@@ -34,7 +37,12 @@ export interface RunDeps {
   onEconomy?: () => void;
   /** Pause between actions, so the ghost cursor can travel (ms). */
   actionDelayMs?: number;
+  /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
+  panel?: ReviewerPanel;
 }
+
+/** Routes reviewed at once (§8.1: at most 2 in flight, 5 reviewers each). */
+const ROUTES_IN_FLIGHT = 2;
 
 const LOGIN = /\b(log ?in|sign ?in)\b|\/(login|signin|sign-in|auth)\b/i;
 
@@ -55,6 +63,11 @@ export class RealRun {
   /** Controls that showed an error, tried again once the crawl next arrives on their route. */
   private readonly retryOn = new Map<string, Set<string>>();
   private readonly retried = new Set<string>();
+  /** What the reviewer panel gets for each route, and when Fitts was first there. */
+  private readonly pages = new Map<
+    string,
+    { evidence: Omit<RouteEvidence, 'probes'>; stepIndex: number; atMs: number }
+  >();
 
   constructor(
     from: RunState,
@@ -217,6 +230,7 @@ export class RealRun {
       this.syncCoverage();
       if (this.loginWall(snap)) continue;
       await this.probes.onPage(snap);
+      await this.remember(snap);
       if (this.blocked() || this.finished) continue;
 
       const here = routeOf(snap.path);
@@ -244,7 +258,88 @@ export class RealRun {
     if (this.finished) return;
     this.emit([{ type: 'now.changed', nowText: 'Checking links and network' }]);
     await this.probes.finish();
+    if (this.finished) return;
+    await this.review();
     if (!this.finished) this.crawlComplete();
+  }
+
+  /** A route's first visit: its screenshot and controls, for the reviewer panel. */
+  private async remember(snap: AxSnapshot): Promise<void> {
+    const route = routeOf(snap.path);
+    if (this.pages.has(route)) return;
+    let shot: RouteEvidence['shot'];
+    if (this.deps.panel) {
+      try {
+        shot = { jpegBase64: (await this.deps.site.screenshot()).jpegBase64 };
+      } catch {
+        // Reviewed without a screenshot.
+      }
+    }
+    this.pages.set(route, {
+      evidence: { route, snapshot: snap, trace: [], ...(shot ? { shot } : {}) },
+      stepIndex: this.state.step,
+      atMs: this.state.elapsedMs,
+    });
+  }
+
+  /** The panel reviews each page, then the aggregator turns everything into findings (§8). */
+  private async review(): Promise<void> {
+    const panel = this.deps.panel;
+    const reviews = [];
+    if (panel) {
+      const pages = [...this.pages.values()];
+      for (let i = 0; i < pages.length; i += ROUTES_IN_FLIGHT) {
+        if (this.finished) return;
+        const batch = pages.slice(i, i + ROUTES_IN_FLIGHT);
+        this.emit([
+          {
+            type: 'now.changed',
+            nowText: `Reviewing ${batch.map((p) => p.evidence.route).join(' and ')} with the panel`,
+          },
+        ]);
+        try {
+          const done = await Promise.all(
+            batch.map((p) =>
+              panel.review(
+                {
+                  ...p.evidence,
+                  probes: this.probes.results.filter((r) => r.route === p.evidence.route),
+                },
+                this.state.brief,
+                this.abort.signal,
+              ),
+            ),
+          );
+          reviews.push(...done.flat());
+        } catch {
+          // Aborted (⌘. or stop): carry on with what the panel has said so far.
+        }
+      }
+    }
+    const findings = aggregate({
+      runId: this.state.runId,
+      probes: this.probes.results,
+      reviews,
+      stepOf: (route) => {
+        const p = this.pages.get(route);
+        return { stepIndex: p?.stepIndex ?? 0, atMs: p?.atMs ?? 0 };
+      },
+    });
+    this.post(findings);
+  }
+
+  /** Adds findings; shown ones get a chat card and a numbered pin (§8.2: suggestions don't). */
+  private post(findings: Finding[]): void {
+    const problems = [...this.state.overlays.problems];
+    const events: RunEvent[] = [];
+    for (const f of findings) {
+      events.push({ type: 'finding.created', finding: f });
+      if (f.lane === 'suggestion') continue;
+      events.push({ type: 'chat.item', item: { id: this.id(), type: 'finding', findingId: f.id } });
+      if (f.elementRef) problems.push({ ref: f.elementRef, pin: problems.length + 1 });
+    }
+    events.push({ type: 'overlay.set', overlays: { ...this.state.overlays, problems } });
+    this.emit(events);
   }
 
   private syncCoverage(): void {
@@ -294,6 +389,7 @@ export class RealRun {
         if (this.coverage.routeDone(from)) this.coverage.setStatus(from, 'done');
         await this.deps.site.navigate(action.path);
         this.history.push(`opened ${action.path}`);
+        this.pages.get(routeOf(from))?.evidence.trace.push(`opened ${action.path}`);
       } else {
         const result =
           action.kind === 'click'
@@ -314,7 +410,9 @@ export class RealRun {
           for (const ref of this.retryOn.get(arrived) ?? []) this.coverage.retry(arrived, ref);
           this.retryOn.delete(arrived);
         }
-        this.history.push(`${label}${result.navigated ? ` → ${result.path}` : ''}`);
+        const line = `${label}${result.navigated ? ` → ${result.path}` : ''}`;
+        this.history.push(line);
+        this.pages.get(routeOf(from))?.evidence.trace.push(line);
         if (this.coverage.routeDone(from)) this.coverage.setStatus(from, 'done');
       }
       this.failures = 0;

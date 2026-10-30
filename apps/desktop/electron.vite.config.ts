@@ -22,6 +22,9 @@ export default defineConfig(({ command }) => {
             index: resolve(__dirname, 'src/main/index.ts'),
             agent: resolve(__dirname, 'src/agent/index.ts'),
           },
+          // Shared code goes to chunks, never into an entry: main must not load agent.js (it
+          // starts the agent's message loop on import).
+          preserveEntrySignatures: 'strict',
         },
       },
     },

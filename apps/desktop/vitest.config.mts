@@ -10,6 +10,7 @@ export default defineConfig({
       'tests/unit/**/*.test.{ts,tsx}',
       'tests/main/**/*.test.ts',
       'tests/agent/**/*.test.ts',
+      'tests/bench/**/*.test.ts',
     ],
     setupFiles: ['tests/unit/setup.ts'],
     css: false,

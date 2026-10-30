@@ -1,0 +1,60 @@
+{
+  "type": "json_schema",
+  "name": "finding_drafts",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "description": "Under 10 words, plain language." },
+            "finding": {
+              "type": "string",
+              "description": "What a person experiences and why it matters."
+            },
+            "fix": { "type": "string", "description": "One sentence a developer can act on." },
+            "heuristic": {
+              "type": ["string", "null"],
+              "enum": ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "H10", null]
+            },
+            "lens": {
+              "type": "string",
+              "enum": [
+                "usability",
+                "accessibility",
+                "performance",
+                "look-and-feel",
+                "ergonomics",
+                "content"
+              ]
+            },
+            "severity": {
+              "type": "integer",
+              "description": "1 cosmetic, 2 minor, 3 major, 4 blocks the task."
+            },
+            "elementRef": { "type": ["string", "null"] },
+            "evidenceIds": { "type": "array", "items": { "type": "string" } },
+            "evidence": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": [
+            "title",
+            "finding",
+            "fix",
+            "heuristic",
+            "lens",
+            "severity",
+            "elementRef",
+            "evidenceIds",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["findings"],
+    "additionalProperties": false
+  }
+}

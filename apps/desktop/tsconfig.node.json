@@ -8,6 +8,7 @@
     "electron.vite.config.ts",
     "vitest.config.mts",
     "playwright.config.ts",
+    "playwright.bench.config.ts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/agent/protocol.ts",

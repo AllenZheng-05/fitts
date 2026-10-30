@@ -22,10 +22,11 @@ import { MockRunEngine } from '../renderer/state/mock-engine';
 import { BudgetGuard } from './ledger/budget';
 import { CostLedger, withLedger } from './ledger/ledger';
 import { basetenClient, LlmCaller, metaClient, type Provider } from './llm/call';
-import { contributorFor, modelFor, SPARK_OPEN, type Profile } from './llm/router';
+import { contributorFor, modelFor, reviewerRoster, SPARK_OPEN, type Profile } from './llm/router';
 import { testKey } from './llm/test-key';
 import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
 import { RealRun } from './orchestrator/run';
+import { ReviewerPanel } from './review/reviewers';
 import type { AgentMessage, MainMessage } from './protocol';
 import { SiteRpc } from './site-client';
 
@@ -154,10 +155,20 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
     ledger,
     { onTrouble: () => runRef.current?.apiTrouble() },
   );
-  const useModel =
-    Boolean(keys.meta) &&
-    process.env['FITTS_OFFLINE'] !== '1' &&
-    process.env['FITTS_CRAWL_BRAIN'] !== 'explorer';
+  const online = Boolean(keys.meta) && process.env['FITTS_OFFLINE'] !== '1';
+  const useModel = online && process.env['FITTS_CRAWL_BRAIN'] !== 'explorer';
+  const callCtx = () => ({
+    runId: from.runId,
+    projectId,
+    contributor,
+    allowed: () => runRef.current?.allowed() ?? true,
+  });
+  const profile = () => profiles.get(projectId) ?? set?.modelProfile ?? 'quality';
+  const panel = online
+    ? new ReviewerPanel(runCaller, callCtx, () =>
+        reviewerRoster(profile(), { contributor, baseten: Boolean(keys.baseten) }),
+      )
+    : undefined;
   const brain: Brain = useModel
     ? new SparkBrain(
         runCaller,
@@ -190,6 +201,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
         send({ kind: 'events', batch: { projectId, runId: from.runId, seq, events } });
       },
       onEconomy: () => profiles.set(projectId, 'economy'),
+      ...(panel ? { panel } : {}),
     },
   );
   runRef.current = run;

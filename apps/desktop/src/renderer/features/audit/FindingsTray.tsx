@@ -42,7 +42,9 @@ export function FindingsTray({ run }: { run: RunState }) {
   const filter = useUi((s) => s.findingsFilter);
   const selectedId = useUi((s) => s.openFindingId);
   const route = useUi((s) => s.findingsRoute);
-  const shown = run.findings.filter(
+  // Suggestions (not enough evidence, SPEC-phase2 §8.2) stay out of the tray.
+  const findings = run.findings.filter((f) => f.lane !== 'suggestion');
+  const shown = findings.filter(
     (f) => (filter === 'all' || filterOf(f) === filter) && (!route || onRoute(f.route, route)),
   );
 
@@ -57,7 +59,7 @@ export function FindingsTray({ run }: { run: RunState }) {
     >
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="tray-title" className="font-display text-[16px] font-bold">
-          {format(copy.audit.trayTitle, { n: run.findings.length })}
+          {format(copy.audit.trayTitle, { n: findings.length })}
         </h2>
         {route && (
           <span className="inline-flex items-center gap-1 rounded-pill border border-ink py-0.5 pr-0.5 pl-2.5 font-mono text-[12px]">
@@ -109,7 +111,7 @@ export function FindingsTray({ run }: { run: RunState }) {
         })}
         {shown.length === 0 && (
           <li className="self-center text-[14px] text-muted">
-            {run.findings.length > 0
+            {findings.length > 0
               ? copy.audit.noMatches
               : run.controlsTried.done >= run.controlsTried.total
                 ? copy.audit.noFindingsDone
@@ -144,27 +146,29 @@ function Timeline({ run }: { run: RunState }) {
           className="absolute top-[9px] left-0 h-1 rounded-pill bg-cobalt"
           style={{ width: pct(progress) }}
         />
-        {run.findings.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            aria-label={format(copy.audit.rewindTo, { title: f.title })}
-            aria-pressed={run.rewindStep === f.stepIndex}
-            onClick={() => getEngine().rewindTo(run.projectId, f.stepIndex)}
-            // A 24px target (WCAG 2.5.8) around the 18px dot.
-            className="group absolute -top-px flex size-6 -translate-x-1/2 items-center justify-center rounded-full"
-            style={{ left: pct(f.stepIndex / total) }}
-          >
-            <span
-              aria-hidden="true"
-              className={cx(
-                'size-[18px] rounded-full border-[1.5px] border-ink group-hover:scale-110',
-                DOT_TONE[f.severity],
-                run.rewindStep === f.stepIndex && 'ring-2 ring-cobalt ring-offset-1',
-              )}
-            />
-          </button>
-        ))}
+        {run.findings
+          .filter((f) => f.lane !== 'suggestion')
+          .map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              aria-label={format(copy.audit.rewindTo, { title: f.title })}
+              aria-pressed={run.rewindStep === f.stepIndex}
+              onClick={() => getEngine().rewindTo(run.projectId, f.stepIndex)}
+              // A 24px target (WCAG 2.5.8) around the 18px dot.
+              className="group absolute -top-px flex size-6 -translate-x-1/2 items-center justify-center rounded-full"
+              style={{ left: pct(f.stepIndex / total) }}
+            >
+              <span
+                aria-hidden="true"
+                className={cx(
+                  'size-[18px] rounded-full border-[1.5px] border-ink group-hover:scale-110',
+                  DOT_TONE[f.severity],
+                  run.rewindStep === f.stepIndex && 'ring-2 ring-cobalt ring-offset-1',
+                )}
+              />
+            </button>
+          ))}
         <span
           aria-hidden="true"
           className="absolute top-0 h-[22px] w-[3px] -translate-x-1/2 rounded-pill bg-ink"
