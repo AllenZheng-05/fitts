@@ -1931,3 +1931,11 @@ that helps Fitts make better design choices without limiting what it can make.
   font inventory: the direction's heading or body font must be in use, and one of its
   background, text or accent colors present, on at least half the pages; otherwise the second
   pass hears why. A font that couldn't be downloaded isn't held against it.
+- **What the real runs taught.** The first real run's 3D redesign rolled back: Vite refuses
+  any JS import from `public/` (even a computed URL), so the page showed its error overlay.
+  three.js now goes beside the source (`src/fitts/three/`) in bundler projects and is imported
+  by relative path, which Vite code-splits into a lazy chunk; plain sites keep
+  `/fitts/three/`. Fonts load with a `<link>` (bundlers resolve CSS `@import` as source). That
+  run also lifted Linear's exact brand purple from an admired site, so `brand` is now only the
+  owner's own color. The rerun ("Launch Studio": Unbounded and Outfit, a lit three.js hero,
+  name front and center) verified on every page for $0.83.
