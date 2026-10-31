@@ -2229,3 +2229,10 @@ Allen ran a live audit of openteamsheets.com and tried the mic. What changed, an
 - **The big changes are a spec, not a commit.** The agent loop, the style boards, the tab
   strip and the redesign rounds are written up in `docs/SPEC-phase3.md` for Allen to approve
   before anything is built.
+- **No hard cap.** Allen saw real progress getting cut at 200 steps on a big site. The cap is
+  now a safety ceiling (1000; the budget bounds a run long before it), and the run ends on
+  coverage or on going in circles: a step that tries no new control, finds no new page and
+  finishes no page is no progress; 8 such steps in a row on one page skip what's left there
+  and move on, 24 anywhere end the crawl, and Fitts says so both times. `stepEstimate` is no
+  longer capped at 200 either. SPEC-phase3 §1.5 has the decider change course itself first,
+  with this as the backstop.

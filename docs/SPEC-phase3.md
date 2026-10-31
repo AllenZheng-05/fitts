@@ -1,10 +1,11 @@
 # Fitts — Phase 3 build spec: Fitts decides
 
-Version 0.1 · Oct 31, 2026 · Draft for Allen's approval · Owner: Allen Zheng
+Version 0.2 · Oct 31, 2026 · Draft for Allen's approval · Owner: Allen Zheng
 Builds on `docs/SPEC-phase2.md` (the real agent, as built) and `docs/DECISIONS.md`. Where this
 spec is silent, Phase 2's spec and decisions apply. Where they disagree, this spec wins.
 
-**Nothing in this spec is built until Allen approves it.**
+**Nothing in this spec is built until Allen approves it.** v0.2 folds in Allen's answers to
+v0.1's open questions (§7) and the end of the hard step cap (§1.5).
 
 ---
 
@@ -82,6 +83,7 @@ Between abilities, one Spark call with tools (one per ability) picks the next. I
 - findings so far: count by severity, the titles of the worst five
 - what was done: the last 8 abilities and their outcomes
 - the budget: spent, cap, and the cost of each ability so far
+- the stall count (§1.5): steps in a row with no progress
 - the mode (Plan only, Ask every action, Ask when unsure, Autonomous, Dangerous)
 - whether the site is live (no code: no `fix`, no `apply_look`)
 
@@ -99,13 +101,31 @@ pages) adds roughly 60 decisions, under $0.20.
 **Fallback.** When the call fails or returns nothing usable, `ScriptedDecider` picks what the
 Phase 2 script would have: the same order as today. The run never stalls on the decider.
 
-### 1.3 The owner steers
+### 1.3 Fitts talks
+
+Fitts is conversational (Allen's answer to v0.1's first question). Whenever it notices
+something or decides something, it says so in the chat, in a line or two, the way it would to
+someone sitting beside it: "Three of these pages are the same template, so I'll test one and
+move on." "Your checkout asks for a phone number but never says why." It doesn't wait for a
+stage to end to say what it thinks.
+
+Talking runs beside the work, not instead of it. A `converse` call on Spark answers every
+owner message within a step or two, in Fitts's voice, with what it's doing right now as
+context, while the ability underway carries on; the same message also reaches the next
+decision (§1.4). So the owner can ask "what do you think of the nav?" during a crawl and get an
+answer, and "skip the settings pages" and see it happen. The reply says when something will
+change course ("Will do, after this page") and when it won't ("I'll keep that in mind for the
+report").
+
+Lines Fitts says on its own are cheap (no model call: they're the abilities' own copy) or come
+from the decision step's `say`. The debug panel shows every decision in full; the chat shows
+what matters to the owner.
+
+### 1.4 The owner steers
 
 Every message the owner sends during the audit goes into the next decision, whether it's typed,
-spoken, or sent while pointing. Nothing is acknowledged with a canned line anymore. Fitts
-replies through `say` when it changes course ("Leaving the settings pages. Opening /checkout
-next.") and stays quiet when the message doesn't change anything, except to say so once
-("Noted. I'll finish this page first.").
+spoken, or sent while pointing, as well as getting a reply (§1.3). Nothing is acknowledged
+with a canned line anymore.
 
 Pivots the loop must handle, with tests:
 
@@ -125,7 +145,22 @@ interrupt ends the current ability early and decides.
 `RunEngine` gains no methods. `sendMessage` opts gain nothing. The UI's `Now:` line shows the
 ability in words ("Looking at /checkout", "Thinking about what's next").
 
-### 1.4 Guarantees that stay in code
+### 1.5 No hard cap: progress, not steps
+
+The 200-step cap is gone (built in round 4, before this spec; the ceiling is now 1000 and the
+budget bounds a run long before it). A run ends when coverage is complete, when the owner says
+so, or when Fitts is going in circles:
+
+- A step that tries no new control, finds no new page and finishes no page is **no progress**.
+- Eight no-progress steps in a row on one page: the page's untried controls are skipped
+  ("going in circles") and Fitts moves on, and says so.
+- Twenty-four in a row anywhere: the crawl ends, and Fitts says what was left.
+
+In Phase 3 the decider sees the stall count and is asked to change course itself first (another
+page, a different control, a different kind of input); the code's skip-and-move-on is the
+backstop when it doesn't.
+
+### 1.6 Guarantees that stay in code
 
 The decider chooses *which* ability; it never gets to skip what an ability does inside.
 
@@ -135,7 +170,7 @@ The decider chooses *which* ability; it never gets to skip what an ability does 
 | Destructive actions ask first; writes are held | the gate (§13), unchanged, inside `explore` |
 | Every page and control is tried, or skipped with a reason, before `finish` | `finish` refuses while coverage is incomplete unless the owner said to stop; it says what's left |
 | The budget cap holds | `BudgetGuard` before every ability and every model call, unchanged |
-| The step cap (200) holds | the loop, unchanged |
+| A run that goes in circles moves on, then ends (§1.5) | the loop, unchanged |
 | Live sites are audit-only | `fix` and `apply_look` are not offered to the decider for a live origin |
 | Plan only never clicks or types | `mayAct`, unchanged |
 | The owner has the final say on a redesign | `apply_look` only runs after `pickDirection`, or in Autonomous after the final review passes (§2.4) |
@@ -164,9 +199,9 @@ shape language, layout, decorations, motion and density. It shows, top to bottom
    mesh, grain, grid, a three.js part if the direction has one).
 6. **Motion**: a hover and a page-in, as the motion part says; still under reduced motion.
 
-The copy on the board is the owner's own: the site's name, its real h1, a real button label
-and a real field label from the crawl's snapshots, so the owner sees their site's words, not
-lorem ipsum. Nothing on the board is a page of the site: it shows what the parts would look
+The copy on the board is the owner's own (Allen's answer: yes): the site's name, its real h1,
+a real button label and a real field label from the crawl's snapshots, so the owner sees their
+site's words, not lorem ipsum. Nothing on the board is a page of the site: it shows what the parts would look
 like, not what the redesigned pages would be.
 
 ### 2.2 Pictures on the board
@@ -210,9 +245,9 @@ the same branch; "It's good" (or "Open the PR") opens the PR. "Start over" goes 
 boards with the answer as feedback.
 
 In Autonomous mode, Fitts reviews the redesign itself against the chosen board's parts and
-the brief (the style check, extended with the parts' rules) and opens the PR when it passes;
-the review item still posts, with "Send it back" on it, which reopens the branch for one more
-job.
+the brief (the style check, extended with the parts' rules) and opens the PR when it passes
+(Allen's answer: Autonomous may open the PR); the review item still posts, with "Send it
+back" on it, which reopens the branch for one more job.
 
 ### 2.5 What goes away
 
@@ -241,7 +276,9 @@ Fitts never acts in an off-site tab. The crawler, probes and reviewers only see 
 The `links` probe keeps checking outside links by fetching them from main, as now, and never
 opens them.
 
-At most 6 tabs; the oldest off-site tab closes when a seventh opens, with a toast.
+At most 6 tabs; the oldest off-site tab closes when a seventh opens, with a toast. **The
+site's own tab is always open**: it has no close button, it can't be closed by the page
+(`window.close` is ignored there), and it's never the one that makes room for a seventh.
 
 ### 3.2 The user drives, Fitts doesn't
 
@@ -280,10 +317,10 @@ Each ends green (typecheck, lint, unit, e2e) and committed to main.
 | # | Milestone | Acceptance |
 |---|---|---|
 | Q0 | Abilities: each Phase 2 stage callable on its own with a uniform signature; `ScriptedDecider` reproduces today's order | The run test suite passes unchanged on the scripted decider; `bench:chat` equal to Phase 2 |
-| Q1 | The decision step: `SparkDecider`, prompt, the owner's messages in the loop, the pivots in §1.3, the guarantees in §1.4 with their tests | On demo/chat with fixtures, "skip settings, look at checkout" changes the next step; each guarantee test passes; a run with a failing decider finishes on the fallback |
+| Q1 | The decision step: `SparkDecider`, prompt, `converse`, the owner's messages in the loop, the pivots in §1.4, the guarantees in §1.6 with their tests | On demo/chat with fixtures, "skip settings, look at checkout" changes the next step; each guarantee test passes; a run with a failing decider finishes on the fallback |
 | Q2 | Boards: the builder in `packages/styles/board/`, fonts, assets from SAM, the viewer's iframe | Each of the 22 schemes × 3 pairings builds a board that passes the contrast probe; the viewer shows it; no network from the board |
 | Q3 | Rounds and the final review: `revise_looks`, "None of these", the `review` item, "Send it back" | Two rounds on hartwell fixtures; the review posts before the PR; "Start over" returns to boards |
-| Q4 | Tabs: the strip, off-site tabs, the bar, sign-in return, limits | e2e: a `_blank` link and an outside link open tabs; closing returns; the crawler never leaves tab 1 |
+| Q4 | Tabs: the strip, off-site tabs, the bar, sign-in return, limits | e2e: a `_blank` link and an outside link open tabs; closing returns; the site's tab can't be closed; the crawler never leaves tab 1 |
 | Q5 | Real runs on Allen's portfolio and openteamsheets.com; DECISIONS; the walkthrough | §0's definition of done, by hand, under the spend cap |
 
 Order: Q0, Q1 first (the engine), then Q2, Q3 (boards), then Q4 (tabs). Q4 is independent
@@ -300,7 +337,8 @@ and can move earlier if the engine work stalls.
 ## 6. Testing
 
 - **Unit:** the decider's input builder (what it sees is exactly §1.2); the scripted fallback
-  order; each pivot; each guarantee against a hostile fake decider; the board builder's
+  order; each pivot; `converse` replies while an ability runs; each guarantee against a
+  hostile fake decider; the board builder's
   output (valid HTML, every component present, contrast); the tab model.
 - **Integration (no network):** a recorded decider's tool calls drive a run on the fake site;
   rounds on recorded compose responses.
@@ -311,12 +349,14 @@ and can move earlier if the engine work stalls.
 
 ---
 
-## 7. Open questions for Allen
+## 7. Allen's answers (Oct 31)
 
-1. **How chatty should Fitts be about decisions?** Proposed: one line when it changes course
-   because of you, silence otherwise. The debug panel shows every decision.
-2. **Autonomous redesigns:** should Fitts open the PR without your review when the mode is
-   Autonomous (proposed, with "Send it back" after), or always wait for you?
-3. **Boards with your site's words:** proposed yes (its name, h1, a button, a field). Say if
-   you'd rather see neutral copy.
-4. **Tabs:** at most 6, oldest closes. Fine?
+The v0.1 questions, answered:
+
+1. **How chatty:** decently chatty and conversational. Whenever Fitts notices or thinks
+   something, it says so, and it can talk about other things while it works (§1.3).
+2. **Autonomous redesigns:** Fitts may open the PR itself (§2.4).
+3. **Boards with the site's words:** yes (§2.1).
+4. **Tabs:** at most 6, and the site's own tab is always open (§3.1).
+
+And one more from Allen: no hard cutoff at 200 steps; detect going in circles instead (§1.5).

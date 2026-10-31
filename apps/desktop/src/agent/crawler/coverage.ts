@@ -235,10 +235,10 @@ export class Coverage {
     return { controls, routes };
   }
 
-  /** stepEstimate (§6.1): routes × controls × 1.4, capped at 200. */
+  /** stepEstimate (§6.1): routes × controls × 1.4 (no longer capped: big sites pass 200). */
   stepEstimate(): number {
     const routes = Math.max(1, this.routes.size);
     const perRoute = Math.max(1, this.controlsTried().total / routes);
-    return Math.min(200, Math.round(routes * perRoute * 1.4));
+    return Math.round(routes * perRoute * 1.4);
   }
 }

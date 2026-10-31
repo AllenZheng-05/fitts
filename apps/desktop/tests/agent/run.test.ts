@@ -127,6 +127,7 @@ function setup({
   brain = new ExplorerBrain(),
   cap = 20,
   mode = 'ask-unsure',
+  maxSteps,
   themeFit,
   origin = 'http://localhost:5173',
   media,
@@ -137,6 +138,7 @@ function setup({
   brain?: Brain;
   cap?: number;
   mode?: RunState['mode'];
+  maxSteps?: number;
   themeFit?: RunDeps['themeFit'];
   origin?: string;
   media?: RunDeps['media'];
@@ -152,6 +154,7 @@ function setup({
       ...(media ? { media } : {}),
       ...(fixer ? { fixer } : {}),
       ...(redesigner ? { redesigner } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
       site,
       brain,
       ledger,
@@ -692,8 +695,8 @@ describe('Done: replays and the step cap (Allen’s feedback, round 4)', () => {
     run.dispose();
   });
 
-  it('stopping at the step cap says so, with what was left', async () => {
-    const many = Array.from({ length: 230 }, (_, i) => ({
+  it('stopping at the step ceiling says so, with what was left', async () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({
       ref: `b${i}`,
       role: 'button',
       name: `Button ${i}`,
@@ -710,21 +713,43 @@ describe('Done: replays and the step cap (Allen’s feedback, round 4)', () => {
         }),
       click: () => Promise.resolve({ path: '/', navigated: false }),
     });
-    const { run, state } = setup({ site });
+    const { run, state } = setup({ site, maxSteps: 20 });
     run.start();
-    await until(
-      () =>
-        state()?.chat.some(
-          (c) => c.type === 'fitts.message' && c.text.startsWith('I stopped testing at 200 steps'),
-        ) ?? false,
-      10_000,
+    const said = () =>
+      state()?.chat.find(
+        (c) => c.type === 'fitts.message' && c.text.startsWith('I stopped testing at 20 steps'),
+      );
+    await until(() => Boolean(said()), 10_000);
+    const line = said();
+    expect(line?.type === 'fitts.message' && line.text).toContain(
+      '10 controls on 1 page weren’t tried',
     );
-    const said = state()?.chat.find(
-      (c) => c.type === 'fitts.message' && c.text.startsWith('I stopped testing at 200 steps'),
-    );
-    expect(said?.type === 'fitts.message' && said.text).toContain(
-      '30 controls on 1 page weren’t tried',
-    );
+    run.dispose();
+  });
+
+  it('going in circles on a page skips what’s left there; everywhere, it ends the crawl', async () => {
+    // A brain that taps the same already-tried button forever.
+    const stuck: Brain = {
+      next: ({ snapshot }) =>
+        Promise.resolve(
+          snapshot.path === '/'
+            ? { kind: 'click', ref: 'del', name: 'Delete everything', why: 'again' }
+            : { kind: 'navigate', path: '/', why: 'back' },
+        ),
+    };
+    const site = fakeSite({ click: () => Promise.resolve({ path: '/', navigated: false }) });
+    const { run, state } = setup({ site, brain: stuck, mode: 'autonomous' });
+    run.start();
+    const lines = () =>
+      state()?.chat.flatMap((c) => (c.type === 'fitts.message' ? [c.text] : [])) ?? [];
+    await until(() => lines().some((t) => t.startsWith('I’m going in circles on /')));
+    // What was left on / counts as covered (skipped), so the crawl can move on.
+    expect(state()?.controlsTried).toEqual({ done: 2, total: 2 });
+    await until(() => lines().some((t) => t.startsWith('I’ve stopped finding anything new')));
+    // Nothing was found on this fake, so Fitts asks whether to finish; the run ends on "finish".
+    await until(() => Boolean(card(state(), 'nothing-found')));
+    run.answer(card(state(), 'nothing-found')?.id ?? '', 'finish');
+    await until(() => state()?.phase === 'done');
     run.dispose();
   });
 });

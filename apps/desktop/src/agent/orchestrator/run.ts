@@ -34,8 +34,15 @@ import { directionInstruction, outlineSvg, type Media } from '../llm/media';
 
 /** api-trouble retries on its own after this long (§6.3). */
 export const API_RETRY_MS = 12_000;
-/** A run never takes more steps than this (§6.1). */
-export const MAX_STEPS = 200;
+/**
+ * A safety ceiling, not a target (Allen's feedback, round 4): a run ends on coverage or on
+ * going in circles (STALL_*), and the budget bounds it long before this. Big sites pass 200.
+ */
+export const MAX_STEPS = 1000;
+/** Steps in a row on one page that move nothing: its untried controls are skipped. */
+export const STALL_PAGE = 8;
+/** Steps in a row anywhere that move nothing: the crawl ends. */
+export const STALL_RUN = 24;
 /** A finding's replay shows at most this many steps. */
 const REPLAY_STEPS = 8;
 
@@ -51,6 +58,8 @@ export interface RunDeps {
   onEconomy?: () => void;
   /** Pause between actions, so the ghost cursor can travel (ms). */
   actionDelayMs?: number;
+  /** Tests: a lower ceiling than MAX_STEPS. */
+  maxSteps?: number;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
   /** SAM outlines and Muse Image mockups (§10). Without it, the UI keeps DOM boxes. */
@@ -109,6 +118,9 @@ export class RealRun {
   private clock: ReturnType<typeof setInterval> | undefined;
   /** A failed action's control, so a stubborn element can't loop forever. */
   private failures = 0;
+  /** Steps in a row that moved nothing (no new control tried, route seen, or route done). */
+  private stalled = 0;
+  private progressKey = '';
   private lastRoutes = '';
   /** Controls that showed an error, tried again once the crawl next arrives on their route. */
   private readonly retryOn = new Map<string, Set<string>>();
@@ -310,17 +322,10 @@ export class RealRun {
         await this.sleepUntilKicked();
         continue;
       }
-      if (this.state.step >= MAX_STEPS) {
-        // The cap, not the end of the site: say so, with what's left (Allen's feedback).
-        const left = this.coverage.remaining();
-        if (left.controls > 0 || left.routes > 0)
-          this.say(
-            format(copy.fitts.stepCap, {
-              max: MAX_STEPS,
-              controls: left.controls,
-              pages: left.routes === 1 ? '1 page' : `${left.routes} pages`,
-            }),
-          );
+      const max = this.deps.maxSteps ?? MAX_STEPS;
+      if (this.state.step >= max) {
+        // The ceiling, not the end of the site: say so, with what's left.
+        this.say(format(copy.fitts.stepCap, { max, ...this.leftWords() }));
         break;
       }
       let snap: AxSnapshot;
@@ -363,6 +368,7 @@ export class RealRun {
       if (action.kind === 'done') break;
       await this.perform(action, snap.path);
       this.deliverQueued();
+      if (this.circling(snap.path)) break;
     }
     if (this.finished) return;
     await this.phonePass();
@@ -501,6 +507,47 @@ export class RealRun {
       }
       this.finish();
     })();
+  }
+
+  /**
+   * Going in circles (Allen's feedback, round 4): a step that tries no new control, finds no
+   * new page and finishes no page is no progress. STALL_PAGE of them in a row on one page
+   * skips what's left there and moves on; STALL_RUN of them anywhere ends the crawl. Either
+   * way Fitts says so. Returns true when the crawl should end.
+   */
+  private circling(path: string): boolean {
+    const ct = this.coverage.controlsTried();
+    const routes = this.coverage.stateRoutes();
+    const done = routes.filter((r) => r.status === 'done').length;
+    const key = `${ct.done}/${ct.total}/${routes.length}/${done}`;
+    if (key !== this.progressKey) {
+      this.progressKey = key;
+      this.stalled = 0;
+      return false;
+    }
+    this.stalled += 1;
+    if (this.stalled >= STALL_RUN) {
+      this.say(format(copy.fitts.circlingRun, this.leftWords()));
+      return true;
+    }
+    const here = routeOf(path);
+    const left = this.coverage.untried(here);
+    if (this.stalled >= STALL_PAGE && left.length > 0) {
+      for (const c of left) this.coverage.skip(here, c.ref, 'going in circles');
+      this.coverage.setStatus(here, 'done', 'moved on');
+      this.syncCoverage();
+      this.say(format(copy.fitts.circlingPage, { route: here, n: left.length }));
+      this.progressKey = '';
+    }
+    return false;
+  }
+
+  private leftWords(): { controls: number; pages: string } {
+    const left = this.coverage.remaining();
+    return {
+      controls: left.controls,
+      pages: left.routes === 1 ? '1 page' : `${left.routes} pages`,
+    };
   }
 
   /** A route's first visit: its screenshot and controls, for the reviewer panel. */

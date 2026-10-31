@@ -872,6 +872,10 @@ export const copy = {
     showFindingDone: 'Here’s “{title}” on {route}, outlined.',
     stepCap:
       'I stopped testing at {max} steps, the most one run takes. {controls} controls on {pages} weren’t tried.',
+    circlingPage:
+      'I’m going in circles on {route}, so I’m leaving its last {n} controls and moving on.',
+    circlingRun:
+      'I’ve stopped finding anything new, so I’m wrapping up the testing here. {controls} controls on {pages} weren’t tried.',
     showFindingFailed: 'I couldn’t open {route} to show you. The site may have changed since.',
     siteNotReady:
       'Your site isn’t running yet, so I can’t start. I’ll be ready as soon as it is: you’ll see it in the site view. If it doesn’t start, the site view shows why.',
