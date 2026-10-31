@@ -434,12 +434,9 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
       const last = run.state;
       run.dispose();
       realRuns.delete(projectId);
-      engine.startNextRun(
-        projectId,
-        last,
-        copy.fitts.interviewNextRun,
-        copy.fitts.interviewNextRunReplies,
-      );
+      engine.startNextRun(projectId, last, copy.fitts.interviewNextRun, [
+        ...copy.fitts.interviewNextRunReplies,
+      ]);
       return true;
     }
     case 'startAudit':

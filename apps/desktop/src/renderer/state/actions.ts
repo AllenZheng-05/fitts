@@ -64,7 +64,8 @@ export function setPermissionMode(mode: Exclude<Mode, 'dangerous'>): void {
 }
 
 /** Adds a project (with a unique id) and opens its interview (SPEC §6.1, §6.11). */
-export function addAndOpenProject(project: Project): void {
+/** Adds the project (a new id if another folder has its name) and opens it; returns the id. */
+export function addAndOpenProject(project: Project): string {
   const { projects, addProject } = useProjects.getState();
   const existing = projects.find((p) => p.id === project.id);
   let id = project.id;
@@ -75,6 +76,7 @@ export function addAndOpenProject(project: Project): void {
   }
   if (!existing || id !== project.id) addProject({ ...project, id });
   useUi.getState().openProject(id);
+  return id;
 }
 
 export function removeProject(id: string): void {

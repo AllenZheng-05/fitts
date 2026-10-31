@@ -128,7 +128,8 @@ export function SiteCanvas({
   const mouse =
     (type: 'mouseDown' | 'mouseUp' | 'mouseMove') => (e: PointerEvent<HTMLDivElement>) => {
       const at = toSite(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-      const button = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+      const button: 'left' | 'right' | 'middle' =
+        e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
       if (!interactive && onNeedsWheel) {
         if (type === 'mouseMove') browse({ kind: 'mouse', type, x: at.x, y: at.y });
         // A click is the user's to make: ask to take the wheel, then make it.

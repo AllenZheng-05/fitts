@@ -13,12 +13,33 @@ import { useDetection } from '../../lib/use-detection';
 import type { Detection } from '@fitts/schema';
 import { projectFromFolder, projectFromUrl } from '../../lib/new-project';
 import { addAndOpenProject } from '../../state/actions';
+import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { LiveVerify } from './LiveVerify';
 
 type Kind = 'code' | 'live';
 
 /** Add a project: code on this computer or a live site (SPEC §6.11). */
+/**
+ * "Add the Fitts plugin": its PR, once main has the new project (the project list is saved a
+ * moment after it's added). The result shows as a toast.
+ */
+function addPlugin(projectId: string) {
+  const install = bridge().installPlugin;
+  if (!install) return;
+  setTimeout(() => {
+    void install(projectId).then((r) =>
+      useToasts
+        .getState()
+        .show(
+          r.ok
+            ? format(copy.addProject.pluginOpened, { n: r.number })
+            : format(copy.addProject.pluginFailed, { message: r.message }),
+        ),
+    );
+  }, 1500);
+}
+
 export function AddProjectDialog() {
   const open = useUi((s) => s.addProjectOpen);
   const close = () => useUi.getState().set({ addProjectOpen: false });
@@ -41,6 +62,12 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
   const verified = verification !== null;
 
   const detection = useDetection(folder);
+  // The plugin is for Vite projects that don't have it yet.
+  const canAddPlugin = Boolean(
+    detection &&
+    !detection.hasPlugin &&
+    /vite/i.test(`${detection.framework} ${detection.devCommand}`),
+  );
   const suggested =
     kind === 'code'
       ? (detection?.name ?? '')
@@ -58,7 +85,8 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
         ...detection,
         devCommand: devCommand ?? detection.devCommand,
       });
-      addAndOpenProject(project);
+      const id = addAndOpenProject(project);
+      if (plugin && canAddPlugin) addPlugin(id);
     } else {
       addAndOpenProject({
         ...projectFromUrl(url.trim(), shownName),
@@ -138,12 +166,19 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
                       onDevCommand={setDevCommand}
                     />
                   )}
-                  <Checkbox
-                    label={copy.addProject.plugin}
-                    checked={plugin}
-                    onChange={(e) => setPlugin(e.target.checked)}
-                    className="items-center"
-                  />
+                  {canAddPlugin && (
+                    <div className="flex flex-col gap-1">
+                      <Checkbox
+                        label={copy.addProject.plugin}
+                        checked={plugin}
+                        onChange={(e) => setPlugin(e.target.checked)}
+                        className="items-center"
+                      />
+                      <span className="pl-8 text-[13px] text-muted">
+                        {copy.addProject.pluginHint}
+                      </span>
+                    </div>
+                  )}
                   {nameField}
                 </>
               ),

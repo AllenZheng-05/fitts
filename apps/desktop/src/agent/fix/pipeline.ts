@@ -900,8 +900,8 @@ export class FixPipeline {
         ...(r.size ? { size: r.size } : {}),
       })) as VerifyPagesResult;
       let reason = judgeRedesign(after, (route) => this.host.baseline(route));
-      const baseline = await (this.testBaselines.get('HEAD') ??
-        Promise.resolve({ ran: false, ok: true, summary: '' }));
+      const baseline: Baseline = await (this.testBaselines.get('HEAD') ??
+        Promise.resolve({ tests: { ran: false, ok: true, summary: '' }, ci: NO_CI }));
       if (reason === null) reason = await this.testsAfter(rj.job, baseline);
       if (reason !== null) {
         await this.site.fix({ fn: 'reset', job: rj.job });

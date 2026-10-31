@@ -234,9 +234,9 @@ describe('aggregator and evidence check', () => {
     const reviews: PersonaReview[] = personas.map((persona) => ({
       route: '/contacts/grandma',
       persona,
-      drafts: [draft()],
+      drafts: [draft({})],
     }));
-    reviews.push({ route: '/contacts/grandma', persona: 'Novice', drafts: [draft()] });
+    reviews.push({ route: '/contacts/grandma', persona: 'Novice', drafts: [draft({})] });
     const [f] = aggregate({ runId: 'r', probes: [], reviews, stepOf });
     expect(f?.agreement.agreeing).toBe(5);
     expect(f?.agreement.total).toBe(5);

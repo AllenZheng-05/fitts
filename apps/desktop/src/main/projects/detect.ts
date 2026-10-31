@@ -128,7 +128,7 @@ export async function detectProject(folder: string): Promise<Detection | null> {
     devCommand: dev.command,
     url: `localhost:${port}`,
     port,
-    hasPlugin: Boolean(deps['@fitts/vite-plugin']),
+    hasPlugin: Boolean(deps['@fitts/vite-plugin']) || existsSync(join(folder, 'fitts.vite.mjs')),
     ...(pkg.fitts?.startPath?.startsWith('/') ? { startPath: pkg.fitts.startPath } : {}),
     ghReady: gh.code === 0,
     ...(repo ? { repo } : {}),

@@ -56,7 +56,7 @@ describe('the fixer loop', () => {
 
   it('keeps going past its budget while it finds new things, and asks first', async () => {
     const asked: number[] = [];
-    const { caller } = scripted((step) =>
+    const { caller } = scripted((step): { name: string; args: Record<string, string> } =>
       step < 9
         ? { name: 'read_file', args: { path: `file-${step}.css` } }
         : step === 9

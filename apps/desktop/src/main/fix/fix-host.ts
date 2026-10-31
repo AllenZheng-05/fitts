@@ -61,8 +61,15 @@ export class FixHost {
   constructor(
     private readonly projectFor: (id: string) => Project | undefined,
     private readonly prs: () => PrBackend = prBackend,
-    /** Fonts and the vendored three.js for redesigns (without them, `assets` copies nothing). */
-    private readonly assetSources: { fonts?: FontStore; vendorDir?: string } = {},
+    /**
+     * Fonts and the vendored three.js for redesigns (without them, `assets` copies nothing), and
+     * the one-file Fitts plugin a project can get in a PR.
+     */
+    private readonly assetSources: {
+      fonts?: FontStore;
+      vendorDir?: string;
+      pluginFile?: string;
+    } = {},
   ) {}
 
   async call(projectId: string, call: FixCall): Promise<unknown> {
@@ -663,6 +670,51 @@ export class FixHost {
     rmSync(runDir, { recursive: true, force: true });
   }
 
+  /**
+   * Adds the Fitts dev plugin to a Vite project, as its own small PR: `fitts.vite.mjs` (one
+   * file, no dependencies) and `fitts()` in vite.config's plugins. It runs only in `vite serve`,
+   * so the live site never changes. The worktree goes once the PR is open; the branch stays.
+   */
+  async installPlugin(
+    projectId: string,
+  ): Promise<{ ok: true; number: number; url: string } | { ok: false; message: string }> {
+    const source = this.assetSources.pluginFile;
+    if (!source || !existsSync(source)) return { ok: false, message: 'The plugin isn’t bundled.' };
+    const root = this.root(projectId);
+    const config = VITE_CONFIGS.map((f) => join(root, f)).find((f) => existsSync(f));
+    if (!config) return { ok: false, message: 'This project has no vite.config.' };
+    if (existsSync(join(root, PLUGIN_FILE)))
+      return { ok: false, message: 'The plugin is already in this project.' };
+    await this.exclude(root);
+    const dir = join(root, '.fitts-worktrees', 'plugin');
+    if (existsSync(dir)) await git(root, 'worktree', 'remove', '--force', dir);
+    let name = 'fitts/add-fitts-plugin';
+    for (let n = 2; (await git(root, 'rev-parse', '--verify', '--quiet', name)).code === 0; n++)
+      name = `fitts/add-fitts-plugin-${n}`;
+    mkdirSync(dirname(dir), { recursive: true });
+    const add = await git(root, 'worktree', 'add', '-q', dir, '-b', name, 'HEAD');
+    if (add.code !== 0) return { ok: false, message: 'git couldn’t make a worktree for it.' };
+    try {
+      const configFile = join(dir, relative(root, config));
+      const patched = withFittsPlugin(readFileSync(configFile, 'utf8'));
+      if (!patched)
+        return { ok: false, message: 'I couldn’t find the plugins list in vite.config.' };
+      copyFileSync(source, join(dir, PLUGIN_FILE));
+      writeFileSync(configFile, patched);
+      await git(dir, 'add', '-A');
+      const commit = await git(dir, 'commit', '-q', '-m', 'Add the Fitts dev plugin');
+      if (commit.code !== 0) return { ok: false, message: 'git couldn’t commit it.' };
+      const bodyFile = join(dirname(dir), 'pr-add-fitts-plugin.md');
+      writeFileSync(bodyFile, PLUGIN_PR_BODY);
+      const pr = await this.prs().open(root, dir, name, 'Add the Fitts dev plugin', bodyFile);
+      return { ok: true, ...pr };
+    } catch (e) {
+      return { ok: false, message: (e as Error).message };
+    } finally {
+      await git(root, 'worktree', 'remove', '--force', dir);
+    }
+  }
+
   /** FINALIZE: every verified branch merged into `fitts/preview-<runId>` (§9.4). */
   async preview(projectId: string, runId: string, branches: string[]) {
     const root = this.root(projectId);
@@ -681,6 +733,35 @@ export class FixHost {
     }
     return { branch: name, merged };
   }
+}
+
+const VITE_CONFIGS = ['vite.config.ts', 'vite.config.mts', 'vite.config.js', 'vite.config.mjs'];
+export const PLUGIN_FILE = 'fitts.vite.mjs';
+
+const PLUGIN_PR_BODY = `This adds the Fitts dev plugin: one file, \`fitts.vite.mjs\`, with no dependencies, and \`fitts()\` in \`vite.config\`'s plugins.
+
+In \`vite serve\` only, it marks each HTML element your JSX renders with the file and line that renders it (\`data-fitts-src\`), so when Fitts finds a problem on the page it can go straight to the code, and its fixes land in the right place.
+
+- It never runs in a build: your live site doesn't change.
+- A file it can't mark safely is served as it is (Vite's own compiler checks each one).
+- To remove it, delete the file and the \`fitts()\` line.`;
+
+/**
+ * vite.config with the plugin: its import after the last import, and `fitts()` first in
+ * `plugins`. Null when there's no plugins list to add it to.
+ */
+export function withFittsPlugin(config: string): string | null {
+  if (config.includes(PLUGIN_FILE)) return null;
+  const list = /plugins\s*:\s*\[/.exec(config);
+  if (!list) return null;
+  const at = list.index + list[0].length;
+  const withCall = `${config.slice(0, at)}fitts(), ${config.slice(at)}`;
+  const imports = [...withCall.matchAll(/^import[^;]*?from\s*['"][^'"]+['"];?[^\n]*$/gm)];
+  const last = imports.at(-1);
+  const line = `import fitts from './${PLUGIN_FILE}';`;
+  if (!last || last.index === undefined) return `${line}\n${withCall}`;
+  const end = last.index + last[0].length;
+  return `${withCall.slice(0, end)}\n${line}${withCall.slice(end)}`;
 }
 
 /** The project's package manager, by its lockfile. */

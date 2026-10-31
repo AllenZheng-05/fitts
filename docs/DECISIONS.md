@@ -2081,3 +2081,15 @@ changes it led to, and the judgment calls in them:
 - **"Replay it" is "Show me on the site"**: Fitts pauses, opens the page on the live site,
   scrolls to the element and outlines it (`showFinding`, a new RunEngine method). The scripted
   test engine still rewinds.
+- **The Fitts plugin is real, as one file.** A Vite project gets it in its own small PR (the
+  Add project checkbox, shown only for Vite projects without it): `fitts.vite.mjs` with no
+  dependencies, and `fitts()` first in vite.config's plugins. In `vite serve` only, it stamps
+  `data-fitts-src="file:line:col"` on host JSX elements with a small scanner (code, strings,
+  comments, templates, tags and their children, so generics, comparisons and text aren't
+  touched), then checks the stamped file with Vite's own compiler (oxc, else esbuild) and
+  serves the original if it doesn't compile. Checked on Fitts's renderer (746 elements in 58
+  files) and Allen's portfolio (386 in 14): every file compiled. The npm package
+  (`@fitts/vite-plugin`, with Babel) stays for the monorepo; detection counts either.
+- **`pnpm -s typecheck` hid errors.** The silent flag swallowed tsc's output (and the build
+  doesn't typecheck), so round 1 went in with a few type errors. Fixed; checks now run
+  without `-s`.
