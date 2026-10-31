@@ -226,11 +226,21 @@ export class MockRunEngine implements RunEngine {
   // card and the ready bar work as in Phase 1.
 
   /** Posts the user's answer and shows Fitts typing. False when the run isn't interviewing. */
-  interviewUser(projectId: string, text: string, opts: { spoken?: boolean } = {}): boolean {
+  interviewUser(
+    projectId: string,
+    text: string,
+    opts: { spoken?: boolean; pointingAt?: string; pointingLabel?: string } = {},
+  ): boolean {
     const ctrl = this.ensure(projectId);
     if (ctrl.state.phase !== 'interview') return false;
     this.mutate(ctrl, (s, ctx) => {
-      ctx.post({ type: 'user.message', text, ...(opts.spoken ? { spoken: true } : {}) });
+      ctx.post({
+        type: 'user.message',
+        text,
+        ...(opts.spoken ? { spoken: true } : {}),
+        ...(opts.pointingAt ? { pointingAt: opts.pointingAt } : {}),
+        ...(opts.pointingLabel ? { pointingLabel: opts.pointingLabel } : {}),
+      });
       markQuickRepliesUsed(s);
       s.fittsTyping = true;
     });
@@ -338,7 +348,7 @@ export class MockRunEngine implements RunEngine {
   sendMessage(
     projectId: string,
     text: string,
-    opts: { pointingAt?: string; spoken?: boolean } = {},
+    opts: { pointingAt?: string; pointingLabel?: string; spoken?: boolean } = {},
   ): void {
     const ctrl = this.ensure(projectId);
     if (ctrl.state.phase === 'interview' && !opts.pointingAt) {

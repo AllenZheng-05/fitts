@@ -1,6 +1,6 @@
 import type { RunState } from '@fitts/schema';
 import { useEffect, useRef } from 'react';
-import { listen, type Listening } from '../../lib/voice/session';
+import { bargeInNow, listen, type Listening } from '../../lib/voice/session';
 import { TEST_BUILD } from '../../dev';
 import { cannedTranscript } from '../../mock/voice';
 import { sendFromComposer } from '../../state/actions';
@@ -28,6 +28,8 @@ export function useMicToggle(run: RunState | undefined) {
     const ui = useUi.getState();
     const current = runRef.current;
     if (!ui.micListening) {
+      // You're about to talk: Fitts stops mid-sentence rather than talking over you.
+      bargeInNow();
       ui.set({ micListening: true, micPartial: '' });
       if (!current) return;
       session.current = 'pending';

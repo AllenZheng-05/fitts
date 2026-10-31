@@ -85,6 +85,10 @@ const FILE_ROUTE = /\.(pdf|png|jpe?g|gif|svg|webp|zip|txt|json|xml)$/i;
 const ROUTES_IN_FLIGHT = 2;
 
 const LOGIN = /\b(log ?in|sign ?in)\b|\/(login|signin|sign-in|auth)\b/i;
+/** A site on this machine (a dev server); anything else is a live site with no server to restart. */
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
+/** A live site: Fitts has no code for it, so it audits and reports, and changes nothing. */
+export const isLiveOrigin = (origin: string): boolean => !LOCAL_ORIGIN.test(origin);
 /** A message about the redesign ("For the redesign, instead…", the Adjust it prefill). */
 const ADJUST = /\b(redesign|the (new )?look)\b/i;
 
@@ -206,9 +210,14 @@ export class RealRun {
   }
 
   /** Posts an edge-state card and waits for its answer (§6.3). */
-  private card(kind: EdgeStateKind, onAnswer: (answer: string) => void, block = true): string {
+  private card(
+    kind: EdgeStateKind,
+    onAnswer: (answer: string) => void,
+    block = true,
+    detail?: Extract<ChatItem, { type: 'state' }>['detail'],
+  ): string {
     const id = this.id();
-    const item: ChatItem = { id, type: 'state', stateKind: kind };
+    const item: ChatItem = { id, type: 'state', stateKind: kind, ...(detail ? { detail } : {}) };
     this.emit([{ type: 'chat.item', item }]);
     if (block) {
       this.emit([{ type: 'waiting.changed', waitingFor: `question:${id}` }]);
@@ -694,6 +703,16 @@ export class RealRun {
       return; // No verdict (aborted, or an unusable answer): the audit goes on without one.
     }
     if (this.finished || verdict.fits) return;
+    // A live site has no code to restyle: the look is reported, with no directions to pick.
+    if (isLiveOrigin(this.deps.origin)) {
+      this.emit([
+        { type: 'chat.item', item: { id: this.id(), type: 'lookfeel', text: verdict.why } },
+      ]);
+      this.say(
+        'I can only look at a live site, not change it, so that’s a note for your report. Add the site’s code as a project and I can redesign it.',
+      );
+      return;
+    }
     this.directions = verdict.directions;
     this.lookWhy = verdict.why;
     this.emit([
@@ -1243,11 +1262,14 @@ export class RealRun {
   private async siteTrouble(): Promise<void> {
     const health = await this.deps.site.health().catch(() => ({ up: false, log: [] as string[] }));
     if (health.up) return;
-    this.siteDown();
+    this.siteDown(health.log);
   }
 
-  /** Main reported the dev server down (3 failed health checks), or an action found it down. */
-  siteDown(): void {
+  /**
+   * Main reported the site down (3 failed health checks), or an action found it down. A live
+   * site has no dev server: the card says the site isn't answering and offers a reload.
+   */
+  siteDown(log: string[] = []): void {
     if (
       this.finished ||
       this.state.chat.some(
@@ -1255,23 +1277,30 @@ export class RealRun {
       )
     )
       return;
-    this.card('site-down', (a) => {
-      if (a === 'restart') {
-        this.say('Restarting your dev server.');
-        void this.deps.site.restart().then((up) => {
-          this.say(
-            up
-              ? 'It’s back. Carrying on.'
-              : 'It didn’t come back. I’ll wait while you take a look.',
-          );
-          if (up) this.resumeFromCard();
-          else this.waitForSite();
-        });
-        return;
-      }
-      this.say('Okay, I’ll wait. I’ll pick up where I left off as soon as it answers.');
-      this.waitForSite();
-    });
+    const live = isLiveOrigin(this.deps.origin);
+    const url = this.deps.origin.replace(/^https?:\/\//, '');
+    this.card(
+      'site-down',
+      (a) => {
+        if (a === 'restart') {
+          this.say(live ? 'Loading your site again.' : 'Restarting your dev server.');
+          void this.deps.site.restart().then((up) => {
+            this.say(
+              up
+                ? 'It’s back. Carrying on.'
+                : 'It didn’t come back. I’ll wait while you take a look.',
+            );
+            if (up) this.resumeFromCard();
+            else this.waitForSite();
+          });
+          return;
+        }
+        this.say('Okay, I’ll wait. I’ll pick up where I left off as soon as it answers.');
+        this.waitForSite();
+      },
+      true,
+      { url, live, ...(live ? {} : { log: log.slice(-8) }) },
+    );
   }
 
   private waitForSite(): void {
@@ -1470,7 +1499,10 @@ export class RealRun {
     if (this.state.activity === 'user-driving') this.emit([{ type: 'user.action', label }]);
   }
 
-  sendMessage(text: string, opts?: { pointingAt?: string; spoken?: boolean }): void {
+  sendMessage(
+    text: string,
+    opts?: { pointingAt?: string; pointingLabel?: string; spoken?: boolean },
+  ): void {
     this.emit([
       {
         type: 'chat.item',
@@ -1480,6 +1512,7 @@ export class RealRun {
           text,
           ...(opts?.spoken ? { spoken: true } : {}),
           ...(opts?.pointingAt ? { pointingAt: opts.pointingAt } : {}),
+          ...(opts?.pointingLabel ? { pointingLabel: opts.pointingLabel.slice(0, 80) } : {}),
         },
       },
     ]);

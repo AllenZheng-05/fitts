@@ -5,6 +5,7 @@ import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@f
 import PROBES from '@fitts/probes/page.js?raw';
 import {
   DEVICES,
+  type PointedElement,
   type ProbeItem,
   type SiteDevice,
   type SiteInput,
@@ -92,6 +93,11 @@ export class SiteWindow {
         canBack: wc.navigationHistory.canGoBack(),
         canForward: wc.navigationHistory.canGoForward(),
       });
+    wc.on('did-fail-load', (_e, code, _desc, _url, isMainFrame) => {
+      // -3 is an aborted load (a newer navigation took over), not a failure.
+      if (isMainFrame && code !== -3) this.loadFailed = true;
+    });
+    wc.on('did-finish-load', () => (this.loadFailed = false));
     wc.on('did-navigate', pushHistory);
     wc.on('did-navigate-in-page', pushHistory);
     this.recordNetwork();
@@ -107,8 +113,15 @@ export class SiteWindow {
   private acting: string | undefined;
   /** When the page last tried to open a new tab or leave the site (both blocked). */
   private openedAt = 0;
+  /** The last page load failed (offline, DNS, refused): a live site's "not answering". */
+  private loadFailed = false;
   /** The device it's emulating (null: a desktop browser the panel's size). */
   private deviceId: string | null = null;
+
+  /** The emulated device's id, "Your screen" included (null: the panel's size). */
+  get deviceKey(): string | null {
+    return this.deviceId;
+  }
 
   get device(): SiteDevice | null {
     return DEVICES.find((d) => d.id === this.deviceId) ?? null;
@@ -354,6 +367,31 @@ export class SiteWindow {
     if (this.wc.getURL()) this.wc.reload();
   }
 
+  /** The page is loaded and its renderer answers (a live site's health; no server to ask). */
+  async responsive(): Promise<boolean> {
+    if (this.loadFailed || this.wc.isCrashed()) return false;
+    const answer = this.wc.executeJavaScript('document.readyState', false).then(
+      () => true,
+      () => false,
+    );
+    const timeout = new Promise<boolean>((r) => setTimeout(() => r(false), 5000));
+    return Promise.race([answer, timeout]);
+  }
+
+  /** Loads the page again and says whether it came back. */
+  async reloadAndCheck(): Promise<boolean> {
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, 20_000);
+      this.wc.once('did-stop-loading', done);
+      this.wc.reload();
+    });
+    return this.responsive();
+  }
+
   /** The window matches the site panel, in CSS px at device scale 1. */
   resize(width: number, height: number): void {
     const w = Math.max(200, Math.round(width));
@@ -470,16 +508,39 @@ export class SiteWindow {
       return out;`);
   }
 
-  /** The ref'd (or interactive) element at a point, in site CSS px. */
-  refAt(x: number, y: number): Promise<string | null> {
-    return this.evaluate<string | null>(`
+  /** The ref'd (or interactive) element at a point, in site CSS px, with what it is. */
+  refAt(x: number, y: number): Promise<PointedElement | null> {
+    return this.evaluate<PointedElement | null>(`
       const el = document.elementFromPoint(${Number(x)}, ${Number(y)});
       if (!el) return null;
       // The thing under the pointer: the control it's part of (a link, a button, a field), or
       // else the innermost element itself (a heading, a picture, a paragraph). Never a big
       // ancestor just because it has a ref or a role.
       const target = el.closest(${JSON.stringify(CONTROLS)}) || el;
-      return F.refOf(target);`);
+      const tag = target.tagName.toLowerCase();
+      const type = (target.getAttribute('type') || '').toLowerCase();
+      const role = target.getAttribute('role') || '';
+      const text = (target.innerText || '').trim();
+      const kind =
+        tag === 'a' || role === 'link' ? 'link'
+        : tag === 'button' || tag === 'summary' || ['button', 'tab', 'menuitem'].includes(role) || ['submit', 'button'].includes(type) ? 'button'
+        : tag === 'select' || role === 'option' ? 'dropdown'
+        : ['checkbox', 'radio'].includes(type) || ['checkbox', 'switch'].includes(role) ? 'checkbox'
+        : tag === 'input' || tag === 'textarea' ? 'field'
+        : ['img', 'svg', 'picture', 'video', 'canvas'].includes(tag) ? 'image'
+        : /^h[1-6]$/.test(tag) ? 'heading'
+        : ['p', 'span', 'li', 'label', 'strong', 'em', 'small', 'blockquote', 'td'].includes(tag) ? 'text'
+        // A box holding one short line ("To: Grandma") reads as text; a bigger one is a section.
+        : text && text.length <= 60 && !text.includes('\\n') ? 'text'
+        : 'section';
+      const label = target.labels && target.labels[0] ? target.labels[0].innerText : '';
+      // A password field is named, never read; a big section has no one name worth showing.
+      const raw = type === 'password' ? '' :
+        target.getAttribute('aria-label') || target.getAttribute('alt') || label ||
+        (kind === 'section' ? '' : text) || target.getAttribute('placeholder') ||
+        target.getAttribute('title') || '';
+      const name = raw.trim().replace(/\\s+/g, ' ');
+      return { ref: F.refOf(target), kind, name: name.length > 48 ? name.slice(0, 47) + '…' : name };`);
   }
 
   /** The element at a point and its accessible name, for "You clicked …" (§5.4). */

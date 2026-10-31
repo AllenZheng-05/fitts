@@ -100,7 +100,10 @@ export function sendFromComposer(projectId: string, text: string, { spoken = fal
   const engine = getEngine();
   const ui = useUi.getState();
   const pointingAt = ui.draftPointingAt ?? undefined;
-  ui.set({ draft: '', draftPointingAt: null });
+  const pointing = pointingAt
+    ? { pointingAt, ...(ui.draftPointingLabel ? { pointingLabel: ui.draftPointingLabel } : {}) }
+    : {};
+  ui.set({ draft: '', draftPointingAt: null, draftPointingLabel: '' });
   const run = useRunStore.getState().runs[projectId];
 
   if (run?.phase === 'interview' && !pointingAt) {
@@ -115,7 +118,7 @@ export function sendFromComposer(projectId: string, text: string, { spoken = fal
     return;
   }
   engine.sendMessage(projectId, trimmed, {
-    ...(pointingAt ? { pointingAt } : {}),
+    ...pointing,
     ...(spoken ? { spoken } : {}),
   });
   if (command) engine.interruptNow(projectId);

@@ -117,7 +117,11 @@ export class IpcRunEngine implements RunEngine {
   handBack(projectId: string) {
     this.call(projectId, 'handBack');
   }
-  sendMessage(projectId: string, text: string, opts?: { pointingAt?: string; spoken?: boolean }) {
+  sendMessage(
+    projectId: string,
+    text: string,
+    opts?: { pointingAt?: string; pointingLabel?: string; spoken?: boolean },
+  ) {
     this.call(projectId, 'sendMessage', text, ...(opts ? [opts] : []));
   }
   interruptNow(projectId: string) {

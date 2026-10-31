@@ -21,11 +21,14 @@ import { useMicToggle } from './useMicToggle';
 export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
   const draft = useUi((s) => s.draft);
   const pointingAt = useUi((s) => s.draftPointingAt);
+  const pointingLabel = useUi((s) => s.draftPointingLabel);
+  const pointedAt = pointingLabel || `#${pointingAt ?? ''}`;
   const pointing = useUi((s) => s.pointing);
   const listening = useUi((s) => s.micListening);
   const armed = useUi((s) => s.wakeArmed);
   const wake = useUi((s) => s.wake);
-  const hearing = listening || armed;
+  const wakeHearing = useUi((s) => s.wakeHearing);
+  const hearing = listening || armed || wakeHearing;
   const micPartial = useUi((s) => s.micPartial);
   const talkMode = useSettings((s) => s.talkMode);
   const toggleMic = useMicToggle(run);
@@ -64,12 +67,12 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
         </span>
       )}
       {pointingAt && (
-        <span className="inline-flex items-center gap-1 self-start rounded-tag border border-cobalt py-0.5 pr-0.5 pl-[7px] font-mono text-[11px] text-cobalt-deep">
-          {format(copy.chat.pointingAt, { ref: pointingAt })}
+        <span className="inline-flex items-center gap-1 self-start rounded-tag border border-cobalt py-0.5 pr-0.5 pl-[7px] text-[12px] text-cobalt-deep">
+          {format(copy.chat.pointingAt, { label: pointedAt })}
           <button
             type="button"
-            aria-label={format(copy.composer.removePointing, { ref: pointingAt })}
-            onClick={() => useUi.getState().set({ draftPointingAt: null })}
+            aria-label={format(copy.composer.removePointing, { label: pointedAt })}
+            onClick={() => useUi.getState().set({ draftPointingAt: null, draftPointingLabel: '' })}
             className="rounded-tag p-0.5 hover:bg-cobalt-tint"
           >
             <X size={12} aria-hidden="true" />
@@ -138,7 +141,7 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
           ? copy.composer.hintTyping
           : talkMode !== 'wake'
             ? copy.composer.hint
-            : armed
+            : armed || wakeHearing
               ? copy.composer.hintArmed
               : wake.status === 'trouble'
                 ? format(copy.composer.hintWakeTrouble, {

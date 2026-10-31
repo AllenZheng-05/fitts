@@ -46,6 +46,12 @@ function screenDevice(): SiteDevice {
   return { id: SCREEN_DEVICE, label: 'Your screen', width, height, mobile: false };
 }
 
+/** A device Fitts offers, by id ("Your screen" is measured here); null for anything else. */
+function deviceById(id: string | null): SiteDevice | null {
+  if (id === SCREEN_DEVICE) return screenDevice();
+  return DEVICES.find((d) => d.id === id) ?? null;
+}
+
 const ASSET_NAME = /^[\w.-]+\.(jpg|png|svg)$/;
 
 export class SiteManager {
@@ -213,6 +219,12 @@ export class SiteManager {
   async restart(projectId: string): Promise<boolean> {
     const live = this.live.get(projectId);
     if (!live) return false;
+    // A live site has no server to restart: load the page again.
+    if (this.projectFor(projectId)?.kind === 'live') {
+      const up = (await live.window?.reloadAndCheck()) ?? false;
+      this.status(projectId, { status: up ? 'running' : 'failed' });
+      return up;
+    }
     const ok = await live.server.restart();
     if (ok) {
       live.window?.wc.reload();
@@ -226,7 +238,11 @@ export class SiteManager {
     const live = this.live.get(projectId);
     if (request.op === 'restart') return { op: 'restart', up: await this.restart(projectId) };
     if (request.op === 'health') {
-      const up = live ? await responds(live.server.url) : false;
+      const up = !live
+        ? false
+        : this.projectFor(projectId)?.kind === 'live'
+          ? ((await live.window?.responsive()) ?? false)
+          : await responds(live.server.url);
       return { op: 'health', up, log: live?.server.log ?? [] };
     }
     if (request.op === 'png' || request.op === 'saveAsset') return this.media(projectId, request);
@@ -264,8 +280,11 @@ export class SiteManager {
       case 'viewport':
         return { op: 'items', items: await win.viewportSweep() };
       case 'device': {
-        const previous = win.device?.id ?? null;
-        await win.emulate(DEVICES.find((d) => d.id === request.id) ?? null);
+        // The device by its id, "Your screen" included, so the previous one restores exactly.
+        const previous = win.deviceKey;
+        await win.emulate(deviceById(request.id));
+        // The picker shows what Fitts is looking at.
+        this.status(projectId, { device: request.id ?? SCREEN_DEVICE });
         return { op: 'device', previous };
       }
       case 'value':
@@ -430,14 +449,12 @@ export class SiteManager {
     });
     // Only a device Fitts offers, by id: the renderer never sets arbitrary emulation.
     ipcMain.on(IPC.siteDevice, (_e, id: unknown, deviceId: unknown) => {
-      if (typeof id !== 'string') return;
-      const device =
-        deviceId === SCREEN_DEVICE
-          ? screenDevice()
-          : (DEVICES.find((d) => d.id === deviceId) ?? null);
-      void this.window(id)
-        ?.emulate(device)
-        .catch(() => undefined);
+      if (typeof id !== 'string' || typeof deviceId !== 'string') return;
+      const device = deviceById(deviceId);
+      const win = this.window(id);
+      if (!win) return;
+      void win.emulate(device).catch(() => undefined);
+      if (this.live.has(id)) this.status(id, { device: device?.id ?? SCREEN_DEVICE });
     });
     ipcMain.on(IPC.siteInput, (_e, id: unknown, input: SiteInput) => {
       if (typeof id === 'string' && input && typeof input === 'object')

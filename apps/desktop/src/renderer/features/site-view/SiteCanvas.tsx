@@ -27,7 +27,23 @@ function appShortcut(e: KeyboardEvent<HTMLDivElement>): boolean {
   return k === ',' || k === 'p' || k === '.' || k === 'l';
 }
 
-const CURSORS: Record<string, string> = { hand: 'pointer', ibeam: 'text', iBeam: 'text' };
+/**
+ * Electron's cursor names to CSS. Electron's "pointer" is the plain arrow (CSS "default") and
+ * its "hand" is CSS "pointer"; names CSS shares pass through, anything else is the arrow.
+ */
+const CURSORS: Record<string, string> = {
+  pointer: 'default',
+  hand: 'pointer',
+  ibeam: 'text',
+  iBeam: 'text',
+  nodrop: 'no-drop',
+};
+const CSS_CURSORS = new Set(
+  'default crosshair text wait help progress move grab grabbing not-allowed none copy alias cell context-menu vertical-text zoom-in zoom-out col-resize row-resize e-resize n-resize ne-resize nw-resize s-resize se-resize sw-resize w-resize ns-resize ew-resize nesw-resize nwse-resize all-scroll'.split(
+    ' ',
+  ),
+);
+const cssCursor = (type: string) => CURSORS[type] ?? (CSS_CURSORS.has(type) ? type : 'default');
 
 const modifiers = (e: {
   shiftKey: boolean;
@@ -207,7 +223,7 @@ export function SiteCanvas({
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
         tabIndex={interactive || onNeedsWheel ? 0 : -1}
         className="h-full w-full outline-none"
-        style={{ cursor: cursor ? (CURSORS[cursor] ?? cursor) : undefined }}
+        style={{ cursor: cursor ? cssCursor(cursor) : undefined }}
         onFocus={() => {
           setFocused(true);
           if (interactive) enqueue(() => bridge().site?.input(projectId, { kind: 'focus' }));

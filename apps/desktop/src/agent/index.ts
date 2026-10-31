@@ -27,7 +27,7 @@ import { contributorFor, modelFor, reviewerRoster, SPARK_OPEN, type Profile } fr
 import { testKey } from './llm/test-key';
 import { recording } from './llm/fake';
 import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
-import { RealRun } from './orchestrator/run';
+import { isLiveOrigin, RealRun } from './orchestrator/run';
 import { ReviewerPanel } from './review/reviewers';
 import { themeFit } from './review/themefit';
 import { briefFromSummary, interviewTurn } from './interview/interview';
@@ -192,8 +192,12 @@ function briefChanged(projectId: string, next: Brief | undefined): boolean {
 }
 
 /** One real interview turn on a live project (§6.2); the scripted step if the model can't. */
-async function realInterviewTurn(projectId: string, text: string, spoken: boolean): Promise<void> {
-  if (!engine.interviewUser(projectId, text, spoken ? { spoken: true } : {})) return;
+async function realInterviewTurn(
+  projectId: string,
+  text: string,
+  opts: { spoken?: boolean; pointingAt?: string; pointingLabel?: string },
+): Promise<void> {
+  if (!engine.interviewUser(projectId, text, opts)) return;
   const s = raw.get(projectId);
   const site = siteRpc.for(projectId);
   try {
@@ -222,6 +226,9 @@ async function realInterviewTurn(projectId: string, text: string, spoken: boolea
         ...(shot ? { shot: shot.jpegBase64 } : {}),
         ...(snap ? { page: { path: snap.path, title: snap.title, headings: snap.headings } } : {}),
         path: visited.get(projectId) ?? [],
+        auditOnly: liveSites.get(projectId)?.url
+          ? isLiveOrigin(new URL(liveSites.get(projectId)?.url ?? '').origin)
+          : false,
       },
     );
     engine.interviewReply(projectId, turn);
@@ -292,7 +299,8 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       ...(online() && keys.meta && process.env['FITTS_NO_MEDIA'] !== '1'
         ? { media: new Media(keys.meta, ledger) }
         : {}),
-      ...(online()
+      // A live site has no code: no fixer or redesigner, so nothing is offered that can't be done.
+      ...(online() && !isLiveOrigin(origin)
         ? {
             fixer: (
               task: string,
@@ -380,7 +388,7 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
     case 'sendMessage':
       run.sendMessage(
         typeof args[0] === 'string' ? args[0] : '',
-        args[1] as { pointingAt?: string; spoken?: boolean },
+        args[1] as { pointingAt?: string; pointingLabel?: string; spoken?: boolean },
       );
       return true;
     case 'interruptNow':
@@ -479,12 +487,17 @@ function call({ projectId, method, args, brief, lastRunId, settings: set }: Engi
   if (callReal(projectId, method, args)) return;
   // The real interview, with a key: a conversation with the model, whether or not the site is
   // up yet (the stub keeps the interview's state: the opener, the brief card, the ready bar).
-  const answering =
-    method === 'answerInterview' ||
-    (method === 'sendMessage' && !(args[1] as { pointingAt?: string } | undefined)?.pointingAt);
+  // A message sent while pointing at something is still an interview answer, with the element.
+  const answering = method === 'answerInterview' || method === 'sendMessage';
   if (answering && raw.get(projectId)?.phase === 'interview' && online()) {
-    const spoken = Boolean((args[1] as { spoken?: boolean } | undefined)?.spoken);
-    void realInterviewTurn(projectId, typeof args[0] === 'string' ? args[0] : '', spoken);
+    const o = (args[1] ?? {}) as { spoken?: boolean; pointingAt?: string; pointingLabel?: string };
+    void realInterviewTurn(projectId, typeof args[0] === 'string' ? args[0] : '', {
+      ...(o.spoken ? { spoken: true } : {}),
+      ...(typeof o.pointingAt === 'string' ? { pointingAt: o.pointingAt } : {}),
+      ...(typeof o.pointingLabel === 'string'
+        ? { pointingLabel: o.pointingLabel.slice(0, 80) }
+        : {}),
+    });
     return;
   }
   if (method === 'startAudit' && startRealAudit(projectId, set)) return;
@@ -513,14 +526,14 @@ port.on('message', (e: { data: MainMessage }) => {
       for (const k of Object.keys(keys) as KeyName[]) delete keys[k];
       Object.assign(keys, message.keys);
     } else if (message.kind === 'siteStatus') {
-      const { projectId, status, url } = message.status;
+      const { projectId, status, url, log } = message.status;
       liveSites.set(projectId, { status, ...(url ? { url } : {}) });
       if (url) {
         const path = new URL(url).pathname;
         const list = visited.get(projectId) ?? [];
         if (list.at(-1) !== path) visited.set(projectId, [...list, path].slice(-20));
       }
-      if (status === 'failed') realRuns.get(projectId)?.siteDown();
+      if (status === 'failed') realRuns.get(projectId)?.siteDown(log);
     } else if (message.kind === 'verifySite') {
       const domain = domainOf(message.domain);
       const check = !domain

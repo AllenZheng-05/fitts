@@ -128,7 +128,7 @@ function setup({
   cap = 20,
   mode = 'ask-unsure',
   themeFit,
-  origin = 'http://x',
+  origin = 'http://localhost:5173',
   media,
   fixer,
   redesigner,
@@ -285,6 +285,23 @@ describe('RealRun edge states from real conditions', () => {
     run.dispose();
   });
 
+  it('site down names the real site: a dev server’s own lines, or a live site with no server', () => {
+    const local = setup();
+    local.run.start();
+    local.run.siteDown(['Error: Cannot find module "./Nav"']);
+    expect(card(local.state(), 'site-down')).toMatchObject({
+      detail: { url: 'localhost:5173', live: false, log: ['Error: Cannot find module "./Nav"'] },
+    });
+    local.run.dispose();
+    const live = setup({ origin: 'https://openteamsheets.com' });
+    live.run.start();
+    live.run.siteDown();
+    expect(card(live.state(), 'site-down')).toMatchObject({
+      detail: { url: 'openteamsheets.com', live: true },
+    });
+    live.run.dispose();
+  });
+
   it('site down is also caught when the site stops answering mid-crawl', async () => {
     const site = fakeSite({
       snapshot: () => Promise.reject(new Error('net::ERR_CONNECTION_REFUSED')),
@@ -375,6 +392,24 @@ describe('theme-fit (§8.3)', () => {
     const directions = state()?.chat.find((c) => c.type === 'directions');
     expect(directions).toMatchObject({ selectedId: 'b' });
     expect(state()?.chat.at(-1)).toMatchObject({ text: 'Going with Soft linen: Quiet and warm.' });
+    run.dispose();
+  });
+
+  it('a live site (no code) gets the lookfeel note but no directions to pick', async () => {
+    const { run, state } = setup({
+      origin: 'https://openteamsheets.com',
+      themeFit: () => Promise.resolve(verdict),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => Boolean(state()?.chat.some((c) => c.type === 'lookfeel')));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(state()?.chat.some((c) => c.type === 'directions')).toBe(false);
+    expect(
+      state()?.chat.some(
+        (c) => c.type === 'fitts.message' && /only look at a live site/.test(c.text),
+      ),
+    ).toBe(true);
     run.dispose();
   });
 

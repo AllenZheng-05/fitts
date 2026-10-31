@@ -65,6 +65,8 @@ export interface InterviewInput {
   /** Where the user is, and the paths they clicked through, oldest first. */
   page?: { path: string; title: string; headings: string[] };
   path: string[];
+  /** A live site with no code: Fitts audits and reports, and offers no new look or fixes. */
+  auditOnly?: boolean;
 }
 
 /** Checks the model's turn; throws when it isn't usable (the caller falls back to the script). */
@@ -148,13 +150,24 @@ export async function briefFromSummary(
 /** The owner asked for a new look: a vision, or sites to take after. */
 export const wantsRedesign = (brief: Brief) => Boolean(brief.look || brief.inspiration);
 
+/**
+ * A message sent while pointing at something on the site: the element goes with it, marked as
+ * possibly unrelated (the chip may still be attached from earlier), so it can't derail the
+ * conversation.
+ */
+function withPointing(c: { text: string; pointingAt?: string; pointingLabel?: string }): string {
+  if (!c.pointingAt) return c.text;
+  const what = c.pointingLabel ?? `the element ${c.pointingAt}`;
+  return `${c.text}\n\n[Sent while pointing at ${what} on their site. Use it only if the message is about it; otherwise answer the message as if nothing was pointed at.]`;
+}
+
 /** The conversation so far as Responses input, then this turn's context and screen. */
-export function interviewInput({ state, shot, page, path }: InterviewInput): unknown[] {
+export function interviewInput({ state, shot, page, path, auditOnly }: InterviewInput): unknown[] {
   const history = state.chat.flatMap((c) =>
     c.type === 'fitts.message'
       ? [{ role: 'assistant', content: c.text }]
       : c.type === 'user.message'
-        ? [{ role: 'user', content: c.text }]
+        ? [{ role: 'user', content: withPointing(c) }]
         : [],
   );
   const lines = state.chat.filter((c) => c.type === 'fitts.message').length;
@@ -165,6 +178,11 @@ export function interviewInput({ state, shot, page, path }: InterviewInput): unk
       ? `On screen now: <untrusted_page_content>${JSON.stringify(page)}</untrusted_page_content>`
       : 'The site isn’t on screen.',
     `Path the user clicked: ${path.join(' → ') || 'none yet'}`,
+    ...(auditOnly
+      ? [
+          'This is a live site with no code: you can audit it and report, but not fix or redesign it.',
+        ]
+      : []),
   ].join('\n');
   return [
     ...history,

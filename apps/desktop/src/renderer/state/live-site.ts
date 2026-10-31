@@ -1,8 +1,9 @@
 // The live site's status per project, pushed by main (SPEC-phase2 §5). When a project's site is
 // running, the site view shows its frames instead of the Phase 1 mock render.
-import type { SiteStatus } from '@fitts/schema';
+import { SCREEN_DEVICE, type SiteStatus } from '@fitts/schema';
 import { create } from 'zustand';
 import { bridge } from '../lib/bridge';
+import { useDevice } from './device';
 import { getEngineKind } from './engine';
 
 interface LiveSiteState {
@@ -11,9 +12,13 @@ interface LiveSiteState {
 
 export const useLiveSites = create<LiveSiteState>(() => ({ sites: {} }));
 
-bridge().site?.onStatus((status) =>
-  useLiveSites.setState((s) => ({ sites: { ...s.sites, [status.projectId]: status } })),
-);
+bridge().site?.onStatus((status) => {
+  useLiveSites.setState((s) => ({ sites: { ...s.sites, [status.projectId]: status } }));
+  // Fitts switched devices (its phone pass): the picker shows what it's looking at.
+  const devices = useDevice.getState();
+  if (status.device && (devices.byProject[status.projectId] ?? SCREEN_DEVICE) !== status.device)
+    devices.setDevice(status.projectId, status.device);
+});
 
 /** The project's live site, when it's running and the real engine is in use. */
 export function useLiveSite(projectId: string): SiteStatus | undefined {

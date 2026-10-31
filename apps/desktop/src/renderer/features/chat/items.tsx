@@ -3,7 +3,6 @@ import {
   EDGE_STATE_ANSWERS,
   type Brief,
   type ChatItem,
-  type EdgeStateKind,
   type Finding,
   type RunState,
 } from '@fitts/schema';
@@ -136,8 +135,8 @@ function UserMessage({ item }: { item: Item<'user.message'> }) {
         <span className="text-[11px] font-bold text-cobalt-ink">{copy.chat.spoken}</span>
       )}
       {item.pointingAt && (
-        <span className="self-start rounded-tag border border-cobalt px-[7px] py-0.5 font-mono text-[11px] text-cobalt-deep">
-          {format(copy.chat.pointingAt, { ref: item.pointingAt })}
+        <span className="self-start rounded-tag border border-cobalt px-[7px] py-0.5 text-[12px] text-cobalt-deep">
+          {format(copy.chat.pointingAt, { label: item.pointingLabel ?? `#${item.pointingAt}` })}
         </span>
       )}
       <span className="text-[14px] leading-[1.45]">{item.text}</span>
@@ -587,7 +586,8 @@ function Driving({ run }: { run: RunState }) {
   );
 }
 
-function stateBody(kind: EdgeStateKind, run: RunState, seconds: number): string {
+function stateBody(item: Item<'state'>, run: RunState, seconds: number): string {
+  const kind = item.stateKind;
   const c = copy.states;
   switch (kind) {
     case 'stop-run-confirm':
@@ -601,8 +601,16 @@ function stateBody(kind: EdgeStateKind, run: RunState, seconds: number): string 
       const action = run.overlays.attention?.label.replace(/^Fitts · /, '');
       return action ? format(c.stopped.body, { action }) : c.stopped.bodyNoAction;
     }
-    case 'site-down':
-      return format(c['site-down'].body, { url: 'localhost:5173' });
+    case 'site-down': {
+      // The mock engine's card has no detail: its scripted dev server.
+      const d = item.detail ?? { url: 'localhost:5173', live: false, log: [c['site-down'].log] };
+      const body = d.live
+        ? c['site-down'].bodyLive
+        : d.log?.length
+          ? c['site-down'].body
+          : c['site-down'].bodyNoLog;
+      return format(body, { url: d.url });
+    }
     case 'api-trouble':
       return seconds > 0
         ? format(c['api-trouble'].body, { seconds })
@@ -627,13 +635,23 @@ function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
     kind === 'api-trouble' && item.answer === undefined ? API_RETRY_MS : 0,
   );
   const answers = EDGE_STATE_ANSWERS[kind] as readonly string[];
-  const labels = text.answers as Record<string, string>;
+  const live = kind === 'site-down' && item.detail?.live === true;
+  const siteLog =
+    kind === 'site-down'
+      ? (item.detail?.log ?? (item.detail ? [] : [copy.states['site-down'].log]))
+      : [];
+  const labels = (live ? copy.states['site-down'].answersLive : text.answers) as Record<
+    string,
+    string
+  >;
   // The cap that was reached, even after "Add $10" raised it.
   const reachedCap = run.cost.capUsd - (item.answer === 'add-10' ? 10 : 0);
   const title =
     kind === 'budget' || kind === 'budget-warning'
       ? format(text.title, { cap: formatUsd(reachedCap, { dropWholeCents: true }) })
-      : text.title;
+      : live
+        ? copy.states['site-down'].titleLive
+        : text.title;
   const firstVariant =
     kind === 'stop-run-confirm' ? 'danger' : kind === 'login-wall' ? 'dark' : 'primary';
 
@@ -641,11 +659,11 @@ function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
     <div className={cx(CARD, 'gap-2 p-3.5', kind === 'login-wall' ? 'bg-sun-tint' : 'bg-card')}>
       <span className="font-display text-[16px] font-bold">{title}</span>
       <p className="text-[14px] leading-normal">
-        <RichText text={stateBody(kind, run, seconds)} />
+        <RichText text={stateBody(item, run, seconds)} />
       </p>
-      {kind === 'site-down' && (
+      {siteLog.length > 0 && (
         <pre className="rounded-row bg-ink p-2.5 font-mono text-[12px] whitespace-pre-wrap text-paper">
-          {copy.states['site-down'].log}
+          {siteLog.join('\n')}
         </pre>
       )}
       {item.answer !== undefined ? (

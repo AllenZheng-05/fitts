@@ -18,7 +18,8 @@ import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
 import { bridge } from '../../lib/bridge';
 import { livePath, useLiveSite, useLiveSites } from '../../state/live-site';
-import { DEVICES, SCREEN_DEVICE } from '@fitts/schema';
+import { DEVICES, SCREEN_DEVICE, type PointedElement } from '@fitts/schema';
+import { format } from '../../lib/format';
 import { Select } from '../../components/fields';
 import { TEST_BUILD } from '../../dev';
 import { screenDevice, useDevice } from '../../state/device';
@@ -281,6 +282,14 @@ export function SiteView({
  * "Point at something" (SPEC §7.4): crosshair, dashed cobalt outline on hover, a click
  * attaches "pointing at #id" to the message box. Esc cancels (it joins the overlay stack).
  */
+/** What you pointed at, in words: "“Sign up” button", or "this image" when it has no name. */
+function pointedLabel(el: PointedElement): string {
+  const kind = copy.chat.pointKinds[el.kind];
+  return el.name
+    ? format(copy.chat.pointedNamed, { name: el.name, kind })
+    : format(copy.chat.pointedUnnamed, { kind });
+}
+
 function PointLayer({ surface }: { surface: SiteSurface }) {
   const [hover, setHover] = useState<{ ref: string; rect: Rect } | null>(null);
   const id = useId();
@@ -300,14 +309,19 @@ function PointLayer({ surface }: { surface: SiteSurface }) {
     };
   }, [id]);
 
-  const at = async (e: React.PointerEvent | React.MouseEvent): Promise<string | null> => {
-    if (surface.refAtAsync) return surface.refAtAsync(e.clientX, e.clientY);
+  const at = async (
+    e: React.PointerEvent | React.MouseEvent,
+  ): Promise<{ ref: string; label: string } | null> => {
+    if (surface.refAtAsync) {
+      const el = await surface.refAtAsync(e.clientX, e.clientY);
+      return el ? { ref: el.ref, label: pointedLabel(el) } : null;
+    }
     // Look through this layer to the site underneath.
     const layer = e.currentTarget as HTMLElement;
     layer.style.pointerEvents = 'none';
     const ref = surface.refAt(e.clientX, e.clientY);
     layer.style.pointerEvents = '';
-    return ref;
+    return ref ? { ref, label: '' } : null;
   };
 
   return (
@@ -316,16 +330,18 @@ function PointLayer({ surface }: { surface: SiteSurface }) {
     <div
       className="absolute inset-0 z-20 cursor-crosshair"
       onPointerMove={(e) => {
-        void at(e).then((ref) => {
-          const rect = ref ? surface.getElementRect(ref) : null;
-          setHover(ref && rect ? { ref, rect } : null);
+        void at(e).then((hit) => {
+          const rect = hit ? surface.getElementRect(hit.ref) : null;
+          setHover(hit && rect ? { ref: hit.ref, rect } : null);
         });
       }}
       onPointerLeave={() => setHover(null)}
       onClick={(e) => {
-        void at(e).then((ref) => {
-          if (!ref) return;
-          useUi.getState().set({ pointing: false, draftPointingAt: ref });
+        void at(e).then((hit) => {
+          if (!hit) return;
+          useUi
+            .getState()
+            .set({ pointing: false, draftPointingAt: hit.ref, draftPointingLabel: hit.label });
           document.getElementById(MESSAGE_BOX_ID)?.focus();
         });
       }}

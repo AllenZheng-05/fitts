@@ -1,6 +1,7 @@
 import type { RunState } from '@fitts/schema';
 import { useEffect } from 'react';
 import { parseVoiceCommand } from '../../lib/voice-command';
+import { chime } from '../../lib/voice/chime';
 import { bargeInNow, listen, type Listening } from '../../lib/voice/session';
 import { getEngine } from '../../state/engine';
 import { sendFromComposer } from '../../state/actions';
@@ -30,7 +31,7 @@ export function useWakeListening(run: RunState | undefined) {
   useEffect(() => {
     const ui = () => useUi.getState();
     if (talkMode !== 'wake' || !projectId || pushing) {
-      ui().set({ wake: { status: 'off' }, wakeArmed: false });
+      ui().set({ wake: { status: 'off' }, wakeArmed: false, wakeHearing: false });
       return;
     }
     let session: Listening | null = null;
@@ -43,12 +44,20 @@ export function useWakeListening(run: RunState | undefined) {
 
     const disarm = () => {
       clearTimeout(armed);
-      if (ui().wakeArmed) ui().set({ wakeArmed: false, micPartial: '' });
+      if (ui().wakeArmed || ui().wakeHearing)
+        ui().set({ wakeArmed: false, wakeHearing: false, micPartial: '' });
     };
     const arm = () => {
-      ui().set({ wakeArmed: true, micPartial: '' });
+      ui().set({ wakeArmed: true, wakeHearing: false, micPartial: '' });
       clearTimeout(armed);
       armed = setTimeout(disarm, ARMED_MS);
+    };
+    /** "Fitts" heard in this utterance: the chime, once, and Fitts stops talking to listen. */
+    const heard = () => {
+      if (ui().wakeHearing || ui().wakeArmed) return;
+      chime();
+      bargeInNow();
+      ui().set({ wakeHearing: true });
     };
     const retry = (reason?: string) => {
       session = null;
@@ -73,20 +82,27 @@ export function useWakeListening(run: RunState | undefined) {
       const s = await listen('ENDPOINTING', projectId, {
         bargeIn: false,
         partial: (text) => {
-          if (!ui().wakeArmed) {
-            // "Fitts, …" starting while Fitts talks: it stops to listen.
-            if (parseVoiceCommand(text)) bargeInNow();
-            return;
-          }
-          bargeInNow();
+          // Words show in the message box as they come, once they start with "Fitts" (or
+          // Fitts was woken); everything else said in the room stays out of it.
+          if (ui().wakeArmed) {
+            bargeInNow();
+            clearTimeout(armed);
+            armed = setTimeout(disarm, ARMED_MS);
+          } else if (parseVoiceCommand(text)) heard();
+          else return;
           ui().set({ micPartial: text });
-          clearTimeout(armed);
-          armed = setTimeout(disarm, ARMED_MS);
         },
         final: (text) => {
           const cmd = parseVoiceCommand(text, { armed: ui().wakeArmed });
-          if (!cmd) return;
-          if (cmd.kind === 'wake') return arm();
+          if (!cmd) {
+            if (ui().wakeHearing) ui().set({ wakeHearing: false, micPartial: '' });
+            return;
+          }
+          if (cmd.kind === 'wake') {
+            heard();
+            return arm();
+          }
+          if (!ui().wakeArmed) heard();
           disarm();
           if (cmd.kind === 'stop') getEngine().stopAction(projectId);
           else sendFromComposer(projectId, cmd.text, { spoken: true });
@@ -123,7 +139,7 @@ export function useWakeListening(run: RunState | undefined) {
       const s = session;
       session = null;
       s?.cancel();
-      ui().set({ wake: { status: 'off' }, wakeArmed: false, micPartial: '' });
+      ui().set({ wake: { status: 'off' }, wakeArmed: false, wakeHearing: false, micPartial: '' });
     };
   }, [talkMode, projectId, pushing]);
 }

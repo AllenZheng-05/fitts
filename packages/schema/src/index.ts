@@ -141,6 +141,22 @@ export interface SiteRect {
   height: number;
 }
 
+/** What "Point at something" picked: a ref, its accessible name, and what kind of thing it is. */
+export interface PointedElement {
+  ref: string;
+  name: string;
+  kind:
+    | 'link'
+    | 'button'
+    | 'field'
+    | 'dropdown'
+    | 'checkbox'
+    | 'image'
+    | 'heading'
+    | 'text'
+    | 'section';
+}
+
 /** The live site's state, pushed by main. */
 export interface SiteStatus {
   projectId: string;
@@ -149,6 +165,8 @@ export interface SiteStatus {
   canBack?: boolean;
   canForward?: boolean;
   cursor?: string;
+  /** The device the site is shown as (a DEVICES id or SCREEN_DEVICE), Fitts's choice or yours. */
+  device?: string;
   /** The dev server's last lines, for the site-down card. */
   log?: string[];
 }
@@ -236,7 +254,8 @@ export interface SiteBridge {
   nav(projectId: string, nav: SiteNav): void;
   /** Element boxes by ref, in site CSS px. */
   rects(projectId: string, refs: string[]): Promise<Record<string, SiteRect>>;
-  refAt(projectId: string, x: number, y: number): Promise<string | null>;
+  /** The element at a point, for "Point at something": its ref, name and kind of thing. */
+  refAt(projectId: string, x: number, y: number): Promise<PointedElement | null>;
   /** The element at a point with its accessible name ("You clicked …" while driving). */
   elementAt(
     projectId: string,
@@ -524,7 +543,15 @@ export interface GateRequest {
 
 export type ChatItem =
   | { id: string; type: 'fitts.message'; text: string }
-  | { id: string; type: 'user.message'; text: string; spoken?: boolean; pointingAt?: string }
+  | {
+      id: string;
+      type: 'user.message';
+      text: string;
+      spoken?: boolean;
+      pointingAt?: string;
+      /** What was pointed at, in words ("“Sign up” button"), for the chip and for Fitts. */
+      pointingLabel?: string;
+    }
   | { id: string; type: 'fitts.thinking'; text: string }
   | { id: string; type: 'steps'; steps: { label: string; costUsd: number }[] }
   | { id: string; type: 'finding'; findingId: string }
@@ -556,7 +583,14 @@ export type ChatItem =
     }
   | { id: string; type: 'wording'; from: string; to: string; decision?: 'keep' | 'undo' }
   // `answer` (addition): which button the user pressed on an edge-state card.
-  | { id: string; type: 'state'; stateKind: EdgeStateKind; answer?: string }
+  | {
+      id: string;
+      type: 'state';
+      stateKind: EdgeStateKind;
+      answer?: string;
+      /** The site-down card: whose site, the last dev-server lines, and whether it's live. */
+      detail?: { url: string; live: boolean; log?: string[] };
+    }
   | { id: string; type: 'driving' };
 
 export type ChatItemType = ChatItem['type'];
@@ -674,7 +708,7 @@ export interface RunEngine {
   sendMessage(
     projectId: string,
     text: string,
-    opts?: { pointingAt?: string; spoken?: boolean },
+    opts?: { pointingAt?: string; pointingLabel?: string; spoken?: boolean },
   ): void;
   interruptNow(projectId: string): void;
   /** Answers a question card or an edge-state card. */

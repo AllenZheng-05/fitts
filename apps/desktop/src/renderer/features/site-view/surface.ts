@@ -1,5 +1,6 @@
 // The seam between the site view and whatever renders "your site" (SPEC §13). Phase 1
 // renders mock React sites; Phase 2 streams the real site (liveSurface, SPEC-phase2 §5.2).
+import type { PointedElement } from '@fitts/schema';
 import { siteView } from '../../state/device';
 
 export interface Rect {
@@ -15,7 +16,7 @@ export interface SiteSurface {
   /** The element with a `data-ref` at a point (client coordinates). */
   refAt(clientX: number, clientY: number): string | null;
   /** Phase 2's live site answers over IPC, so pointing awaits this when present (§5.2). */
-  refAtAsync?(clientX: number, clientY: number): Promise<string | null>;
+  refAtAsync?(clientX: number, clientY: number): Promise<PointedElement | null>;
 }
 
 /** A surface over the DOM container (read at call time) holding a mock site. */
@@ -56,7 +57,7 @@ export function liveSurface(
   containerRef: { readonly current: HTMLElement | null },
   site: {
     rects(projectId: string, refs: string[]): Promise<Record<string, Rect>>;
-    refAt(projectId: string, x: number, y: number): Promise<string | null>;
+    refAt(projectId: string, x: number, y: number): Promise<PointedElement | null>;
   },
 ): SiteSurface & { refresh(): Promise<void> } {
   const rects = new Map<string, Rect>();

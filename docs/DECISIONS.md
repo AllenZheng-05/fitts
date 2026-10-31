@@ -2150,3 +2150,43 @@ changes it led to, and the judgment calls in them:
   search, find, filter or look up. The model also says what each field is for (`purpose:
   search | save`). Text areas, email and passwords are always marked. The explorer's fallback query
   is the first meaningful word on the page (headings, then links).
+
+## Phase 2 — Allen's walkthrough feedback (round 3)
+
+- **Live sites only audit.** A run whose origin isn't localhost (`isLiveOrigin`) gets no fixer or
+  redesigner. If theme-fit finds the look doesn't suit, the run posts the lookfeel note and says
+  a redesign needs the code; it posts no directions card. The interview context says the site is
+  live with no code, and the prompt then skips the "new look?" question. The origin test stands
+  in for the project's kind, because every local project is served from localhost.
+- **Site down on a live site.** The health check pinged the placeholder dev server (`localhost:0`)
+  of a live project, so three failed clicks raised the dev-server card. The card also always
+  showed mock text (`localhost:5173`, the Toast error).
+  - A live site's health is now its window: the last main-frame load didn't fail, the renderer
+    hasn't crashed, and `document.readyState` answers within 5s. No extra network call is made.
+  - "Restart" reloads the page.
+  - The card carries `detail` (url, live, the dev server's last 8 lines). A live site's card has
+    its own title, body and button labels, and no log.
+- **Device picker follows Fitts.** `SiteStatus.device` is set whenever the device changes, by
+  Fitts (the phone pass) or by the user. The picker updates from it.
+  - The device op now returns the raw id, "Your screen" included. Restoring after the phone pass
+    goes back to the screen size; before, it left the window at phone width.
+- **Cursor.** Electron's `pointer` is the arrow and its `hand` is CSS `pointer`. The old map
+  passed `pointer` straight through, so the mirror always showed the hand. Names CSS shares pass
+  through; anything else (custom, panning) shows the arrow.
+- **Voice.**
+  - Pressing the mic cuts Fitts off at once. Push-to-talk sessions may never send a speech event,
+    so barge-in on speech alone wasn't enough.
+  - New Fitts lines aren't spoken while the user is talking (mic on, armed, or mid-"Fitts, …").
+    The lines stay in the chat.
+  - "Always listening" shows the words in the message box once an utterance starts with "Fitts",
+    and plays a two-note chime (Web Audio, no file) the moment it hears the name. Room speech
+    without "Fitts" stays out of the box.
+- **Pointing names the thing.** `refAt` returns `{ref, name, kind}`, and the chip reads
+  `pointing at “Sign up” button` (or `this image`). A one-line box counts as text.
+  - The label travels with the message (`pointingLabel`).
+  - The interview now answers messages sent while pointing. Before, they skipped the interview
+    model, which is why the brief lost what the user said.
+  - The model sees the element as a bracketed note, marked as possibly unrelated, so a chip left
+    attached can't derail the answer.
+  - The audit still only acknowledges messages. Making them steer the run is part of the
+    agent-loop change.

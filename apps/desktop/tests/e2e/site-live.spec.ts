@@ -85,7 +85,8 @@ test('demo/chat streams live, the user drives it in the interview, and point ret
   const k = await canvasScale(page);
   await page.mouse.move(box.x + (to.left + 10) * k, box.y + (to.top + to.height / 2) * k);
   await page.mouse.click(box.x + (to.left + 10) * k, box.y + (to.top + to.height / 2) * k);
-  await expect(page.getByText('pointing at #compose-to')).toBeVisible();
+  // The chip says what it is, in words, not its ref.
+  await expect(page.getByText(/^pointing at “To: \(/)).toBeVisible();
 });
 
 test('see it on a phone: the site renders at 390×844, scaled into the panel, and clicks still land', async () => {

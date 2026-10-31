@@ -10,6 +10,7 @@ import {
   type KeyName,
   type Platform,
   type RunState,
+  type PointedElement,
   type SiteRect,
   type SiteStatus,
   type VoiceEvent,
@@ -64,7 +65,7 @@ const bridge: FittsBridge = {
     rects: (projectId, refs) =>
       ipcRenderer.invoke(IPC.siteRects, projectId, refs) as Promise<Record<string, SiteRect>>,
     refAt: (projectId, x, y) =>
-      ipcRenderer.invoke(IPC.siteRefAt, projectId, x, y) as Promise<string | null>,
+      ipcRenderer.invoke(IPC.siteRefAt, projectId, x, y) as Promise<PointedElement | null>,
     elementAt: (projectId, x, y) =>
       ipcRenderer.invoke(IPC.siteElementAt, projectId, x, y) as Promise<{
         ref: string;

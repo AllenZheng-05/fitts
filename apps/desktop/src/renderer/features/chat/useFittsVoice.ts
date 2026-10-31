@@ -5,6 +5,7 @@ import { format } from '../../lib/format';
 import { say, stopSpeaking, type SpokenLine } from '../../lib/speech';
 import { useRunStore } from '../../state/run-store';
 import { useSettings } from '../../state/settings';
+import { useUi } from '../../state/ui';
 
 /**
  * The line Fitts says for a chat item: the text for messages and questions, and the first
@@ -77,7 +78,10 @@ export function useFittsVoice() {
           text: `${copy.gate.title}. ${format(copy.gate.body, { action: run.gate.action, route: run.gate.route })}`,
         });
       }
-      if (useSettings.getState().speaksAloud) say(lines);
+      // Not while you're talking to it: the lines are in the chat, and Fitts doesn't talk over you.
+      const ui = useUi.getState();
+      const userTalking = ui.micListening || ui.wakeArmed || ui.wakeHearing;
+      if (useSettings.getState().speaksAloud && !userTalking) say(lines);
     });
     const unsubscribeSettings = useSettings.subscribe((s, prev) => {
       if (prev.speaksAloud && !s.speaksAloud) stopSpeaking();

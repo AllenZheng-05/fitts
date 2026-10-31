@@ -32,6 +32,8 @@ interface UiState {
   draft: string;
   /** The "pointing at #id" chip attached to the message box (§7.4). */
   draftPointingAt: string | null;
+  /** What it is, in words ("“Sign up” button"); empty when only the ref is known. */
+  draftPointingLabel: string;
   /** Hold-to-talk is held: "Listening…" (§7.5). */
   micListening: boolean;
   /** What Transcribe has heard so far, shown in the message box (SPEC-phase2 §14). */
@@ -40,6 +42,8 @@ interface UiState {
   wake: { status: 'off' | 'starting' | 'listening' | 'trouble'; reason?: string };
   /** "Fitts" was just said on its own: the next thing said is for Fitts. */
   wakeArmed: boolean;
+  /** "Always listening" heard "Fitts, …" and the words are still coming in (shown live). */
+  wakeHearing: boolean;
   /** The mic button was let go and Transcribe is still sending the last words. */
   micFinishing: boolean;
   /** Site-view toggles during the audit (§6.4). */
@@ -103,10 +107,12 @@ export const useUi = create<UiState>((set, get) => ({
   pointing: false,
   draft: '',
   draftPointingAt: null,
+  draftPointingLabel: '',
   micListening: false,
   micPartial: '',
   wake: { status: 'off' },
   wakeArmed: false,
+  wakeHearing: false,
   micFinishing: false,
   highlightsOn: true,
   beforeAfter: false,
