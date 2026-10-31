@@ -94,7 +94,15 @@ export function removeProject(id: string): void {
  * brief. Spoken messages starting with "Fitts" are commands: "Fitts, stop" stops the
  * current action and any other "Fitts, …" interrupts. "stop" or "wait" alone does nothing.
  */
-export function sendFromComposer(projectId: string, text: string, { spoken = false } = {}): void {
+/**
+ * Sends a message. `keepDraft`: always listening sends what was just said and leaves whatever
+ * you'd typed before it in the box.
+ */
+export function sendFromComposer(
+  projectId: string,
+  text: string,
+  { spoken = false, keepDraft = false } = {},
+): void {
   const trimmed = text.trim();
   if (!trimmed) return;
   const engine = getEngine();
@@ -103,7 +111,11 @@ export function sendFromComposer(projectId: string, text: string, { spoken = fal
   const pointing = pointingAt
     ? { pointingAt, ...(ui.draftPointingLabel ? { pointingLabel: ui.draftPointingLabel } : {}) }
     : {};
-  ui.set({ draft: '', draftPointingAt: null, draftPointingLabel: '' });
+  ui.set({
+    ...(keepDraft ? {} : { draft: '', draftSpoken: false }),
+    draftPointingAt: null,
+    draftPointingLabel: '',
+  });
   const run = useRunStore.getState().runs[projectId];
 
   if (run?.phase === 'interview' && !pointingAt) {

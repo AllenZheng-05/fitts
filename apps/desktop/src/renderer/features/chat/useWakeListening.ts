@@ -2,6 +2,7 @@ import type { RunState } from '@fitts/schema';
 import { useEffect } from 'react';
 import { parseVoiceCommand } from '../../lib/voice-command';
 import { chime } from '../../lib/voice/chime';
+import { beginDictation, dictate, endDictation } from '../../lib/voice/dictation';
 import { bargeInNow, listen, type Listening } from '../../lib/voice/session';
 import { getEngine } from '../../state/engine';
 import { sendFromComposer } from '../../state/actions';
@@ -22,7 +23,9 @@ const STEADY_MS = 5_000;
  * on, reopened whenever it drops. Only utterances that start with "Fitts" count: "Fitts, stop"
  * stops the current action, any other "Fitts, …" is a spoken interrupt, and "Fitts" on its own
  * wakes Fitts so the next thing said is for it. Bare "stop" or "wait" do nothing. The mic
- * button pauses it (one session at a time); it picks up again after.
+ * button pauses it (one session at a time); it picks up again after. The words go into the
+ * message box as they're said and send when you stop talking, unless you start editing the box
+ * first: then they stay there for you to finish and send (Allen's feedback, round 4).
  */
 export function useWakeListening(run: RunState | undefined) {
   const talkMode = useSettings((s) => s.talkMode);
@@ -42,13 +45,22 @@ export function useWakeListening(run: RunState | undefined) {
     let retrying: ReturnType<typeof setTimeout> | undefined;
     let armed: ReturnType<typeof setTimeout> | undefined;
 
+    /** This stretch of talking is over without being sent. */
     const disarm = () => {
       clearTimeout(armed);
-      if (ui().wakeArmed || ui().wakeHearing)
-        ui().set({ wakeArmed: false, wakeHearing: false, micPartial: '' });
+      if (ui().wakeArmed || ui().wakeHearing) {
+        // Words you took over stay; a "Fitts" that went nowhere leaves the box as it was.
+        const taken = ui().dictationTakenOver;
+        const before = endDictation();
+        ui().set({
+          wakeArmed: false,
+          wakeHearing: false,
+          ...(taken ? {} : { draft: before.trimEnd() }),
+        });
+      }
     };
     const arm = () => {
-      ui().set({ wakeArmed: true, wakeHearing: false, micPartial: '' });
+      ui().set({ wakeArmed: true, wakeHearing: false });
       clearTimeout(armed);
       armed = setTimeout(disarm, ARMED_MS);
     };
@@ -57,7 +69,8 @@ export function useWakeListening(run: RunState | undefined) {
       if (ui().wakeHearing || ui().wakeArmed) return;
       chime();
       bargeInNow();
-      ui().set({ wakeHearing: true });
+      beginDictation();
+      ui().set({ wakeHearing: true, dictationTakenOver: false });
     };
     const retry = (reason?: string) => {
       session = null;
@@ -82,6 +95,7 @@ export function useWakeListening(run: RunState | undefined) {
       const s = await listen('ENDPOINTING', projectId, {
         bargeIn: false,
         partial: (text) => {
+          if (ui().dictationTakenOver) return;
           // Words show in the message box as they come, once they start with "Fitts" (or
           // Fitts was woken); everything else said in the room stays out of it.
           if (ui().wakeArmed) {
@@ -90,12 +104,17 @@ export function useWakeListening(run: RunState | undefined) {
             armed = setTimeout(disarm, ARMED_MS);
           } else if (parseVoiceCommand(text)) heard();
           else return;
-          ui().set({ micPartial: text });
+          dictate(text);
         },
         final: (text) => {
+          // You took over the box while talking: it's yours to finish and send.
+          if (ui().dictationTakenOver) return disarm();
           const cmd = parseVoiceCommand(text, { armed: ui().wakeArmed });
           if (!cmd) {
-            if (ui().wakeHearing) ui().set({ wakeHearing: false, micPartial: '' });
+            if (ui().wakeHearing) {
+              const before = endDictation();
+              ui().set({ wakeHearing: false, draft: before.trimEnd() });
+            }
             return;
           }
           if (cmd.kind === 'wake') {
@@ -103,9 +122,12 @@ export function useWakeListening(run: RunState | undefined) {
             return arm();
           }
           if (!ui().wakeArmed) heard();
-          disarm();
+          clearTimeout(armed);
+          // What was in the box before you spoke stays there; only the spoken words send.
+          const before = endDictation();
+          ui().set({ wakeArmed: false, wakeHearing: false, draft: before.trimEnd() });
           if (cmd.kind === 'stop') getEngine().stopAction(projectId);
-          else sendFromComposer(projectId, cmd.text, { spoken: true });
+          else sendFromComposer(projectId, cmd.text, { spoken: true, keepDraft: true });
         },
         ended: () => {
           if (session && !stopped) retry();
@@ -139,7 +161,8 @@ export function useWakeListening(run: RunState | undefined) {
       const s = session;
       session = null;
       s?.cancel();
-      ui().set({ wake: { status: 'off' }, wakeArmed: false, wakeHearing: false, micPartial: '' });
+      if (ui().wakeArmed || ui().wakeHearing) endDictation();
+      ui().set({ wake: { status: 'off' }, wakeArmed: false, wakeHearing: false });
     };
   }, [talkMode, projectId, pushing]);
 }

@@ -9,7 +9,10 @@ export interface RunStats {
   undone: number;
   rolled: number;
   dismissed: number;
+  /** Open, with enough evidence to show. */
   open: number;
+  /** Open, without enough evidence yet (SPEC-phase2 §8.2). */
+  suggestions: number;
   prs: number;
   spentUsd: number;
 }
@@ -23,14 +26,24 @@ export function runStats(run: RunState): RunStats {
     undone: run.changes.filter((c) => c.status === 'undone').length,
     rolled: run.changes.filter((c) => c.status === 'rolled-back').length,
     dismissed: run.findings.filter((f) => f.status === 'dismissed').length,
-    open: run.findings.filter((f) => f.status === 'open').length,
+    open: run.findings.filter((f) => f.status === 'open' && f.lane !== 'suggestion').length,
+    suggestions: run.findings.filter((f) => f.status === 'open' && f.lane === 'suggestion').length,
     prs: new Set(verified.flatMap((c) => (c.prNumber ? [c.prNumber] : []))).size,
     spentUsd: run.cost.spentUsd,
   };
 }
 
 export function mathLine(stats: RunStats): string {
-  return format(stats.undone > 0 ? copy.done.mathUndone : copy.done.math, { ...stats });
+  const p = copy.done.mathParts;
+  const parts = [
+    format(p.fixed, { n: stats.fixed }),
+    ...(stats.undone > 0 ? [format(p.undone, { n: stats.undone })] : []),
+    format(p.rolled, { n: stats.rolled }),
+    format(p.dismissed, { n: stats.dismissed }),
+    ...(stats.open > 0 ? [format(p.open, { n: stats.open })] : []),
+    ...(stats.suggestions > 0 ? [format(p.suggestions, { n: stats.suggestions })] : []),
+  ];
+  return format(copy.done.math, { found: stats.found, parts: parts.join(' + ') });
 }
 
 function statusText(change: Change): string {
@@ -75,14 +88,28 @@ export function buildReport(project: Project | undefined, run: RunState, now = n
     '',
     `## ${r.findings}`,
     '',
-    ...run.findings.map((f) => {
-      // Where it stands, in words, with the PR that fixed it (the redesign's, if it did).
-      const change = run.changes.find((c) => c.findingIds.includes(f.id));
-      const status = r.findingStatus[f.status];
-      const pr = f.prNumber ? ` · PR #${f.prNumber}` : '';
-      const by = change?.kind === 'redesign' ? ` ${r.byRedesign}` : '';
-      return `- [${severityLabel(f.severity, 'short')}] ${f.title} · ${f.heuristic ?? copy.audit.lens[f.lens]} · ${f.route} · ${status}${by}${pr}`;
-    }),
+    // Each finding in full (Allen's feedback, round 4): what, how to fix it, and the evidence.
+    ...[...run.findings]
+      .sort((a, b) => b.severity - a.severity)
+      .flatMap((f) => {
+        // Where it stands, in words, with the PR that fixed it (the redesign's, if it did).
+        const change = run.changes.find((c) => c.findingIds.includes(f.id));
+        const status = r.findingStatus[f.status];
+        const pr = f.prNumber ? ` · PR #${f.prNumber}` : '';
+        const by = change?.kind === 'redesign' ? ` ${r.byRedesign}` : '';
+        const lane = f.lane === 'suggestion' ? ` · ${r.suggestion}` : '';
+        return [
+          `### [${severityLabel(f.severity, 'short')}] ${f.title}`,
+          '',
+          `${f.heuristic ?? copy.audit.lens[f.lens]} · ${f.route} · ${status}${by}${pr}${lane}`,
+          '',
+          ...(f.finding ? [`**${copy.finding.findingPrefix}** ${f.finding}`, ''] : []),
+          ...(f.fix ? [`**${copy.finding.fixPrefix}** ${f.fix}`, ''] : []),
+          ...(f.evidence.length > 0
+            ? [`${r.evidence}:`, '', ...f.evidence.map((e) => `- ${e}`), '']
+            : []),
+        ];
+      }),
     '',
     `## ${r.cost}`,
     '',

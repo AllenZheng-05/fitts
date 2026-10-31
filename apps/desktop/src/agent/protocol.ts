@@ -22,6 +22,11 @@ export interface AxNode {
   href?: string;
   /** Inside a dialog, form or nav (helps pick primary controls). */
   region?: string;
+  /**
+   * Which control this is, across re-renders (refs are per element). Controls in repeated
+   * cards share one key starting "card:", so a list of 40 team cards is tried once.
+   */
+  key?: string;
 }
 
 export interface AxSnapshot {

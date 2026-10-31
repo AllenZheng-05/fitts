@@ -1,4 +1,4 @@
-import type { Change, ChatItem, CostPhase, RunState } from '@fitts/schema';
+import type { Change, ChatItem, CostPhase, Finding, RunState } from '@fitts/schema';
 import { useEffect, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { Chip, SeverityBadge } from '../../components/Chip';
@@ -16,7 +16,7 @@ import { DEMO_PAST_RUNS } from '../../mock/fixtures/demo-chat';
 import { DEMO_CHAT } from '../../mock/fixtures/projects';
 import { startRoute } from '../../mock/sites';
 import { getEngine } from '../../state/engine';
-import { useProject } from '../../state/projects';
+import { useAuditOnly, useProject } from '../../state/projects';
 import { useSite } from '../../state/site';
 import { fixedBranches, useSiteVersion } from '../../state/site-versions';
 import { SegmentedControl } from '../../components/SegmentedControl';
@@ -28,6 +28,7 @@ import { RetryControls } from '../chat/RetryControls';
 import { ResizeHandle } from '../../components/ResizeHandle';
 import { panelSize, useLayout } from '../../state/layout';
 import { SiteView } from '../site-view/SiteView';
+import { FindingPanel } from '../finding-panel/FindingPanel';
 
 /** How many verified changes show before "See all N changes". */
 const COLLAPSED = 4;
@@ -70,6 +71,7 @@ export function DoneLayout({ run }: { run: RunState }) {
         interactive
         variant="fixed"
         direction={currentDirection(run)}
+        panel={<FindingPanel run={run} />}
         addressHost={TEST_BUILD ? previewUrl : undefined}
         toolbarEnd={
           <>
@@ -206,6 +208,7 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
           <>
             <p className="text-[13px] text-muted">{mathLine(stats)}</p>
             <ChangeList run={run} />
+            <FindingList run={run} />
             <CostBar run={run} />
           </>
         )}
@@ -254,8 +257,10 @@ const SEVERITY_ORDER = (c: Change) => (c.severity ?? (c.kind === 'redesign' ? 3.
 function ChangeList({ run }: { run: RunState }) {
   const [all, setAll] = useState(false);
   const titleId = useId();
+  const auditOnly = useAuditOnly(run.projectId);
   if (run.changes.length === 0) {
-    return <p className="text-[14px] text-muted">{copy.done.nothingChanged}</p>;
+    // A live site can't be changed: saying so after every audit is noise.
+    return auditOnly ? null : <p className="text-[14px] text-muted">{copy.done.nothingChanged}</p>;
   }
   const rolled = run.changes.filter((c) => c.status === 'rolled-back' || c.status === 'retrying');
   const rest = run.changes
@@ -361,6 +366,78 @@ function ChangeRow({ run, change }: { run: RunState; change: Change }) {
           {copy.done.undo}
         </Button>
       )}
+    </li>
+  );
+}
+
+const bySeverity = (a: Finding, b: Finding) => b.severity - a.severity;
+
+/**
+ * Every finding of the run (Allen's feedback, round 4), worst first, then the suggestions. Each
+ * opens the Finding panel over the site: the evidence, and the replay of how Fitts found it.
+ */
+function FindingList({ run }: { run: RunState }) {
+  const openId = useUi((s) => s.openFindingId);
+  const titleId = useId();
+  const suggestionsId = useId();
+  if (run.findings.length === 0) return null;
+  const shown = run.findings.filter((f) => f.lane !== 'suggestion').sort(bySeverity);
+  const suggestions = run.findings.filter((f) => f.lane === 'suggestion').sort(bySeverity);
+  const rows = (list: Finding[]) =>
+    list.map((f) => <FindingRow key={f.id} finding={f} open={f.id === openId} />);
+  return (
+    <div className="flex flex-col gap-[7px]">
+      {shown.length > 0 && (
+        <>
+          <h3 id={titleId} className="font-display text-[17px] font-bold">
+            {format(copy.done.foundTitle, { n: shown.length })}
+          </h3>
+          <p className="text-[13px] text-muted">{copy.done.foundHint}</p>
+          <ul aria-labelledby={titleId} className="flex flex-col gap-1.5">
+            {rows(shown)}
+          </ul>
+        </>
+      )}
+      {suggestions.length > 0 && (
+        <>
+          <h3 id={suggestionsId} className="mt-1.5 font-display text-[17px] font-bold">
+            {format(copy.done.suggestionsTitle, { n: suggestions.length })}
+          </h3>
+          <p className="text-[13px] text-muted">{copy.done.suggestionsHint}</p>
+          <ul aria-labelledby={suggestionsId} className="flex flex-col gap-1.5">
+            {rows(suggestions)}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FindingRow({ finding, open }: { finding: Finding; open: boolean }) {
+  return (
+    <li>
+      <button
+        type="button"
+        aria-pressed={open}
+        onClick={() => useUi.getState().set({ openFindingId: open ? null : finding.id })}
+        className={cx(
+          'flex min-h-[50px] w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left transition-tint hover:bg-paper',
+          open ? 'border-2 border-cobalt px-[9px] py-[7px]' : 'border border-ink',
+          finding.status === 'dismissed' && 'bg-neutral-tint',
+        )}
+      >
+        <SeverityBadge severity={finding.severity} form="short" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[14px] font-semibold">{finding.title}</span>
+          <span className="text-[12px] text-muted">
+            {format(copy.done.findingMeta, {
+              where: finding.heuristic ?? copy.audit.lens[finding.lens],
+              route: finding.route,
+              status: copy.done.report.findingStatus[finding.status],
+            })}
+          </span>
+        </span>
+      </button>
     </li>
   );
 }

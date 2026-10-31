@@ -9,6 +9,8 @@ export const DESTRUCTIVE =
   /\b(delete|remove|pay|purchase|buy|checkout|transfer|unsubscribe|cancel plan|close account)\b/i;
 
 interface Control {
+  /** The element it was last seen as (refs change when the page re-renders). */
+  ref: string;
   name: string;
   role: string;
   type?: string;
@@ -20,7 +22,10 @@ interface Route {
   path: string;
   status: 'queued' | 'testing' | 'done';
   label?: string;
+  /** By key (AxNode.key, or the ref when there's none). */
   controls: Map<string, Control>;
+  /** Ref → key, for the refs the crawler acts on. */
+  refs: Map<string, string>;
   seen: boolean;
   issues: number;
 }
@@ -29,6 +34,22 @@ interface Route {
 export const routeOf = (path: string) => (path.split(/[?#]/)[0] ?? '/').replace(/\/+$/, '') || '/';
 
 const depthOf = (path: string) => Math.max(0, path.split('/').filter(Boolean).length - 1);
+
+/**
+ * A path segment that names one item, not a kind of page: "42", "a8f3k2x9", a uuid. Words
+ * with a number ("step-2", "v2") are kinds of page, so they don't count.
+ */
+const ID_SEGMENT = /^\d+$|^(?=.*\d)(?=.*[a-z])[a-z0-9_]{6,}$|^[0-9a-f-]{16,}$/i;
+
+/** "/team/abc123" → "/team/:id": pages that are one template with different data. */
+export const patternOf = (path: string) =>
+  path
+    .split('/')
+    .map((s) => (ID_SEGMENT.test(s) ? ':id' : s))
+    .join('/');
+
+/** Pages of one template tested before the rest count as the same page (Allen's feedback). */
+export const SAME_TEMPLATE_PAGES = 2;
 
 /**
  * Links in shared chrome (nav, header, footer) repeat on every page: they're for discovering
@@ -40,6 +61,8 @@ const isChrome = (n: AxNode) =>
 
 export class Coverage {
   private readonly routes = new Map<string, Route>();
+  /** A repeated card's controls, tried once anywhere: key → the route they were tried on. */
+  private readonly triedCards = new Map<string, string>();
 
   constructor(private readonly origin: string) {}
 
@@ -54,7 +77,23 @@ export class Coverage {
       return false;
     }
     if (this.routes.has(path)) return false;
-    this.routes.set(path, { path, status: 'queued', controls: new Map(), seen: false, issues: 0 });
+    const route: Route = {
+      path,
+      status: 'queued',
+      controls: new Map(),
+      refs: new Map(),
+      seen: false,
+      issues: 0,
+    };
+    // A third page of the same template (/team/:id) isn't tested again: it's the same page.
+    const pattern = patternOf(path);
+    const like = [...this.routes.values()].filter((r) => patternOf(r.path) === pattern);
+    if (pattern !== path && like.length >= SAME_TEMPLATE_PAGES) {
+      route.status = 'done';
+      route.seen = true;
+      route.label = 'same page';
+    }
+    this.routes.set(path, route);
     return true;
   }
 
@@ -68,14 +107,29 @@ export class Coverage {
     for (const n of snap.nodes) {
       if (n.href && n.role === 'link') this.discover(n.href);
       if (n.disabled || isChrome(n)) continue;
-      if (route.controls.has(n.ref)) continue;
-      route.controls.set(n.ref, {
+      const key = n.key ?? n.ref;
+      route.refs.set(n.ref, key);
+      const known = route.controls.get(key);
+      if (known) {
+        known.ref = n.ref;
+        continue;
+      }
+      const elsewhere = key.startsWith('card:') ? this.triedCards.get(key) : undefined;
+      route.controls.set(key, {
+        ref: n.ref,
         name: n.name,
         role: n.role,
         ...(n.type ? { type: n.type } : {}),
         tried: false,
+        ...(elsewhere ? { skipped: `same as on ${elsewhere}` } : {}),
       });
     }
+  }
+
+  private control(path: string, ref: string): Control | undefined {
+    const route = this.routes.get(routeOf(path));
+    const key = route?.refs.get(ref) ?? ref;
+    return route?.controls.get(key);
   }
 
   setStatus(path: string, status: Route['status'], label?: string): void {
@@ -87,14 +141,18 @@ export class Coverage {
   }
 
   markTried(path: string, ref: string): void {
-    const c = this.routes.get(routeOf(path))?.controls.get(ref);
-    if (c) c.tried = true;
+    const c = this.control(path, ref);
+    if (!c) return;
+    c.tried = true;
+    const key = this.routes.get(routeOf(path))?.refs.get(ref);
+    if (key?.startsWith('card:') && !this.triedCards.has(key))
+      this.triedCards.set(key, routeOf(path));
   }
 
   /** Untries a control (and reopens its route), so the crawl uses it again. */
   retry(path: string, ref: string): void {
     const route = this.routes.get(routeOf(path));
-    const c = route?.controls.get(ref);
+    const c = this.control(path, ref);
     if (!route || !c) return;
     c.tried = false;
     if (route.status === 'done') {
@@ -104,7 +162,7 @@ export class Coverage {
   }
 
   skip(path: string, ref: string, reason: string): void {
-    const c = this.routes.get(routeOf(path))?.controls.get(ref);
+    const c = this.control(path, ref);
     if (c) c.skipped = reason;
   }
 
@@ -118,10 +176,10 @@ export class Coverage {
   untried(path: string): { ref: string; name: string; role: string; type?: string }[] {
     const route = this.routes.get(routeOf(path));
     if (!route) return [];
-    return [...route.controls]
-      .filter(([, c]) => !c.tried && !c.skipped)
-      .map(([ref, c]) => ({
-        ref,
+    return [...route.controls.values()]
+      .filter((c) => !c.tried && !c.skipped)
+      .map((c) => ({
+        ref: c.ref,
         name: c.name,
         role: c.role,
         ...(c.type ? { type: c.type } : {}),
@@ -162,6 +220,19 @@ export class Coverage {
       issues: r.issues,
       ...(r.label ? { label: r.label } : {}),
     }));
+  }
+
+  /** Controls not yet tried or skipped, and on how many pages (for "I stopped at …"). */
+  remaining(): { controls: number; routes: number } {
+    let controls = 0;
+    let routes = 0;
+    for (const r of this.routes.values()) {
+      const left = [...r.controls.values()].filter((c) => !c.tried && !c.skipped).length;
+      const unseen = r.status !== 'done' && !r.seen;
+      controls += left;
+      if (left > 0 || unseen) routes += 1;
+    }
+    return { controls, routes };
   }
 
   /** stepEstimate (§6.1): routes × controls × 1.4, capped at 200. */

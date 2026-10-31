@@ -513,6 +513,11 @@ export interface Finding {
   /** Asset ids (fitts-asset://) for the step shot, the after shot, the SAM mask, the mockup. */
   assets?: { shot?: string; after?: string; mask?: string; mockup?: string };
   prUrl?: string;
+  /**
+   * How Fitts got to it (Allen's feedback, round 4): the steps that led there, each with its
+   * shot at runs/<runId>/shots/<step>.jpg, the last one where it found the problem.
+   */
+  replay?: { step: number; label: string }[];
 }
 
 export interface Change {

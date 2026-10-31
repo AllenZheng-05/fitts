@@ -36,6 +36,8 @@ import { directionInstruction, outlineSvg, type Media } from '../llm/media';
 export const API_RETRY_MS = 12_000;
 /** A run never takes more steps than this (§6.1). */
 export const MAX_STEPS = 200;
+/** A finding's replay shows at most this many steps. */
+const REPLAY_STEPS = 8;
 
 export interface RunDeps {
   site: Site;
@@ -101,6 +103,8 @@ export class RealRun {
   private wake: (() => void) | undefined;
   private abort = new AbortController();
   private readonly history: string[] = [];
+  /** Every step taken, for each finding's replay (Allen's feedback, round 4). */
+  private readonly trail: { step: number; route: string; ref?: string; label: string }[] = [];
   private readonly handlers = new Map<string, (answer: string) => void>();
   private clock: ReturnType<typeof setInterval> | undefined;
   /** A failed action's control, so a stubborn element can't loop forever. */
@@ -306,7 +310,19 @@ export class RealRun {
         await this.sleepUntilKicked();
         continue;
       }
-      if (this.state.step >= MAX_STEPS) break;
+      if (this.state.step >= MAX_STEPS) {
+        // The cap, not the end of the site: say so, with what's left (Allen's feedback).
+        const left = this.coverage.remaining();
+        if (left.controls > 0 || left.routes > 0)
+          this.say(
+            format(copy.fitts.stepCap, {
+              max: MAX_STEPS,
+              controls: left.controls,
+              pages: left.routes === 1 ? '1 page' : `${left.routes} pages`,
+            }),
+          );
+        break;
+      }
       let snap: AxSnapshot;
       try {
         snap = await this.deps.site.snapshot();
@@ -1051,8 +1067,27 @@ export class RealRun {
       },
     });
     this.checks = checks;
-    this.post(findings);
-    void this.media(findings.filter((f) => f.lane !== 'suggestion'));
+    const withReplay = findings.map((f) => this.withReplay(f));
+    this.post(withReplay);
+    void this.media(withReplay.filter((f) => f.lane !== 'suggestion'));
+  }
+
+  /**
+   * The steps that led to a finding: from the step that opened its page to the step that used
+   * its element (or a few steps in, when it isn't tied to one), at most REPLAY_STEPS of them.
+   */
+  private withReplay(f: Finding): Finding {
+    const arrived = this.pages.get(f.route)?.stepIndex ?? f.stepIndex;
+    const used = f.elementRef
+      ? this.trail.find((t) => t.route === f.route && t.ref === f.elementRef && t.step >= arrived)
+      : undefined;
+    const last = used?.step ?? arrived + 3;
+    const steps = this.trail
+      .filter((t) => t.step >= arrived && t.step <= last)
+      .slice(-REPLAY_STEPS)
+      .map((t) => ({ step: t.step, label: t.label }));
+    if (steps.length === 0) return f;
+    return { ...f, replay: steps, ...(used ? { stepIndex: used.step } : {}) };
   }
 
   /** A route's shot as an asset (saved once) and as PNG for Muse Image (converted once). */
@@ -1237,6 +1272,13 @@ export class RealRun {
       this.failures += 1;
       if (this.failures >= 3) await this.siteTrouble();
     }
+    const logged = this.stepsItem?.steps.at(-1)?.label;
+    this.trail.push({
+      step,
+      route: routeOf(from),
+      ...(action.kind !== 'navigate' ? { ref: action.ref } : {}),
+      label: logged ?? label,
+    });
     this.emit([{ type: 'step.finished', step }]);
     this.syncCoverage();
   }

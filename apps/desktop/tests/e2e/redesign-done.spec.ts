@@ -112,7 +112,7 @@ test('Done: stats, undo and redo, try again, all changes', async () => {
   await expect(stat(page, 'Pull requests')).toContainText('9');
   await expect(stat(page, 'Spent')).toContainText('$13.92');
   await expect(summary(page)).toContainText(
-    '31 found = 24 fixed + 2 rolled back + 3 you marked "not a problem" + 2 suggestions without enough evidence.',
+    '31 found = 24 fixed + 2 rolled back + 3 you marked "not a problem" + 2 still open.',
   );
   await expect(page.getByLabel('Address')).toHaveValue('localhost:5180/compose/confirm');
   await expect(page.getByText('Sent to Grandma ✓')).toBeVisible();
@@ -140,7 +140,9 @@ test('Done: stats, undo and redo, try again, all changes', async () => {
 
   await summary(page).getByRole('button', { name: 'See all 26 changes' }).click();
   await expect(summary(page).getByText('Roomier settings rows')).toBeVisible();
-  await expect(summary(page).getByRole('listitem')).toHaveCount(26 + 5);
+  await expect(
+    summary(page).getByRole('list', { name: 'What I changed' }).getByRole('listitem'),
+  ).toHaveCount(26);
 });
 
 test('Done: export, run picker, new run', async () => {
@@ -160,4 +162,22 @@ test('Done: export, run picker, new run', async () => {
   await summary(page).getByRole('button', { name: 'New run' }).click();
   await expect(chat(page)).toContainText('Anything changed since last time?');
   await expect(page.getByText('I know enough to start')).toBeVisible();
+});
+
+test('Done: every finding is listed, and one opens with its evidence beside the site', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Done');
+  const list = summary(page).getByRole('list', { name: /^What I found/ });
+  const row = list.getByRole('button').first();
+  await expect(row).toBeVisible();
+  const title = (await row.locator('span.font-semibold').first().innerText()).trim();
+  await row.click();
+  await expect(row).toHaveAttribute('aria-pressed', 'true');
+  const panel = page.getByRole('dialog', { name: title });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('tab', { name: 'Evidence' })).toBeVisible();
+  await expectNoSeriousA11yViolations(page);
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expectNoWindowScrollAt(page, { width: 1200, height: 720 });
 });

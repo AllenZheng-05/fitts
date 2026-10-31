@@ -2190,3 +2190,42 @@ changes it led to, and the judgment calls in them:
     attached can't derail the answer.
   - The audit still only acknowledges messages. Making them steer the run is part of the
     agent-loop change.
+
+## Phase 2 — Allen's walkthrough feedback (round 4)
+
+Allen ran a live audit of openteamsheets.com and tried the mic. What changed, and the calls:
+
+- **Talking writes into the message box.** The mic button used to send what you said the
+  moment you tapped it again, with no way to fix a word. Now it dictates: the words land in
+  the box after whatever was typed, the second tap leaves them there to edit, and you send.
+  Typing while still talking takes over (the mic stops; the box is yours). Always listening
+  keeps sending on its own when you stop talking, since that's the point of hands-free, but
+  the same takeover applies: start editing and it waits for you. What was typed before a
+  "Fitts, …" stays in the box after it's sent. `micPartial` is gone; `draft` holds everything,
+  with `draftSpoken` so a dictated message is still sent as spoken.
+- **Done lists what was found.** The Done screen showed only the changes, so a live audit
+  (nothing changed) showed 27 found and no way to see them but the exported report. Now every
+  finding is listed under "What I found", worst first, suggestions in their own list, each
+  opening the Finding panel over the site. The math line separates "still open" from
+  "suggestions without enough evidence", which it used to lump together: every open finding
+  read as a suggestion. The exported report has each finding in full (finding, fix, evidence)
+  instead of one line.
+- **How I found it.** Every step already saved a shot (`shots/<step>.jpg`, for rewind). The
+  orchestrator now keeps a trail of steps, and each finding gets `replay`: from the step that
+  opened its page to the step that used its element, at most 8. The Finding panel's new tab
+  plays them with what Fitts did at each; it steps by hand and plays once (not under reduced
+  motion). A finding's `stepIndex` moves to the step that used its element, so the timeline's
+  dot and rewind land there too.
+- **Why the run stopped at 199.** It hit the 200-step cap (SPEC-phase2 §6.1) and said nothing.
+  Two causes made the cap bite on openteamsheets: every team card's buttons counted as new
+  controls (refs are per element), and every `/team/<id>` page counted as a new page. Now the
+  snapshot gives each control a structural key (its tag and classes, and the repeated card
+  it sits in, if any); controls of one repeated card share a key, so a list of 40 cards is one
+  set of controls, tried once, and skipped on later pages that show the same card. Pages of
+  one template (`/team/:id`, an id being digits, a uuid, or 6+ mixed letters and digits)
+  count once two of them are tested; the third is marked "same page" in the site map. Steps
+  of a flow (`/signup/step-2`) are not ids. And when the cap does stop a run, Fitts says so
+  and how much was left.
+- **The big changes are a spec, not a commit.** The agent loop, the style boards, the tab
+  strip and the redesign rounds are written up in `docs/SPEC-phase3.md` for Allen to approve
+  before anything is built.

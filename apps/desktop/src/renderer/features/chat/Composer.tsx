@@ -29,7 +29,6 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
   const wake = useUi((s) => s.wake);
   const wakeHearing = useUi((s) => s.wakeHearing);
   const hearing = listening || armed || wakeHearing;
-  const micPartial = useUi((s) => s.micPartial);
   const talkMode = useSettings((s) => s.talkMode);
   const toggleMic = useMicToggle(run);
   const engine = getEngine();
@@ -37,7 +36,12 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
   const auditing = run.phase === 'audit';
   const acting = auditing && (run.activity === 'acting' || run.activity === 'redesigning');
 
-  const send = () => sendFromComposer(id, draft);
+  const send = () => {
+    const ui = useUi.getState();
+    // Sending while still talking: the mic stops, and the box's text is what goes.
+    if (hearing) ui.set({ dictationTakenOver: true });
+    sendFromComposer(id, ui.draft, { spoken: ui.draftSpoken });
+  };
 
   return (
     <div className="flex flex-none flex-col gap-2 border-t border-ink px-3.5 py-2.5">
@@ -95,10 +99,23 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
           id={MESSAGE_BOX_ID}
           rows={1}
           autoComplete="off"
-          value={hearing ? micPartial || copy.composer.listening : draft}
-          readOnly={hearing}
-          placeholder={auditing ? copy.composer.placeholderRun : copy.composer.placeholderInterview}
-          onChange={(e) => useUi.getState().set({ draft: e.target.value })}
+          value={draft}
+          placeholder={
+            hearing
+              ? copy.composer.listening
+              : auditing
+                ? copy.composer.placeholderRun
+                : copy.composer.placeholderInterview
+          }
+          // Editing while talking takes over: the words stop coming in and nothing sends
+          // until you do.
+          onChange={(e) =>
+            useUi.getState().set({
+              draft: e.target.value,
+              ...(e.target.value ? {} : { draftSpoken: false }),
+              ...(hearing ? { dictationTakenOver: true } : {}),
+            })
+          }
           onKeyDown={(e) => {
             if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
             e.preventDefault();

@@ -665,3 +665,66 @@ describe('media (§10)', () => {
     run.dispose();
   });
 });
+
+describe('Done: replays and the step cap (Allen’s feedback, round 4)', () => {
+  it('a finding replays the steps from opening its page to using its element', async () => {
+    const site = fakeSite({
+      probes: () =>
+        Promise.resolve([
+          {
+            probe: 'target-size' as const,
+            pass: false,
+            items: [
+              { ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' },
+            ],
+          },
+        ]),
+    });
+    const { run, state } = setup({ site });
+    run.start();
+    await skipLogin(state, run);
+    await until(() =>
+      Boolean(state()?.findings.find((f) => f.title === 'Tap target is too small')),
+    );
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    expect(f?.replay?.at(-1)?.label).toBe('Tapped “Open B” → /b');
+    expect(f?.stepIndex).toBe(f?.replay?.at(-1)?.step);
+    run.dispose();
+  });
+
+  it('stopping at the step cap says so, with what was left', async () => {
+    const many = Array.from({ length: 230 }, (_, i) => ({
+      ref: `b${i}`,
+      role: 'button',
+      name: `Button ${i}`,
+    }));
+    const site = fakeSite({
+      snapshot: () =>
+        Promise.resolve({
+          url: 'http://x/',
+          path: '/',
+          title: 'App',
+          headings: [],
+          nodes: many,
+          hasPassword: false,
+        }),
+      click: () => Promise.resolve({ path: '/', navigated: false }),
+    });
+    const { run, state } = setup({ site });
+    run.start();
+    await until(
+      () =>
+        state()?.chat.some(
+          (c) => c.type === 'fitts.message' && c.text.startsWith('I stopped testing at 200 steps'),
+        ) ?? false,
+      10_000,
+    );
+    const said = state()?.chat.find(
+      (c) => c.type === 'fitts.message' && c.text.startsWith('I stopped testing at 200 steps'),
+    );
+    expect(said?.type === 'fitts.message' && said.text).toContain(
+      '30 controls on 1 page weren’t tried',
+    );
+    run.dispose();
+  });
+});

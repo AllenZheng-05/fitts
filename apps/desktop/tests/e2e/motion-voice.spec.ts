@@ -227,6 +227,7 @@ test('Fitts speaks new lines when speaking is on, and the mic chimes', async () 
   const mic = page.getByRole('button', { name: 'Talk to Fitts' });
   await mic.click();
   await mic.click();
+  await page.getByLabel('Message Fitts').press('Enter');
   await expect
     .poll(() => audio(page))
     .toEqual(

@@ -22,6 +22,7 @@ import { RetryControls } from '../chat/RetryControls';
 import { MESSAGE_BOX_ID, SiteView } from '../site-view/SiteView';
 import type { Decision } from '../../state/ui';
 import { decide, finishReview, pendingBatchFor, type Batch } from './review';
+import { Replay } from './Replay';
 
 /** The check a verified fix passed, shown in the mint footer. */
 function checkFor(f: Finding): string {
@@ -114,6 +115,15 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
               label: copy.finding.livePreview,
               content: <LivePreview run={run} finding={finding} />,
             },
+            ...(finding.replay?.length
+              ? [
+                  {
+                    id: 'replay',
+                    label: copy.finding.replayTab,
+                    content: <Replay run={run} finding={finding} />,
+                  },
+                ]
+              : []),
             {
               id: 'evidence',
               label: copy.finding.evidence,

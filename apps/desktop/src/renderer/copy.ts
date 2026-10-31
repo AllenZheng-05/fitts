@@ -204,10 +204,10 @@ export const copy = {
     send: 'Send',
     talk: 'Talk to Fitts',
     listening: 'Listening…',
-    hint: "Tap the mic to talk, and tap it again when you're done.",
+    hint: "Tap the mic to talk, and tap it again when you're done. Then edit and send.",
     hintWake: `Listening for "Fitts". Say "Fitts" and then what you need, or tap the mic.`,
     hintWakeStarting: 'Getting ready to listen…',
-    hintArmed: 'I’m listening. Go ahead.',
+    hintArmed: 'I’m listening. It sends when you stop, or start typing to edit it first.',
     hintWakeTrouble:
       'I can’t hear you right now: {why}. I’ll keep trying. You can still tap the mic or type.',
     wakeWhy: {
@@ -418,6 +418,15 @@ export const copy = {
     measuredBy: 'Fitts measured it too',
     measuredChip: 'Measured',
     replay: 'Show me on the site',
+    replayTab: 'How I found it',
+    replayNone: 'There’s no recording of how I got here.',
+    replayShotAlt: 'The page at step {step} of the run',
+    replayPosition: '{i}/{n}',
+    replayHere: 'found it here',
+    replayPlay: 'Play the steps',
+    replayPause: 'Pause',
+    replayPrev: 'Previous step',
+    replayNext: 'Next step',
     diffLabel: 'Code change',
     fixIt: 'Fix it',
     changeFix: 'Change the fix',
@@ -502,10 +511,23 @@ export const copy = {
     finishing: 'Tidying up…',
     openInBrowser: 'Open in browser',
     stats: { found: 'Found', fixed: 'Fixed & verified', prs: 'Pull requests', spent: 'Spent' },
-    math: '{found} found = {fixed} fixed + {rolled} rolled back + {dismissed} you marked "not a problem" + {open} suggestions without enough evidence.',
-    mathUndone:
-      '{found} found = {fixed} fixed + {undone} undone + {rolled} rolled back + {dismissed} you marked "not a problem" + {open} suggestions without enough evidence.',
+    math: '{found} found = {parts}.',
+    /** The math line's terms; "undone", "still open" and suggestions only show when there are any. */
+    mathParts: {
+      fixed: '{n} fixed',
+      undone: '{n} undone',
+      rolled: '{n} rolled back',
+      dismissed: '{n} you marked "not a problem"',
+      open: '{n} still open',
+      suggestions: '{n} suggestions without enough evidence',
+    },
     changedTitle: 'What I changed',
+    foundTitle: 'What I found ({n})',
+    foundHint: 'Open one to see the evidence and how I found it.',
+    findingMeta: '{where} · {route} · {status}',
+    suggestionsTitle: 'Suggestions ({n})',
+    suggestionsHint:
+      'Fewer than two reviewers flagged these, and nothing I measured backs them up. Worth a look, not proof.',
     rolledBack: 'Rolled back',
     lookAndFeel: 'Look & feel',
     wording: 'Wording',
@@ -539,6 +561,8 @@ export const copy = {
         undone: 'undone',
       },
       byRedesign: 'by the redesign',
+      evidence: 'Evidence',
+      suggestion: 'a suggestion, without enough evidence yet',
       title: 'Fitts report · {project} · Run #{run}',
       generated: 'Generated {date}',
       summary: 'Summary',
@@ -846,6 +870,8 @@ export const copy = {
     showFindingPaused:
       'Here’s “{title}” on {route}, outlined. I’ve paused so you can look; press Resume when you’re done.',
     showFindingDone: 'Here’s “{title}” on {route}, outlined.',
+    stepCap:
+      'I stopped testing at {max} steps, the most one run takes. {controls} controls on {pages} weren’t tried.',
     showFindingFailed: 'I couldn’t open {route} to show you. The site may have changed since.',
     siteNotReady:
       'Your site isn’t running yet, so I can’t start. I’ll be ready as soon as it is: you’ll see it in the site view. If it doesn’t start, the site view shows why.',

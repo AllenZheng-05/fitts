@@ -36,8 +36,10 @@ interface UiState {
   draftPointingLabel: string;
   /** Hold-to-talk is held: "Listening…" (§7.5). */
   micListening: boolean;
-  /** What Transcribe has heard so far, shown in the message box (SPEC-phase2 §14). */
-  micPartial: string;
+  /** The message box's text came (at least partly) from talking: it's sent as spoken. */
+  draftSpoken: boolean;
+  /** You started editing the box while still talking: the words stop coming in, nothing sends. */
+  dictationTakenOver: boolean;
   /** "Always listening": whether Fitts can hear, and why not (shown under the message box). */
   wake: { status: 'off' | 'starting' | 'listening' | 'trouble'; reason?: string };
   /** "Fitts" was just said on its own: the next thing said is for Fitts. */
@@ -109,7 +111,8 @@ export const useUi = create<UiState>((set, get) => ({
   draftPointingAt: null,
   draftPointingLabel: '',
   micListening: false,
-  micPartial: '',
+  draftSpoken: false,
+  dictationTakenOver: false,
   wake: { status: 'off' },
   wakeArmed: false,
   wakeHearing: false,

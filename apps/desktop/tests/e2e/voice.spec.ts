@@ -76,7 +76,7 @@ test.afterEach(async () => {
   server.close();
 });
 
-test('tap to talk: the mic streams to Transcribe, partials show, and the final text is sent spoken', async () => {
+test('tap to talk: the mic streams to Transcribe, partials show, and the final text waits in the box to send', async () => {
   const { page } = launched;
   const mic = page.getByRole('button', { name: 'Talk to Fitts' });
   await mic.click();
@@ -86,6 +86,10 @@ test('tap to talk: the mic streams to Transcribe, partials show, and the final t
   await expect(page.getByLabel('Message Fitts')).toHaveValue('It helps grandparents');
   await mic.click();
   await expect.poll(() => heard.ended).toBe(true);
+  await expect(page.getByLabel('Message Fitts')).toHaveValue(
+    'It helps grandparents text the family.',
+  );
+  await page.getByLabel('Message Fitts').press('Enter');
   const bubble = chat(page).getByRole('listitem').filter({ hasText: 'SPOKEN' });
   await expect(bubble).toContainText('It helps grandparents text the family.');
   expect(heard.handshake).toMatchObject({
@@ -116,6 +120,10 @@ test('always listening: “Fitts, …” is sent spoken, and the mic button stil
   await mic.click();
   await expect(page.getByLabel('Message Fitts')).toHaveValue('It helps grandparents');
   await mic.click();
+  await expect(page.getByLabel('Message Fitts')).toHaveValue(
+    'It helps grandparents text the family.',
+  );
+  await page.getByLabel('Message Fitts').press('Enter');
   await expect(bubble.filter({ hasText: 'It helps grandparents text the family.' })).toHaveCount(1);
   await expect(page.getByRole('status').filter({ hasText: 'Listening for "Fitts"' })).toBeVisible({
     timeout: 10_000,

@@ -619,15 +619,44 @@ export class SiteWindow {
         return tag;
       };
       const sel = 'a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=link],[role=tab],[role=switch],[role=checkbox],[role=menuitem],[tabindex]:not([tabindex="-1"])';
+      // A control's key says which control it is across re-renders, and which controls are
+      // the same component repeated (a card in a list of cards): those share one key.
+      const shape = (el) => el.tagName.toLowerCase() + [...el.classList].map((c) => c.replace(/[0-9]+/g, '')).filter(Boolean).sort().map((c) => '.' + c).join('');
+      const near = (el, stop) => {
+        const parts = [];
+        for (let x = el, i = 0; x && x !== stop && i < 4; x = x.parentElement, i++) parts.push(shape(x));
+        return parts.join('<');
+      };
+      const card = (el) => {
+        let a = el.parentElement;
+        for (let depth = 0; a && a !== document.body && depth < 8; a = a.parentElement, depth++) {
+          const p = a.parentElement;
+          if (!p) break;
+          const s = shape(a);
+          let same = 0;
+          for (const c of p.children) if (shape(c) === s) same++;
+          // A card holds more than the control: other controls, or text of its own.
+          if (same >= 3 && (a.querySelectorAll(sel).length > 1 || text(a).length > text(el).length + 20)) return a;
+        }
+        return null;
+      };
+      const keyOf = (el, role, name) => {
+        const c = card(el);
+        if (c) return 'card:' + shape(c.parentElement) + '>' + shape(c) + '>' + near(el, c) + '|' + role;
+        return role + '|' + name + '|' + near(el, null);
+      };
       const nodes = [];
       for (const el of document.querySelectorAll(sel)) {
         if (!visible(el)) continue;
         const href = el.tagName === 'A' ? el.getAttribute('href') : null;
         const region = el.closest('dialog,[role=dialog],form,nav,header,footer');
+        const role = roleOf(el);
+        const name = nameOf(el).slice(0, 80);
         nodes.push({
           ref: F.refOf(el),
-          role: roleOf(el),
-          name: nameOf(el).slice(0, 80),
+          role,
+          name,
+          key: keyOf(el, role, name).slice(0, 300),
           ...(el.type ? { type: el.type } : {}),
           ...(el.value !== undefined && el.type !== 'password' && typeof el.value === 'string' && el.value ? { value: el.value.slice(0, 60) } : {}),
           ...(el.disabled ? { disabled: true } : {}),
