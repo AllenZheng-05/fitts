@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, RotateCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X } from 'lucide-react';
 import {
   Fragment,
   useEffect,
@@ -6,9 +6,11 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
 import { IconButton } from '../../components/IconButton';
+import { Button } from '../../components/Button';
 import { copy } from '../../copy';
 import { cx } from '../../lib/cx';
 import { renderSite } from '../../mock/sites';
@@ -18,7 +20,7 @@ import { useSite, useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
 import { bridge } from '../../lib/bridge';
 import { livePath, useLiveSite, useLiveSites } from '../../state/live-site';
-import { DEVICES, SCREEN_DEVICE, type PointedElement } from '@fitts/schema';
+import { DEVICES, SCREEN_DEVICE, type PointedElement, type SiteStatus } from '@fitts/schema';
 import { format } from '../../lib/format';
 import { Select } from '../../components/fields';
 import { TEST_BUILD } from '../../dev';
@@ -182,6 +184,7 @@ export function SiteView({
       )}
       style={style}
     >
+      {live?.tabs && live.tabs.length > 1 && <TabStrip siteId={sid} site={live} />}
       <div className="flex flex-none flex-col gap-1 border-b border-ink px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <div role="group" aria-label={copy.site.nav} className="flex gap-1">
@@ -216,6 +219,22 @@ export function SiteView({
           {toolbarEnd}
         </div>
         {header}
+        {live?.activeTab && live.activeTab !== 'site' && (
+          <div
+            role="status"
+            className="flex flex-wrap items-center gap-2 rounded-row bg-sun-tint px-2.5 py-1.5 text-[13px] text-sun-ink"
+          >
+            <span className="min-w-0 flex-1">
+              {format(copy.site.offsite, { host: liveHost ?? '' })}
+            </span>
+            <Button
+              size="sm"
+              onClick={() => bridge().site?.tab(sid, { kind: 'select', id: 'site' })}
+            >
+              {copy.site.backToSite}
+            </Button>
+          </div>
+        )}
       </div>
       <div
         ref={containerRef}
@@ -358,6 +377,73 @@ function PointLayer({ surface }: { surface: SiteSurface }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * The mirror's tabs (SPEC-phase3 §3): the site first, always there and never closable, then
+ * the pages that opened beside it. Arrow keys move between tabs.
+ */
+function TabStrip({ siteId, site }: { siteId: string; site: SiteStatus }) {
+  const tabs = site.tabs ?? [];
+  const active = site.activeTab ?? 'site';
+  const select = (id: string) => bridge().site?.tab(siteId, { kind: 'select', id });
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const i = tabs.findIndex((t) => t.id === active);
+    const next =
+      e.key === 'ArrowRight' ? tabs[i + 1] : e.key === 'ArrowLeft' ? tabs[i - 1] : undefined;
+    if (!next) return;
+    e.preventDefault();
+    select(next.id);
+    requestAnimationFrame(() => document.getElementById(`site-tab-${siteId}-${next.id}`)?.focus());
+  };
+  return (
+    <div
+      role="tablist"
+      aria-label={copy.site.tabs}
+      className="flex flex-none gap-1 overflow-x-auto border-b border-ink bg-surface-2 px-2 pt-1.5"
+    >
+      {tabs.map((t) => {
+        const selected = t.id === active;
+        const title = t.site ? copy.site.siteTab : t.title;
+        return (
+          <span
+            key={t.id}
+            className={cx(
+              'flex max-w-[220px] min-w-0 items-center rounded-t-control border border-b-0 border-ink',
+              selected ? 'bg-card' : 'bg-surface-2',
+            )}
+          >
+            <button
+              id={`site-tab-${siteId}-${t.id}`}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              tabIndex={selected ? 0 : -1}
+              title={t.url}
+              onClick={() => select(t.id)}
+              onKeyDown={onKeyDown}
+              className={cx(
+                'min-h-8 min-w-0 truncate px-3 text-[12px]',
+                selected ? 'font-bold' : 'text-ink-2',
+              )}
+            >
+              {title}
+            </button>
+            {!t.site && (
+              <button
+                type="button"
+                aria-label={format(copy.site.closeTab, { title: t.title })}
+                onClick={() => bridge().site?.tab(siteId, { kind: 'close', id: t.id })}
+                className="mr-1 flex size-6 flex-none items-center justify-center rounded-tag hover:bg-paper"
+              >
+                <X size={12} strokeWidth={2.5} aria-hidden="true" />
+              </button>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }

@@ -75,16 +75,21 @@ export class SiteWindow {
       if (width && height) this.onFrame(image.toJPEG(80), width, height);
     });
     wc.on('cursor-changed', (_e, type) => this.onStatus({ cursor: type }));
-    // Only the project's origin; everything else is checked later (links probe), never opened.
-    // Either way the page did respond to the action that caused it (the feedback probe).
+    // Only the project's origin here. Leaving it from your own click opens a tab beside the site
+    // (SPEC-phase3 §3); from Fitts's, it's blocked and checked later by the links probe. Either
+    // way the page did respond to the action that caused it (the feedback probe).
     wc.on('will-navigate', (e, url) => {
       if (this.allowed(url)) return;
       e.preventDefault();
       this.openedAt = Date.now();
+      if (!this.byFitts()) this.onOffsite?.(url);
     });
     wc.setWindowOpenHandler(({ url }) => {
       if (this.allowed(url)) void wc.loadURL(url);
-      else this.openedAt = Date.now();
+      else {
+        this.openedAt = Date.now();
+        if (!this.byFitts()) this.onOffsite?.(url);
+      }
       return { action: 'deny' };
     });
     const pushHistory = () =>
@@ -113,6 +118,15 @@ export class SiteWindow {
   private acting: string | undefined;
   /** When the page last tried to open a new tab or leave the site (both blocked). */
   private openedAt = 0;
+  /** Until when Fitts's action is in flight (its click, then the page settling). */
+  private fittsUntil = 0;
+  /** A link that leaves the site, followed by the user: it opens in a tab (main sets this). */
+  onOffsite: ((url: string) => void) | undefined;
+
+  /** The page is moving because Fitts acted, not you. */
+  private byFitts(): boolean {
+    return Date.now() < this.fittsUntil;
+  }
   /** The last page load failed (offline, DNS, refused): a live site's "not answering". */
   private loadFailed = false;
   /** The device it's emulating (null: a desktop browser the panel's size). */
@@ -710,13 +724,14 @@ export class SiteWindow {
     const armed = await this.probes<boolean>('P.feedbackArm(); return true;').catch(() => false);
     const t0 = Date.now();
     this.acting = ref;
+    this.fittsUntil = t0 + 15_000;
     let rect: SiteRect | null;
     try {
       rect = await act();
     } finally {
       this.acting = undefined;
     }
-    const result = await this.settle(before);
+    const result = await this.settle(before).finally(() => (this.fittsUntil = 0));
     const mine = () =>
       this.drained.filter((r) => r.startMs >= t0 && (r.type === 'Fetch' || r.type === 'XHR'));
     const deadline = Date.now() + 10_000;

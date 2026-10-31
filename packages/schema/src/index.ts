@@ -169,6 +169,20 @@ export interface SiteStatus {
   device?: string;
   /** The dev server's last lines, for the site-down card. */
   log?: string[];
+  /**
+   * SPEC-phase3 §3: the mirror's tabs, the site's first (always open), and the one showing.
+   * Absent until a page opens a second tab.
+   */
+  tabs?: SiteTab[];
+  activeTab?: string;
+}
+
+/** A tab in the mirror (SPEC-phase3 §3). `site`: the site's own tab, which can't be closed. */
+export interface SiteTab {
+  id: string;
+  title: string;
+  url: string;
+  site: boolean;
 }
 
 export type SiteInput =
@@ -252,6 +266,8 @@ export interface SiteBridge {
   device(projectId: string, device: SiteDevice | null): void;
   input(projectId: string, input: SiteInput): void;
   nav(projectId: string, nav: SiteNav): void;
+  /** SPEC-phase3 §3: show a tab, or close an off-site one ("site" is the site's own tab). */
+  tab(projectId: string, action: { kind: 'select' | 'close'; id: string }): void;
   /** Element boxes by ref, in site CSS px. */
   rects(projectId: string, refs: string[]): Promise<Record<string, SiteRect>>;
   /** The element at a point, for "Point at something": its ref, name and kind of thing. */
@@ -392,6 +408,7 @@ export const IPC = {
   siteDevice: 'fitts:site-device',
   siteInput: 'fitts:site-input',
   siteNav: 'fitts:site-nav',
+  siteTab: 'fitts:site-tab',
   siteRects: 'fitts:site-rects',
   siteRefAt: 'fitts:site-ref-at',
   siteElementAt: 'fitts:site-element-at',

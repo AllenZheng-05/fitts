@@ -2355,3 +2355,28 @@ Allen's update (NEEDS-ALLEN).
   open, its wording changes are undone, and "Start over on the look" goes to the decider,
   which makes a new round. The rollback line still says "I rolled the redesign back: you asked
   to start over", which reads fine.
+
+## Phase 3 — Q4: tabs in the mirror
+
+- **The site window stays tab 1.** The crawler, the probes, rewind, the overlays, pointing and
+  versions all keep using the one site window, untouched. Off-site tabs are extra offscreen
+  windows (`main/site/tabs.ts`) in the same session partition, so a sign-in made in one counts
+  for the site. Main streams frames and routes input, Back, Forward and Reload to whichever tab
+  is showing; boxes, pointing and "the element at" answer only while the site's tab shows.
+- **Only your clicks open tabs.** The site window knows when Fitts's action is in flight (from
+  its click until the page settles, not just the click as `acting` was), and a navigation off
+  the site then is blocked exactly as before, for the links probe. Anything else that leaves
+  the origin, or opens a window to another origin, opens a tab. A same-origin `_blank` link
+  still loads in the site's tab, as Fitts sees it, rather than in a tab saying "not your site".
+- **The site's tab is always open.** It has no close button and isn't in the set that makes
+  room: at six tabs, the oldest off-site tab closes. An off-site tab that redirects or
+  navigates back to the site's origin (a sign-in returning) closes and the site's tab loads
+  that address.
+- **The strip only shows with a second tab**, so the mirror looks exactly as before until a
+  link leaves the site. Off the site, a sun-colored bar says "You're on google.com, not your
+  site. Fitts doesn't test here." with "Back to your site".
+- **Left out:** favicons in the strip (titles only), and a toast when the oldest tab closes
+  to make room (the strip shows it). Both are small; say if you want them.
+- **The health check waits 4s, not 1.5s,** before a local dev server's answer counts as a
+  miss. Under load Vite answers slowly without being down, and three slow answers in a row
+  were what put a false site-down card in the coverage-gate e2e test.

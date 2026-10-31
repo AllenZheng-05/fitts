@@ -62,6 +62,7 @@ const bridge: FittsBridge = {
     device: (projectId, device) => ipcRenderer.send(IPC.siteDevice, projectId, device?.id ?? null),
     input: (projectId, input) => ipcRenderer.send(IPC.siteInput, projectId, input),
     nav: (projectId, nav) => ipcRenderer.send(IPC.siteNav, projectId, nav),
+    tab: (projectId, action) => ipcRenderer.send(IPC.siteTab, projectId, action),
     rects: (projectId, refs) =>
       ipcRenderer.invoke(IPC.siteRects, projectId, refs) as Promise<Record<string, SiteRect>>,
     refAt: (projectId, x, y) =>

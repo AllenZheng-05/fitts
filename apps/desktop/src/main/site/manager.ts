@@ -11,7 +11,7 @@ import {
   type SiteVersion,
   SCREEN_DEVICE,
 } from '@fitts/schema';
-import { BrowserWindow, ipcMain, nativeImage, screen, shell } from 'electron';
+import { BrowserWindow, ipcMain, nativeImage, screen, shell, type WebContents } from 'electron';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectProject, devCommandOnPort } from '../projects/detect';
@@ -20,6 +20,7 @@ import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
 import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
+import { hostOf, SITE_TAB, TabSet } from './tabs';
 
 interface Live {
   server: DevServer;
@@ -28,6 +29,9 @@ interface Live {
   health?: ReturnType<typeof setInterval>;
   /** A version (not the project's own site): frees its port when it closes. */
   release?: () => void;
+  /** Tabs beside the site (SPEC-phase3 §3), and the site tab's own address while one shows. */
+  tabs?: TabSet;
+  siteNav?: Partial<SiteStatus>;
 }
 
 /** Where versions of a site come from: the FixHost's worktrees and ports. */
@@ -146,10 +150,11 @@ export class SiteManager {
     const win = new SiteWindow(
       siteId,
       live.server.url,
-      (jpeg, w, h) => this.broadcast(IPC.siteFrame, siteId, jpeg, w, h),
-      (patch) => this.status(siteId, patch),
+      (jpeg, w, h) => this.siteFrame(siteId, jpeg, w, h),
+      (patch) => this.sitePatch(siteId, patch),
     );
     live.window = win;
+    this.attachTabs(siteId, live, win, new URL(live.server.url).origin);
     const detection = await detectProject(dir);
     const path = version.path && PATH.test(version.path) ? version.path : undefined;
     await win.load(path ?? project.startPath ?? detection?.startPath ?? '/').catch(() => undefined);
@@ -192,11 +197,12 @@ export class SiteManager {
     const win = new SiteWindow(
       projectId,
       server.url,
-      (jpeg, w, h) => this.broadcast(IPC.siteFrame, projectId, jpeg, w, h),
-      (patch) => this.status(projectId, patch),
+      (jpeg, w, h) => this.siteFrame(projectId, jpeg, w, h),
+      (patch) => this.sitePatch(projectId, patch),
       (held) => this.onHeld?.(projectId, held),
     );
     live.window = win;
+    this.attachTabs(projectId, live, win, new URL(server.url).origin);
     await win.load(project.startPath ?? detection?.startPath ?? '/').catch(() => undefined);
     this.status(projectId, { status: 'running' });
     this.watch(projectId, live);
@@ -206,7 +212,8 @@ export class SiteManager {
   private watch(projectId: string, live: Live): void {
     let misses = 0;
     live.health = setInterval(() => {
-      void responds(live.server.url).then((up) => {
+      // 4s, not 1.5: under load a dev server answers slowly without being down.
+      void responds(live.server.url, 4000).then((up) => {
         if (this.live.get(projectId) !== live) return;
         misses = up ? 0 : misses + 1;
         if (misses === 3) this.status(projectId, { status: 'failed', log: live.server.log });
@@ -339,11 +346,12 @@ export class SiteManager {
     const win = new SiteWindow(
       projectId,
       url.origin,
-      (jpeg, w, h) => this.broadcast(IPC.siteFrame, projectId, jpeg, w, h),
-      (patch) => this.status(projectId, patch),
+      (jpeg, w, h) => this.siteFrame(projectId, jpeg, w, h),
+      (patch) => this.sitePatch(projectId, patch),
       (held) => this.onHeld?.(projectId, held),
     );
     live.window = win;
+    this.attachTabs(projectId, live, win, url.origin);
     await win.load(url.pathname || '/').catch(() => undefined);
     this.status(projectId, { status: 'running' });
   }
@@ -352,6 +360,7 @@ export class SiteManager {
     const live = this.live.get(projectId);
     if (!live) return;
     if (live.health) clearInterval(live.health);
+    live.tabs?.destroy();
     live.window?.destroy();
     live.server.stop();
     live.release?.();
@@ -369,6 +378,93 @@ export class SiteManager {
 
   window(projectId: string): SiteWindow | undefined {
     return this.live.get(projectId)?.window;
+  }
+
+  /** The site's own tab is showing (overlays and pointing only ever apply there). */
+  private onSite(id: string): boolean {
+    const tabs = this.live.get(id)?.tabs;
+    return !tabs || tabs.active === SITE_TAB;
+  }
+
+  /** The site's own frames show only while its tab does (SPEC-phase3 §3). */
+  private siteFrame(id: string, jpeg: Buffer, w: number, h: number): void {
+    const tabs = this.live.get(id)?.tabs;
+    if (!tabs || tabs.active === SITE_TAB) this.broadcast(IPC.siteFrame, id, jpeg, w, h);
+  }
+
+  /** The site tab's address and cursor wait while another tab shows; the rest passes. */
+  private sitePatch(id: string, patch: Partial<SiteStatus>): void {
+    const live = this.live.get(id);
+    if (!live?.tabs || live.tabs.active === SITE_TAB) return this.status(id, patch);
+    const { url, canBack, canForward, cursor, ...rest } = patch;
+    const nav = { url, canBack, canForward, cursor };
+    for (const [k, v] of Object.entries(nav))
+      if (v !== undefined) live.siteNav = { ...live.siteNav, [k]: v };
+    if (Object.keys(rest).length > 0) this.status(id, rest);
+  }
+
+  /** Each site window gets its tabs; a link out of the site from your click opens one. */
+  private attachTabs(id: string, live: Live, win: SiteWindow, origin: string): void {
+    const tabs = new TabSet({
+      partition: `persist:fitts-site-${id}`,
+      siteOrigin: origin,
+      frame: (jpeg, w, h) => this.broadcast(IPC.siteFrame, id, jpeg, w, h),
+      changed: () => this.tabsChanged(id),
+      cursor: (type) => this.status(id, { cursor: type }),
+      returnToSite: (url) => {
+        tabs.select(SITE_TAB);
+        void win.wc.loadURL(url).catch(() => undefined);
+      },
+      closedOldest: () => undefined,
+      size: () => {
+        const [w = 1024, h = 700] = win.win.getContentSize();
+        return [w, h];
+      },
+    });
+    live.tabs = tabs;
+    win.onOffsite = (url) => tabs.open(url);
+  }
+
+  /** The strip and the address bar follow the tab showing. */
+  private tabsChanged(id: string): void {
+    const live = this.live.get(id);
+    const tabs = live?.tabs;
+    const win = live?.window;
+    if (!live || !tabs || !win || win.wc.isDestroyed()) return;
+    const siteUrl = (live.siteNav?.url ?? live.status.url ?? win.wc.getURL()) || '';
+    const list =
+      tabs.count > 0 ? tabs.list(win.wc.getTitle() || hostOf(siteUrl), siteUrl) : undefined;
+    const wc = tabs.activeWc();
+    if (wc) {
+      // Leaving the site's tab: remember its address for when it shows again.
+      if (!live.siteNav)
+        live.siteNav = {
+          url: live.status.url,
+          canBack: live.status.canBack,
+          canForward: live.status.canForward,
+          cursor: live.status.cursor,
+        };
+      this.status(id, {
+        ...(list ? { tabs: list } : {}),
+        activeTab: tabs.active,
+        url: wc.getURL(),
+        canBack: wc.navigationHistory.canGoBack(),
+        canForward: wc.navigationHistory.canGoForward(),
+        cursor: 'default',
+      });
+      return;
+    }
+    const back = live.siteNav ?? {};
+    live.siteNav = undefined;
+    const next: SiteStatus = { ...live.status, ...back, activeTab: SITE_TAB };
+    if (list) next.tabs = list;
+    else {
+      delete next.tabs;
+      delete next.activeTab;
+    }
+    live.status = next;
+    this.broadcast(IPC.siteStatus, next);
+    if (!live.release) this.onStatus?.(next);
   }
 
   private media(
@@ -446,8 +542,17 @@ export class SiteManager {
       },
     );
     ipcMain.on(IPC.siteResize, (_e, id: unknown, w: unknown, h: unknown) => {
-      if (typeof id === 'string' && typeof w === 'number' && typeof h === 'number')
-        this.window(id)?.resize(w, h);
+      if (typeof id !== 'string' || typeof w !== 'number' || typeof h !== 'number') return;
+      this.window(id)?.resize(w, h);
+      const size = this.window(id)?.win.getContentSize();
+      if (size) this.live.get(id)?.tabs?.resize(size[0] ?? w, size[1] ?? h);
+    });
+    ipcMain.on(IPC.siteTab, (_e, id: unknown, action: unknown) => {
+      const tabs = typeof id === 'string' ? this.live.get(id)?.tabs : undefined;
+      const a = action as { kind?: unknown; id?: unknown } | null;
+      if (!tabs || !a || typeof a.id !== 'string') return;
+      if (a.kind === 'select') tabs.select(a.id);
+      else if (a.kind === 'close') tabs.close(a.id);
     });
     // Only a device Fitts offers, by id: the renderer never sets arbitrary emulation.
     ipcMain.on(IPC.siteDevice, (_e, id: unknown, deviceId: unknown) => {
@@ -459,26 +564,74 @@ export class SiteManager {
       if (this.live.has(id)) this.status(id, { device: device?.id ?? SCREEN_DEVICE });
     });
     ipcMain.on(IPC.siteInput, (_e, id: unknown, input: SiteInput) => {
-      if (typeof id === 'string' && input && typeof input === 'object')
-        this.window(id)?.input(input);
+      if (typeof id !== 'string' || !input || typeof input !== 'object') return;
+      const tab = this.live.get(id)?.tabs?.activeWc();
+      if (tab) tabInput(tab, input);
+      else this.window(id)?.input(input);
     });
     ipcMain.on(IPC.siteNav, (_e, id: unknown, nav: SiteNav) => {
-      if (typeof id === 'string' && nav && typeof nav === 'object') this.window(id)?.nav(nav);
+      if (typeof id !== 'string' || !nav || typeof nav !== 'object') return;
+      const tab = this.live.get(id)?.tabs?.activeWc();
+      if (!tab) return this.window(id)?.nav(nav);
+      const h = tab.navigationHistory;
+      if (nav.kind === 'back' && h.canGoBack()) h.goBack();
+      else if (nav.kind === 'forward' && h.canGoForward()) h.goForward();
+      else if (nav.kind === 'reload') tab.reload();
     });
     ipcMain.handle(IPC.siteRects, async (_e, id: unknown, refs: unknown) => {
-      const win = typeof id === 'string' ? this.window(id) : undefined;
+      const win = typeof id === 'string' && this.onSite(id) ? this.window(id) : undefined;
       if (!win || !Array.isArray(refs)) return {};
       return win.rects(refs.filter((r): r is string => typeof r === 'string')).catch(() => ({}));
     });
     ipcMain.handle(IPC.siteElementAt, async (_e, id: unknown, x: unknown, y: unknown) => {
-      const win = typeof id === 'string' ? this.window(id) : undefined;
+      const win = typeof id === 'string' && this.onSite(id) ? this.window(id) : undefined;
       if (!win || typeof x !== 'number' || typeof y !== 'number') return null;
       return win.elementAt(x, y).catch(() => null);
     });
     ipcMain.handle(IPC.siteRefAt, async (_e, id: unknown, x: unknown, y: unknown) => {
-      const win = typeof id === 'string' ? this.window(id) : undefined;
+      const win = typeof id === 'string' && this.onSite(id) ? this.window(id) : undefined;
       if (!win || typeof x !== 'number' || typeof y !== 'number') return null;
       return win.refAt(x, y).catch(() => null);
     });
+  }
+}
+
+/** Accelerator names where the browser's key names differ. */
+const TAB_KEYS: Record<string, string> = {
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right',
+  ArrowUp: 'Up',
+  ArrowDown: 'Down',
+  ' ': 'Space',
+};
+
+/** Your input in an off-site tab: plain events, no gate (Fitts never acts there). */
+function tabInput(wc: WebContents, input: SiteInput): void {
+  if (input.kind === 'focus') wc.focus();
+  else if (input.kind === 'mouse') {
+    if (input.type === 'mouseDown') wc.focus();
+    wc.sendInputEvent({
+      type: input.type,
+      x: Math.round(input.x),
+      y: Math.round(input.y),
+      button: input.button ?? 'left',
+      clickCount: input.clickCount ?? 1,
+    });
+  } else if (input.kind === 'wheel')
+    wc.sendInputEvent({
+      type: 'mouseWheel',
+      x: Math.round(input.x),
+      y: Math.round(input.y),
+      deltaX: -input.deltaX,
+      deltaY: -input.deltaY,
+      canScroll: true,
+    });
+  else if (input.kind === 'key') {
+    const modifiers = input.modifiers ?? [];
+    wc.sendInputEvent({ type: input.type, keyCode: TAB_KEYS[input.key] ?? input.key, modifiers });
+    // A printable key types, unless it's a shortcut.
+    const shortcut = modifiers.includes('control') || modifiers.includes('meta');
+    if (input.type === 'keyDown' && input.key.length === 1 && !shortcut)
+      wc.sendInputEvent({ type: 'char', keyCode: input.key });
   }
 }

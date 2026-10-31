@@ -664,6 +664,11 @@ export const copy = {
     pointing: 'Pointing… click an element',
     highlights: 'Show problems on the page',
     highlightsNone: 'Nothing to show on this page yet. Problems I find get outlined here.',
+    tabs: 'Tabs',
+    siteTab: 'Your site',
+    closeTab: 'Close {title}',
+    offsite: 'You’re on {host}, not your site. Fitts doesn’t test here.',
+    backToSite: 'Back to your site',
     beforeAfter: 'Before / after',
     wheelAsk: 'Take the wheel to use your site?',
     wheelAskBody:
