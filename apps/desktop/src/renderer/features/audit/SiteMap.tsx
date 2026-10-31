@@ -11,7 +11,7 @@ import { useUi } from '../../state/ui';
  * Routes with status dots (SPEC §6.4): mint done, cobalt testing (row tinted), hollow queued.
  * Each row shows its issue count or a label like "next"; status is also given in words.
  */
-export function SiteMap({ run }: { run: RunState }) {
+export function SiteMap({ run, width = 210 }: { run: RunState; width?: number }) {
   const { done, total } = run.controlsTried;
   const selectedPath = useUi((s) => s.findingsRoute);
   // A row shows that page in the site view and narrows the findings tray to it; pressing
@@ -24,7 +24,8 @@ export function SiteMap({ run }: { run: RunState }) {
   return (
     <section
       aria-labelledby="site-map-title"
-      className="flex w-[210px] flex-none flex-col gap-2.5 overflow-hidden rounded-panel border-[1.5px] border-ink bg-card p-3.5 shadow-panel"
+      className="flex flex-none flex-col gap-2.5 overflow-hidden rounded-panel border-[1.5px] border-ink bg-card p-3.5 shadow-panel"
+      style={{ width }}
     >
       <h2 id="site-map-title" className="font-display text-[16px] font-bold">
         {copy.audit.siteMap}

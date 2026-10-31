@@ -2,7 +2,7 @@ import type { Brief, Project } from '@fitts/schema';
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { bridge } from '../lib/bridge';
-import { DEV } from '../dev';
+import { TEST_BUILD } from '../dev';
 import { DEMO_PROJECTS } from '../mock/fixtures/projects';
 
 /**
@@ -38,6 +38,8 @@ interface ProjectsState {
   renameProject: (id: string, name: string) => void;
   setBrief: (id: string, brief: Brief) => void;
   setLastOpen: (id: string | null) => void;
+  /** The project's latest run id, kept so a new run after a restart takes the next number. */
+  setLastRun: (id: string, runId: string) => void;
   /** Dev only: the three demo projects, as the Scenario panel uses them. */
   seedDemo: () => void;
   clear: () => void;
@@ -63,12 +65,18 @@ export const useProjects = create<ProjectsState>()(
       setBrief: (id, brief) =>
         set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, brief } : p)) })),
       setLastOpen: (id) => set({ lastOpenId: id }),
+      setLastRun: (id, runId) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === id && p.lastRunId !== runId ? { ...p, lastRunId: runId } : p,
+          ),
+        })),
       seedDemo: () =>
         set((s) => ({
-          projects: (DEV ? DEMO_PROJECTS : []).map(
+          projects: (TEST_BUILD ? DEMO_PROJECTS : []).map(
             (demo) => s.projects.find((p) => p.id === demo.id) ?? demo,
           ),
-          lastOpenId: s.lastOpenId ?? (DEV ? DEMO_PROJECTS[0]?.id : undefined) ?? null,
+          lastOpenId: s.lastOpenId ?? (TEST_BUILD ? DEMO_PROJECTS[0]?.id : undefined) ?? null,
         })),
       clear: () => set({ projects: [], lastOpenId: null }),
     }),

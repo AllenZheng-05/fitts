@@ -1,5 +1,5 @@
 // Settings › API keys over IPC (SPEC-phase2 §15). Values only travel renderer → main; the
-// renderer never gets one back.
+// renderer never gets one back, only each key's last 4 characters and where it's from.
 import { IPC, type KeyName } from '@fitts/schema';
 import { ipcMain } from 'electron';
 import type { RunHost } from './run-host';
@@ -19,6 +19,8 @@ export function registerKeys(secrets: Secrets, host: RunHost): void {
     host.pushKeys();
   });
   ipcMain.handle(IPC.keysHas, () => secrets.has());
+  ipcMain.handle(IPC.keysInfo, () => secrets.info());
+  ipcMain.handle(IPC.keysEnvDefaults, () => secrets.envDefaults());
   ipcMain.handle(IPC.keysTest, (_e, name: unknown, value: unknown) => {
     if (!isKeyName(name)) return { ok: false, message: 'Unknown key' };
     const key = typeof value === 'string' && value ? value : secrets.get(name);

@@ -21,7 +21,17 @@ describe('spoken commands (“Fitts” first)', () => {
     expect(parseVoiceCommand('stop')).toBeNull();
     expect(parseVoiceCommand('wait')).toBeNull();
     expect(parseVoiceCommand('I told Fitts to stop')).toBeNull();
-    expect(parseVoiceCommand('Fitts')).toBeNull();
     expect(parseVoiceCommand('Fittsburgh is nice')).toBeNull();
+  });
+
+  it('“Fitts” on its own wakes Fitts, and the next thing said is for it', () => {
+    expect(parseVoiceCommand('Fitts')).toEqual({ kind: 'wake' });
+    expect(parseVoiceCommand('Hey Fitts.')).toEqual({ kind: 'wake' });
+    expect(parseVoiceCommand('check the search page', { armed: true })).toEqual({
+      kind: 'say',
+      text: 'Check the search page',
+    });
+    expect(parseVoiceCommand('stop', { armed: true })).toEqual({ kind: 'stop' });
+    expect(parseVoiceCommand('check the search page')).toBeNull();
   });
 });

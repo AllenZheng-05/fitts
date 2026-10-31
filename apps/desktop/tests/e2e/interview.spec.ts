@@ -87,11 +87,13 @@ test('the Brief popover saves and Fitts acknowledges it', async () => {
   const popover = page.getByRole('dialog', { name: 'Brief' });
   await expect(popover).toBeVisible();
   await expectNoSeriousA11yViolations(page);
-  await popover.getByLabel('Feel').fill('Calm and readable');
+  // One box, in the owner's words.
+  const box = popover.getByLabel('About your site');
+  await box.fill(`${await box.inputValue()} It should feel calm and readable.`);
   await popover.getByRole('button', { name: 'Save' }).click();
   await expect(popover).toBeHidden();
   await expect(chat(page)).toContainText("Got it, I'll keep that in mind from here.");
-  await expect(chat(page)).toContainText('Calm and readable');
+  await expect(chat(page)).toContainText('It should feel calm and readable.');
 });
 
 test('Point at something attaches the element to the message', async () => {

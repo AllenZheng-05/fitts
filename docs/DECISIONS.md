@@ -1939,3 +1939,145 @@ that helps Fitts make better design choices without limiting what it can make.
   run also lifted Linear's exact brand purple from an admired site, so `brand` is now only the
   owner's own color. The rerun ("Launch Studio": Unbounded and Outfit, a lit three.js hero,
   name front and center) verified on every page for $0.83.
+
+## Phase 2 — Allen's walkthrough feedback (round 1)
+
+Allen ran a full Ask-every-action run on his portfolio and sent a long list of feedback. The
+changes it led to, and the judgment calls in them:
+
+- **`pnpm dev` is the real app.** Phase 1's stand-ins (the mock engine and sites, demo
+  projects, the canned user, the Scenario panel, the gallery) are now only in e2e builds
+  (`FITTS_DEV_TOOLS=1`); `pnpm dev` no longer turns them on. They stay as the test harness,
+  because 130 e2e tests drive the UI through them, but no user (and no `pnpm dev`) sees them.
+  The flag is renamed `TEST_BUILD` to say what it is.
+- **The judges' replay is gone** (ReplayRunEngine, the bundled recording, Welcome's "Watch a
+  recorded run"). Allen will demo on his own repositories. The packaged smoke test now only
+  checks the app reaches Welcome.
+- **Versions of a site.** Before/after, a fix's live preview and the Done preview used Phase 1's
+  mock render. Now main serves a *version* of the site under its own site id
+  (`<projectId>.v.<name>`): a fix's branch (its existing worktree, or a detached view worktree)
+  or the run's preview branch (verified branches merged, as FINALIZE does), with its own dev
+  server on a spare port, streamed like the live site. Versions are only for the user: the
+  agent never gets their status and never acts on them, so they can always be used, in any
+  mode. They open while a view needs them and close when it goes.
+- **Before/after is a switch, not a slider** (audit and Done): "Before" is the live site,
+  "With fixes" the preview version, both usable. A slider made the sites impossible to use.
+- **The fix panel's mockup tab is gone.** The live preview is "When I found it" (the step shot
+  with SAM's outline) and, once the fix is verified, the "Fixed version" itself.
+- **"Your screen" replaces "Fit to panel"** as the default device: a desktop browser the size
+  of the display Fitts is on, scaled down to fit the panel (main measures the display with
+  Electron's `screen`; the renderer labels it with `screen.width × screen.height`).
+- **"View PR" opens the pull request** in the browser (main opens only https links on
+  github.com). A dry-run PR has no page, so it says that instead.
+- **"Finished" on Done** removes the run's worktrees (`git worktree remove`, then prune) but
+  keeps every `fitts/` branch, so the user can check them out normally, and goes back to the
+  projects. "Open in browser" opens the shown version's localhost page. Undo and Try again on
+  that run need its worktrees, so they stop working after Finished; that's what finishing means.
+- **Agreement counts each reviewer once.** "6 of 5" came from the probe counting as a reviewer
+  and a reviewer counting once per page. Now `agreeing` is distinct reviewers (at most 5) and a
+  probe is `agreement.measured`, shown as its own "Measured" chip.
+- **The message box grows** (a textarea with `field-sizing: content`, up to about 8 lines).
+  Enter sends; Shift+Enter is a new line.
+- **The shapes keep their places** when the motion setting changes: the field remembers where
+  each shape was and the new field starts there.
+- **Always listening.** "Fitts" said on its own now wakes Fitts (a chime, "I'm listening") and
+  the next thing said within 10 s is for it; "Fitts, …" in one breath works as before. Bare
+  "stop" still does nothing. A session that drops or can't start is retried (2 s, 5 s, 15 s,
+  then every 30 s) and the line under the message box says why Fitts can't hear. The mic
+  button pauses it, and it picks up after the button's last words arrive.
+- **Keys from `.env.local` are shown, not hidden.** Settings and Welcome say which key is in
+  use (its last 4 characters) and whether it's from `.env.local`. A key saved in Settings still
+  wins. The key itself is never copied into the app's storage; main reads the file in dev
+  builds only, as before. `ELEVENLABS_VOICE_ID` fills the voice setting if it's empty.
+- **No spending limit by default.** `capUsd` 0 means no limit (the budget guard already treated
+  it so); the header shows only the spend. Settings' old default of $20 migrates to no limit.
+- **The fixer's budget bends; it stops when stuck.** A one-element fix gets 14 steps and a
+  site-wide one (focus styles, fonts, spacing, contrast, the same problem on 3+ pages, or no
+  element) gets 30. At the budget, a loop that's still finding new things (a file it hadn't
+  read, a new search, a patch that applied) asks to keep going: Autonomous and Dangerous say
+  yes, the ask modes ask the user with the fix's cost so far. 6–15 more steps at a time, never
+  past 60. Four steps in a row with nothing new (repeats or only errors) is stuck, and it stops
+  there. Each attempt keeps notes (files read, searches, files edited), and Try again's task
+  starts from them. The rollback reasons say what happened in plain words.
+- **Fitts runs the project's CI checks before a PR.** It reads `.github/workflows/*.yml` for
+  `run:` lines and keeps only checks: package scripts named like lint/format/typecheck/check
+  (never ones that fix or write) and direct `prettier`/`eslint`/`tsc`/`stylelint` calls without
+  `--write`/`--fix`. Installs, builds, deploys and anything with shell operators never run. At
+  most 5 checks. Before the checks, it formats the files it changed with the project's
+  Prettier and applies ESLint's fixes when CI checks them. The checks run on the fresh worktree
+  first (once per starting point, with the tests); a check that passed before and fails after
+  rolls the fix back, and one that already failed doesn't count. The PR body names the checks
+  that pass. Projects without workflows are unchanged.
+- **Settings explains the model profiles and destructive actions** in place, under the
+  controls, with the models each profile uses.
+- **The interview is a conversation.** The prompt now has Fitts answer what the user actually
+  says (tangents, questions, stories) before steering back to what it still needs, one thing at
+  a time, never re-asking what it was told. The 7-question cap is gone; after 8 of Fitts's
+  lines it's nudged to wrap up. Personal details (interests, hobbies) go into the brief. It runs
+  whether or not the site is up yet (no screenshot until it is).
+- **The brief is one paragraph** (`Brief.summary`, in the owner's voice), rewritten by the model
+  each turn and shown in the chat card and the Brief popover as one growing box. The fields
+  stay, kept in step by the model, because the reviewers and the design library rank on them.
+  When the owner saves an edited paragraph, a small model call re-reads every field from it
+  (fields it no longer mentions are cleared). A brief from before summaries is shown as plain
+  sentences built from its fields.
+- **New run continues from the real run.** It used to restart Phase 1's scripted interview on
+  the same run id (so the app stayed on Done, and branches and worktrees would collide). Now the
+  next run gets the next number (from the project's `lastRunId`, kept by the renderer, so a
+  restart can't reuse one either), keeps the brief, and Fitts asks what this run should focus
+  on, with quick replies.
+- **A real run never plays the scripted audit.** With a key, Start the audit on a site that
+  isn't up says so and waits, instead of falling back to Phase 1's script. The script only runs
+  in the test harness (offline e2e).
+- **Try again says what it's doing.** Fitts posts what went wrong last time and what it'll do
+  differently; a note from the user ("Add a note") goes into the next attempt's task. The Done
+  row and the card show what Fitts is doing while it retries, and the chat says whether it
+  worked. `retryChange` takes the optional note.
+- **The fix panel sits over the site** instead of pushing it aside, and it's there during the
+  redesign too ("See evidence and fix" works while the look is applied; fixing waits for it).
+- **Review calls stay changeable until Go ahead.** In "Review each", Approve, Skip and Not a
+  problem are all calls you can change (the pressed one shows); nothing is sent until "Go ahead
+  · fix N" (on the panel's bar or the batch card). Outside a batch, "Not a problem" dismisses
+  at once, and a dismissed finding has "It is a problem" to open it again (`reopenFinding`, a
+  new RunEngine method). Chat finding cards show where each one stands (approved, fixing, fixed,
+  skipped, not a problem) with a tint and a chip.
+- **The timeline is a history**, from the start to now: finding dots where they were found, the
+  playhead at now or at the rewound moment. It was a progress bar against a step estimate,
+  which showed "three-quarters done" before anything happened. It's hidden until a finding.
+- **"Highlights on" is "Show problems on the page"**, disabled with a hint until there's
+  something to outline on the page.
+- **Sign in with GitHub.** Fitts is a GitHub App, and signs its user in with GitHub's device
+  flow (no server, no secret in the app): a code to enter on github.com, then the user picks
+  repositories on the app's install page. Tokens (8-hour user tokens with refresh) are kept with
+  safeStorage in main; the renderer only learns the login. Signed in, PRs go through the REST
+  API and pushes use the token through git's environment config (`GIT_CONFIG_*`), so it's never
+  in a command line, the repo's config or a credential store; GitHub Pages sites come from the
+  repositories the user gave Fitts. Not signed in, Fitts falls back to `gh` as before; the
+  dry run stays for tests. Ask every action now asks before every push and pull request. The
+  client id is empty until Allen registers the app (NEEDS-ALLEN 4b); until then Settings says
+  sign-in isn't set up.
+- **Ask every action has real permission choices**: Allow once, Allow on this page, Allow
+  everything this run, or Skip it. Before it asks, Fitts scrolls the control into view (a new
+  `reveal` site op) and outlines it, so you can see what it means.
+- **Every action shows in the chat.** Taps, typing and page loads gather in one steps group
+  while they come one after another: it shows the latest ("Fitts · Tapped “Projects”") and
+  opens to show them all. Anything else Fitts posts starts a new group.
+- **Mockups open large.** Clicking a direction opens it in a viewer (the whole picture in a
+  browser frame, arrows through the three, "Choose this one"); a click no longer picks it.
+  Muse Image is asked for the screenshot's shape (1536×1024 for a wide window) instead of a
+  square crop, and asked again without a size if it refuses one.
+- **Findings no longer get a Muse Image mockup.** The fix panel shows the real fixed site, so
+  the pictures were cost with nothing to show them. Redesign directions still get theirs.
+- **Panels resize and collapse.** The site map, the chat, the findings tray and Done's site
+  preview each have a grip (a focusable window splitter: drag, arrow keys, double-click or
+  Enter to collapse). A collapsed panel is a slim bar that brings it back. Sizes are kept
+  between launches; the defaults are the design's.
+- **Your site can be used in any mode.** Without the wheel, scrolling and hovering always go
+  through to the live site. A click, a key, or back/forward/reload asks "Take the wheel to use
+  your site?"; taking it pauses Fitts and then does what you tried to do.
+- **Point at something picks what's under the pointer**: the control it's part of (a link, a
+  button, a field) or else the innermost element (a heading, a picture). It used to climb to
+  the nearest ancestor with a ref or a role, which was often the whole section.
+- **"Replay it" is "Show me on the site"**: Fitts pauses, opens the page on the live site,
+  scrolls to the element and outlines it (`showFinding`, a new RunEngine method). The scripted
+  test engine still rewinds.

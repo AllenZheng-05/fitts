@@ -1,37 +1,16 @@
-import type { Brief } from '@fitts/schema';
-import { useRef, useState, type RefObject } from 'react';
+import { useId, useState, type RefObject } from 'react';
 import { Button } from '../../components/Button';
-import { TextField } from '../../components/fields';
 import { Popover } from '../../components/overlay/Popover';
 import { copy } from '../../copy';
+import { briefText } from '../../lib/brief';
 import { getEngine } from '../../state/engine';
 import { useRun } from '../../state/run-store';
 import { useUi } from '../../state/ui';
 
-const FIELDS = [
-  'for',
-  'who',
-  'feel',
-  'look',
-  'keep',
-  'avoid',
-  'inspiration',
-  'boldness',
-  'pain',
-  'flows',
-  'outOfScope',
-] as const;
-const HINTED = new Set<string>([
-  'flows',
-  'outOfScope',
-  'look',
-  'keep',
-  'avoid',
-  'inspiration',
-  'boldness',
-]);
-
-/** Editable brief (SPEC §6.10). Save updates the brief and Fitts acknowledges in chat. */
+/**
+ * The brief (SPEC §6.10), as one paragraph in the owner's words: one box that grows as you
+ * write. Save updates it (Fitts re-reads the details from it) and Fitts acknowledges in chat.
+ */
 export function BriefPopover({
   projectId,
   anchorRef,
@@ -47,7 +26,7 @@ export function BriefPopover({
       onClose={close}
       anchorRef={anchorRef}
       align="end"
-      width={360}
+      width={460}
       aria-labelledby="brief-title"
       className="p-4"
     >
@@ -58,35 +37,38 @@ export function BriefPopover({
 
 function BriefForm({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const run = useRun(projectId);
-  const [brief, setBrief] = useState<Brief>(() => ({ ...run?.brief }));
-  const firstRef = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState(() => briefText(run?.brief ?? {}));
+  const id = useId();
   return (
     <form
       className="flex min-h-0 flex-col gap-3 overflow-y-auto"
       onSubmit={(e) => {
         e.preventDefault();
-        getEngine().updateBrief(projectId, brief);
+        const summary = text.trim();
+        getEngine().updateBrief(projectId, { ...run?.brief, summary: summary || undefined });
         onDone();
       }}
     >
       <h2 id="brief-title" className="font-display text-[18px] font-bold">
         {copy.brief.popoverTitle}
       </h2>
-      {FIELDS.map((key, i) => (
-        <TextField
-          key={key}
-          ref={i === 0 ? firstRef : undefined}
-          label={copy.brief.fields[key]}
-          size="md"
-          value={brief[key] ?? ''}
-          placeholder={
-            HINTED.has(key)
-              ? copy.brief.placeholders[key as keyof typeof copy.brief.placeholders]
-              : undefined
-          }
-          onChange={(e) => setBrief((b) => ({ ...b, [key]: e.target.value || undefined }))}
-        />
-      ))}
+      <label htmlFor={id} className="text-[14px] font-semibold">
+        {copy.brief.boxLabel}
+      </label>
+      <textarea
+        id={id}
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- the popover opens to edit the brief
+        autoFocus
+        rows={6}
+        value={text}
+        placeholder={copy.brief.boxPlaceholder}
+        aria-describedby={`${id}-hint`}
+        onChange={(e) => setText(e.target.value)}
+        className="max-h-[50vh] min-h-36 resize-none rounded-control border border-ink bg-card px-3.5 py-3 text-[15px] leading-normal field-sizing-content placeholder:text-muted"
+      />
+      <span id={`${id}-hint`} className="text-[13px] text-muted">
+        {copy.brief.boxHint}
+      </span>
       <div className="flex justify-end gap-2">
         <Button size="sm" onClick={onDone}>
           {copy.overlay.cancel}

@@ -154,7 +154,7 @@ describe('aggregator and evidence check', () => {
     const focus = findings[2];
     expect(focus?.locations?.map((l) => l.route)).toEqual(['/', '/search', '/settings']);
     expect(focus?.severity).toBe(4); // impact 3, on 3+ screens
-    expect(findings.every((f) => f.lane === 'shown' && f.agreement.who[0] === 'Probe')).toBe(true);
+    expect(findings.every((f) => f.lane === 'shown' && f.agreement.measured === true)).toBe(true);
   });
 
   it('reviewers citing a probe add agreement to its finding', () => {
@@ -189,10 +189,12 @@ describe('aggregator and evidence check', () => {
       reviews,
       stepOf,
     });
+    // Two reviewers agree; the probe is a measurement, not a third reviewer.
     expect(f?.agreement).toEqual({
-      agreeing: 3,
+      agreeing: 2,
       total: 5,
-      who: ['Probe', 'Accessibility', 'Novice'],
+      who: ['Accessibility', 'Novice'],
+      measured: true,
     });
   });
 
@@ -227,6 +229,20 @@ describe('aggregator and evidence check', () => {
     expect(shotOnly[0]?.lane).toBe('suggestion');
   });
 
+  it('a reviewer who flags the same problem twice counts once, so agreement never passes 5 of 5', () => {
+    const personas = ['Novice', 'Power user', 'Accessibility', 'Visual design', 'Trust & ethics'];
+    const reviews: PersonaReview[] = personas.map((persona) => ({
+      route: '/contacts/grandma',
+      persona,
+      drafts: [draft()],
+    }));
+    reviews.push({ route: '/contacts/grandma', persona: 'Novice', drafts: [draft()] });
+    const [f] = aggregate({ runId: 'r', probes: [], reviews, stepOf });
+    expect(f?.agreement.agreeing).toBe(5);
+    expect(f?.agreement.total).toBe(5);
+    expect(f?.agreement.who).toEqual(personas);
+  });
+
   it('a draft about the page a broken link leads to joins that link’s finding', () => {
     const findings = aggregate({
       runId: 'r',
@@ -252,7 +268,8 @@ describe('aggregator and evidence check', () => {
       stepOf,
     });
     expect(findings).toHaveLength(1);
-    expect(findings[0]?.agreement.who).toEqual(['Probe', 'Novice', 'Trust & ethics']);
+    expect(findings[0]?.agreement.who).toEqual(['Novice', 'Trust & ethics']);
+    expect(findings[0]?.agreement.measured).toBe(true);
   });
 
   it('severity rubric: impact, raised one step for 3+ screens or 3+ reviewers, capped at 4', () => {

@@ -8,9 +8,10 @@ import { LlmCaller } from '../../src/agent/llm/call';
 import { FakeLlmClient, type Fixture } from '../../src/agent/llm/fake';
 import {
   interviewInput,
+  briefFromSummary,
   interviewTurn,
-  MAX_QUESTIONS,
   parseTurn,
+  WRAP_UP_AFTER,
 } from '../../src/agent/interview/interview';
 import {
   describeDirection,
@@ -50,13 +51,18 @@ describe('interview turns', () => {
           pain: null,
           feel: '  ',
         },
+        summary: '  A family messaging app for older adults, some with low vision.  ',
         quickReplies: ['a', 'b', 'c', 'd'],
         ready: true,
       }),
     );
+    expect(turn.fields.summary).toBe(
+      'A family messaging app for older adults, some with low vision.',
+    );
     expect(turn.fields).toEqual({
       for: 'Family messaging',
       who: 'Older adults, some with low vision',
+      summary: 'A family messaging app for older adults, some with low vision.',
     });
     expect(turn.quickReplies).toEqual(['a', 'b', 'c']);
     expect(turn.ready).toBe(true);
@@ -75,8 +81,52 @@ describe('interview turns', () => {
     const last = input.at(-1)?.content as { type: string; text?: string }[];
     expect(last.map((c) => c.type)).toEqual(['input_text', 'input_image']);
     expect(last[0]?.text).toContain('Brief so far: {"for":"Family messaging"}');
-    expect(last[0]?.text).toContain(`Questions asked so far: 1 of ${MAX_QUESTIONS}`);
+    expect(last[0]?.text).toContain('Your lines so far: 1');
+    expect(last[0]?.text).not.toContain('wrap up');
+    const long = interviewInput({
+      state: state({
+        chat: Array.from({ length: WRAP_UP_AFTER }, (_, i) => ({
+          id: `m${i}`,
+          type: 'fitts.message' as const,
+          text: 'Hm?',
+        })),
+      }),
+      path: [],
+    }) as { content: unknown }[];
+    const text = (long.at(-1)?.content as { text?: string }[])[0]?.text ?? '';
+    expect(text).toContain('wrap up');
     expect(last[0]?.text).toContain('Path the user clicked: /compose → /compose/recipient');
+  });
+
+  it('re-reads the fields from the brief paragraph the owner edited', async () => {
+    const fixtures: Fixture[] = [
+      fixture('brief-fields', {
+        for: 'Personal portfolio',
+        who: 'Recruiters and hackathon judges',
+        pain: null,
+        feel: 'Personal and playful',
+        look: 'Floating 3D sprites of Pokemon, chess and climbing',
+        keep: null,
+        avoid: null,
+        inspiration: null,
+        boldness: null,
+        flows: null,
+        outOfScope: null,
+      }),
+    ];
+    const caller = new LlmCaller(() => new FakeLlmClient(fixtures), new CostLedger());
+    const brief = await briefFromSummary(
+      caller,
+      { runId: 'r', projectId: 'p', contributor: false, allowed: () => true },
+      'm',
+      'My portfolio for recruiters. I love Pokemon, chess and bouldering; put them in it.',
+    );
+    expect(brief).toMatchObject({
+      for: 'Personal portfolio',
+      look: 'Floating 3D sprites of Pokemon, chess and climbing',
+      summary: 'My portfolio for recruiters. I love Pokemon, chess and bouldering; put them in it.',
+    });
+    expect(brief.pain).toBeUndefined();
   });
 
   it('runs one turn through the caller (recorded fixture shape)', async () => {

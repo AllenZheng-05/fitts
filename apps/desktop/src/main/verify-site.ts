@@ -69,7 +69,7 @@ export async function recheck(
   return { ok: true, message: 'Verified through your host.' };
 }
 
-export function registerVerify(check: Check): void {
+export function registerVerify(check: Check, pages: typeof githubPages = githubPages): void {
   ipcMain.handle(IPC.verifyCheck, (_e, method: unknown, domain: unknown, token: unknown) => {
     if (offline()) return { ok: true, message: '', offline: true };
     if (
@@ -80,5 +80,5 @@ export function registerVerify(check: Check): void {
       return { ok: false, message: 'Bad request.' };
     return check(method, domain, token);
   });
-  ipcMain.handle(IPC.verifyPages, () => (offline() ? null : githubPages()));
+  ipcMain.handle(IPC.verifyPages, () => (offline() ? null : pages()));
 }

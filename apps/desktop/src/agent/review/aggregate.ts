@@ -16,7 +16,6 @@ import {
 import type { PersonaReview } from './reviewers';
 
 export const PANEL_SIZE = 5;
-const PROBE = 'Probe';
 
 interface Template {
   title: string;
@@ -440,8 +439,9 @@ function toFinding(
   stepOf: AggregateInput['stepOf'],
 ): Finding {
   const lead = c.drafts[0]?.draft;
-  const who = [...(c.probe ? [PROBE] : []), ...c.drafts.map((d) => d.persona)];
-  const reviewers = c.drafts.length;
+  // Each reviewer counts once, however many pages they flagged it on; a probe isn't a reviewer.
+  const who = [...new Set(c.drafts.map((d) => d.persona))].slice(0, PANEL_SIZE);
+  const reviewers = who.length;
   const impact = c.template?.severity ?? median(c.drafts.map((d) => d.draft.severity));
   const severity = severityOf(impact, c.routes.size, reviewers);
   // Evidence check: grounded in something Fitts measured or did (a probe, the trace, the page's
@@ -474,7 +474,12 @@ function toFinding(
     finding: c.template?.finding ?? lead?.finding ?? '',
     fix: c.template?.fix ?? lead?.fix ?? '',
     route: c.route,
-    agreement: { agreeing: who.length, total: PANEL_SIZE, who },
+    agreement: {
+      agreeing: reviewers,
+      total: PANEL_SIZE,
+      who,
+      ...(c.probe ? { measured: true } : {}),
+    },
     evidence,
     ...(c.refs[0] ? { elementRef: c.refs[0] } : {}),
     ...sourceOf(c.items),

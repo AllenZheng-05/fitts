@@ -4,22 +4,24 @@ import {
   type Brief,
   type ChatItem,
   type EdgeStateKind,
+  type Finding,
   type RunState,
 } from '@fitts/schema';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '../../components/Button';
-import { SeverityBadge } from '../../components/Chip';
+import { Chip, SeverityBadge } from '../../components/Chip';
 import { RichText } from '../../components/RichText';
 import { copy } from '../../copy';
+import { openPr } from '../../lib/links';
 import { cx } from '../../lib/cx';
 import { format, formatUsd } from '../../lib/format';
 import { sendFromComposer } from '../../state/actions';
 import { getEngine } from '../../state/engine';
 import { useSpeech } from '../../state/speech';
 import { API_RETRY_MS } from '../../lib/timing';
-import { useToasts } from '../../state/toasts';
-import { useUi } from '../../state/ui';
-import { startReview } from '../finding-panel/review';
+import { useUi, type Decision } from '../../state/ui';
+import { finishReview, startReview } from '../finding-panel/review';
+import { DirectionViewer } from './DirectionViewer';
 import { MESSAGE_BOX_ID } from '../site-view/SiteView';
 
 type Item<T extends ChatItem['type']> = Extract<ChatItem, { type: T }>;
@@ -145,17 +147,26 @@ function UserMessage({ item }: { item: Item<'user.message'> }) {
 
 function Steps({ item }: { item: Item<'steps'> }) {
   const [open, setOpen] = useState(false);
+  const last = item.steps.at(-1);
   return (
     <div className="flex flex-col gap-2">
-      <Button
-        variant="ghost-dashed"
-        size="inline"
-        aria-expanded={open}
-        className="self-start"
-        onClick={() => setOpen((o) => !o)}
-      >
-        {open ? copy.items.hideSteps : format(copy.items.showSteps, { n: item.steps.length })}
-      </Button>
+      {/* What Fitts just did, always in view; the rest opens below. */}
+      {last && !open && (
+        <span className="font-mono text-[12px] text-ink-2">
+          {format(copy.items.lastStep, { step: last.label })}
+        </span>
+      )}
+      {item.steps.length > 1 && (
+        <Button
+          variant="ghost-dashed"
+          size="inline"
+          aria-expanded={open}
+          className="self-start"
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? copy.items.hideSteps : format(copy.items.showSteps, { n: item.steps.length })}
+        </Button>
+      )}
       {open && (
         <ol className="flex flex-col gap-1 rounded-control bg-surface-2 p-2.5 font-mono text-[12px]">
           {item.steps.map((step, i) => (
@@ -170,20 +181,52 @@ function Steps({ item }: { item: Item<'steps'> }) {
   );
 }
 
+/** Where a finding stands, for its chat card: your call in a review, or what Fitts did. */
+function findingState(
+  finding: Finding,
+  decision: Decision | undefined,
+): { label: string; tone: 'mint' | 'cobalt' | 'neutral' | 'sun'; card: string } | null {
+  if (finding.status === 'verified' || finding.status === 'pr-opened')
+    return { label: copy.items.stateFixed, tone: 'mint', card: 'border-mint bg-mint-tint' };
+  if (finding.status === 'fixing')
+    return { label: copy.items.stateFixing, tone: 'cobalt', card: 'border-cobalt bg-cobalt-tint' };
+  if (finding.status === 'rolled-back')
+    return { label: copy.items.stateRolledBack, tone: 'sun', card: 'border-sun bg-sun-tint' };
+  if (finding.status === 'dismissed')
+    return { label: copy.items.stateDismissed, tone: 'neutral', card: 'bg-neutral-tint' };
+  if (finding.status === 'undone')
+    return { label: copy.items.stateUndone, tone: 'neutral', card: 'bg-neutral-tint' };
+  if (decision === 'fix')
+    return { label: copy.items.stateApproved, tone: 'mint', card: 'border-mint bg-mint-tint' };
+  if (decision === 'skip')
+    return { label: copy.items.stateSkipped, tone: 'neutral', card: 'bg-neutral-tint' };
+  if (decision === 'dismiss')
+    return { label: copy.items.stateDismissed, tone: 'neutral', card: 'bg-neutral-tint' };
+  return null;
+}
+
 function FindingCard({ item, run }: { item: Item<'finding'>; run: RunState }) {
   const finding = run.findings.find((f) => f.id === item.findingId);
+  const decision = useUi((s) => (finding ? s.review?.decisions[finding.id] : undefined));
   if (!finding) return null;
+  const state = findingState(finding, decision);
   const meta = [
     finding.heuristic,
     format(copy.items.agree, { n: finding.agreement.agreeing, total: finding.agreement.total }),
+    finding.agreement.measured && copy.items.measured,
   ]
     .filter(Boolean)
     .join(' · ');
   return (
-    <div className={cx(CARD, 'gap-[5px]')}>
+    <div className={cx(CARD, 'gap-[5px]', state?.card)}>
       <div className="flex flex-wrap items-center gap-1.5">
         <SeverityBadge severity={finding.severity} />
         <span className="text-[12px] font-semibold text-muted">{meta}</span>
+        {state && (
+          <Chip tone={state.tone} className="ml-auto px-2 py-0.5">
+            {state.label}
+          </Chip>
+        )}
       </div>
       <span className="text-[14px] font-semibold">{finding.title}</span>
       <button
@@ -237,6 +280,11 @@ function ApprovalBatch({ item, run }: { item: Item<'approval.batch'>; run: RunSt
   const decided = useUi((s) =>
     s.review?.itemId === item.id ? Object.keys(s.review.decisions).length : 0,
   );
+  const approving = useUi((s) =>
+    s.review?.itemId === item.id
+      ? Object.values(s.review.decisions).filter((d) => d === 'fix').length
+      : 0,
+  );
   return (
     <div className={CARD}>
       <span className="font-display text-[16px] font-bold">
@@ -273,6 +321,14 @@ function ApprovalBatch({ item, run }: { item: Item<'approval.batch'>; run: RunSt
               ? format(copy.items.continueReview, { n: decided, total: n })
               : copy.items.reviewEach}
           </Button>
+          {/* Every fix has a call: send them (until then, each can still change). */}
+          {decided === n && (
+            <Button variant="dark" size="sm" onClick={() => finishReview(run, item)}>
+              {approving > 0
+                ? format(copy.finding.goAhead, { n: approving })
+                : copy.finding.goAheadNone}
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -281,7 +337,6 @@ function ApprovalBatch({ item, run }: { item: Item<'approval.batch'>; run: RunSt
 
 function FixResult({ item, run }: { item: Item<'fix.result'>; run: RunState }) {
   const change = run.changes.find((c) => c.id === item.changeId);
-  const toast = useToasts((s) => s.show);
   if (!change) return null;
   const undone = change.status === 'undone';
   return (
@@ -305,10 +360,7 @@ function FixResult({ item, run }: { item: Item<'fix.result'>; run: RunState }) {
           : format(copy.items.fixed, { title: change.title })}
       </span>
       {!undone && change.prNumber && (
-        <Button
-          size="inline"
-          onClick={() => toast(format(copy.items.prToast, { n: change.prNumber ?? 0 }))}
-        >
+        <Button size="inline" onClick={() => openPr(change)}>
           {format(copy.items.viewPr, { n: change.prNumber })}
         </Button>
       )}
@@ -336,19 +388,25 @@ function BriefSummary({ brief }: { brief: Brief }) {
   return (
     <div className="flex flex-col gap-2.5 rounded-card border border-ink bg-sun-tint p-3.5">
       <span className="font-display text-[15px] font-bold">{copy.brief.cardTitle}</span>
-      <dl className="grid grid-cols-[70px_1fr] gap-x-2.5 gap-y-1 text-[14px]">
-        {/* The look shows once the user has asked for one: most runs keep theirs. */}
-        {[...BRIEF_ROWS, ...(['look', 'keep', 'inspiration'] as const).filter((k) => brief[k])].map(
-          (key) => (
+      {/* The real interview keeps the brief as one paragraph; the rows are for a brief without. */}
+      {brief.summary ? (
+        <p className="text-[14px] leading-normal">{brief.summary}</p>
+      ) : (
+        <dl className="grid grid-cols-[70px_1fr] gap-x-2.5 gap-y-1 text-[14px]">
+          {/* The look shows once the user has asked for one: most runs keep theirs. */}
+          {[
+            ...BRIEF_ROWS,
+            ...(['look', 'keep', 'inspiration'] as const).filter((k) => brief[k]),
+          ].map((key) => (
             <div key={key} className="contents">
               <dt className="text-muted">{copy.brief.labels[key]}</dt>
               <dd className={brief[key] ? undefined : 'text-muted'}>
                 {brief[key] ?? copy.brief.waiting}
               </dd>
             </div>
-          ),
-        )}
-      </dl>
+          ))}
+        </dl>
+      )}
     </div>
   );
 }
@@ -372,16 +430,26 @@ function QuickReplies({ item, run }: { item: Item<'quick-replies'>; run: RunStat
 }
 
 function Directions({ item, run }: { item: Item<'directions'>; run: RunState }) {
+  // A click opens the direction large; you choose it from there.
+  const [viewing, setViewing] = useState<number | null>(null);
   return (
     <div role="group" aria-label={copy.items.directionsLabel} className="flex gap-2">
-      {item.options.map((option) => {
+      <DirectionViewer
+        item={item}
+        run={run}
+        index={viewing}
+        onIndex={setViewing}
+        onClose={() => setViewing(null)}
+      />
+      {item.options.map((option, i) => {
         const selected = option.id === item.selectedId;
         return (
           <button
             key={option.id}
             type="button"
             aria-pressed={selected}
-            onClick={() => getEngine().pickDirection(run.projectId, option.id)}
+            aria-haspopup="dialog"
+            onClick={() => setViewing(i)}
             className={cx(
               'flex min-w-0 flex-1 flex-col gap-1.5 rounded-control bg-card p-[9px] text-left transition-tint hover:bg-paper',
               selected ? 'border-2 border-cobalt p-2' : 'border border-ink',

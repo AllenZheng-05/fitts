@@ -7,12 +7,15 @@ import { HARTWELL_THEMES } from '../../mock/sites/hartwell-themes';
 import { renderSite } from '../../mock/sites';
 import { useSiteRoute } from '../../state/site';
 import { useUi } from '../../state/ui';
-import { DEV } from '../../dev';
+import { TEST_BUILD } from '../../dev';
 import { getEngineKind } from '../../state/engine';
 import { currentDirection } from './redesign';
 import { appliedRedesign } from './redesign';
 import { RedesignShots } from './RedesignShots';
 import { ChatPanel } from '../chat/ChatPanel';
+import { FindingPanel } from '../finding-panel/FindingPanel';
+import { CollapsedPanel, ResizeHandle } from '../../components/ResizeHandle';
+import { useLayout } from '../../state/layout';
 import { SiteView } from '../site-view/SiteView';
 
 const ALL_PAGES = ['/', '/services', '/services/packages', '/about', '/obituaries', '/contact'];
@@ -30,8 +33,9 @@ export function RedesignLayout({ run }: { run: RunState }) {
     name: HARTWELL_THEMES[direction]?.label ?? direction.toUpperCase(),
   });
   const ui = useUi.getState();
+  const chat = useLayout((s) => s.panels.chat);
   // A real run compares real pictures: the step shot and the mockup, then every page's shots.
-  const real = !DEV || getEngineKind() !== 'mock';
+  const real = !TEST_BUILD || getEngineKind() !== 'mock';
   const applied = real ? appliedRedesign(run) : undefined;
 
   return (
@@ -115,8 +119,15 @@ export function RedesignLayout({ run }: { run: RunState }) {
             />
           ) : null
         }
+        // Findings stay open to read while the look is applied (fixing waits for it).
+        panel={<FindingPanel run={run} />}
       />
-      <ChatPanel run={run} className="w-[420px] flex-none" />
+      <ResizeHandle panel="chat" side="right" label={copy.layout.resizeChat} />
+      {chat.collapsed ? (
+        <CollapsedPanel panel="chat" side="right" label={copy.layout.chat} />
+      ) : (
+        <ChatPanel run={run} className="flex-none" width={chat.size ?? 420} />
+      )}
     </>
   );
 }

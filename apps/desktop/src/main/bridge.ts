@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, Notification } from 'electron';
+import { BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { IPC } from '@fitts/schema';
 
@@ -11,8 +11,26 @@ const sentNotifications: { id: string; title: string; body: string }[] = [];
 (globalThis as { fittsNotifications?: typeof sentNotifications }).fittsNotifications =
   sentNotifications;
 
+/** Sites Fitts opens in the user's browser: pull requests and the hosts it works with. */
+const LINK_HOSTS = ['github.com'];
+
+/** A link the renderer may open: https, on a host Fitts works with. */
+export function openableLink(url: unknown): url is string {
+  if (typeof url !== 'string') return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && LINK_HOSTS.includes(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** The small set of native features the renderer may use (SPEC §2, §3). */
 export function registerBridge(): void {
+  ipcMain.on(IPC.openLink, (_e, url: unknown) => {
+    if (openableLink(url)) void shell.openExternal(url);
+  });
+
   ipcMain.handle(IPC.pickFolder, async (event) => {
     if (e2eFolder !== undefined) return e2eFolder || null;
     const win = BrowserWindow.fromWebContents(event.sender);

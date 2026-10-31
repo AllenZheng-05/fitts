@@ -4,12 +4,10 @@ import { useRef } from 'react';
 import { Select } from '../../components/fields';
 import { IconButton } from '../../components/IconButton';
 import { SegmentedControl } from '../../components/SegmentedControl';
-import { Chip } from '../../components/Chip';
 import { CostChip, MicOnChip } from '../../components/StatusChips';
 import { Stepper } from '../../components/Stepper';
 import { Wordmark } from '../../components/brand/Wordmark';
 import { copy } from '../../copy';
-import { useProject } from '../../state/projects';
 import { cx } from '../../lib/cx';
 import { format } from '../../lib/format';
 import { getEngine } from '../../state/engine';
@@ -36,7 +34,6 @@ export function Header({
   const briefOpen = useUi((s) => s.briefOpen);
   const micListening = useUi((s) => s.micListening);
   const talkMode = useSettings((s) => s.talkMode);
-  const replaying = Boolean(useProject(projectId)?.replay);
   const projectRef = useRef<HTMLButtonElement>(null);
   const briefRef = useRef<HTMLButtonElement>(null);
   const engine = getEngine();
@@ -148,15 +145,10 @@ export function Header({
         icon={<FileText size={18} aria-hidden="true" />}
       />
       {(micListening || talkMode === 'wake') && <MicOnChip />}
-      {replaying && (
-        <Chip tone="cobalt" role="status" className="app-no-drag">
-          {format(copy.replay.chip, { n: 4 })}
-        </Chip>
-      )}
       {run && (
         <CostChip
           spentUsd={run.cost.spentUsd}
-          capUsd={run.phase === 'audit' ? run.cost.capUsd : undefined}
+          capUsd={run.phase === 'audit' && run.cost.capUsd > 0 ? run.cost.capUsd : undefined}
         />
       )}
       <IconButton

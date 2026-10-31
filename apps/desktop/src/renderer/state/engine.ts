@@ -1,26 +1,18 @@
 // The UI's only door to a run (SPEC §9.2). Phase 2: IpcRunEngine (the agent process) is the
 // default; MockRunEngine stays for the Scenario panel and for tests outside Electron.
 import type { RunEngine } from '@fitts/schema';
-import { DEV } from '../dev';
+import { TEST_BUILD } from '../dev';
 import { bridge } from '../lib/bridge';
 import { profileFor } from '../mock/profiles';
 import { IpcRunEngine } from './ipc-engine';
 import { MockRunEngine } from './mock-engine';
-import { ReplayRunEngine } from './replay-engine';
 import { useProjects } from './projects';
 import { useSettings } from './settings';
 
 export type { RunEngine };
-export type EngineKind = 'ipc' | 'mock' | 'replay';
+export type EngineKind = 'ipc' | 'mock';
 
 let mock: MockRunEngine | undefined;
-let replay: ReplayRunEngine | undefined;
-
-/** Replay mode's engine (§12.3): plays a recorded run, needs no keys. */
-export function getReplayEngine(): ReplayRunEngine {
-  replay ??= new ReplayRunEngine();
-  return replay;
-}
 let ipc: IpcRunEngine | undefined;
 
 const briefFor = (id: string) => useProjects.getState().projects.find((p) => p.id === id)?.brief;
@@ -30,7 +22,7 @@ const briefFor = (id: string) => useProjects.getState().projects.find((p) => p.i
  * release never has it: there the real engine is always there (Electron).
  */
 // A constant branch, so a release bundle drops the engine and its scripts.
-export const getMockEngine: () => MockRunEngine = DEV
+export const getMockEngine: () => MockRunEngine = TEST_BUILD
   ? () => (mock ??= new MockRunEngine({ profileFor, briefFor: (id) => briefFor(id) ?? {} }))
   : () => {
       throw new Error('The scripted engine is only in dev builds');
@@ -40,10 +32,15 @@ export const getMockEngine: () => MockRunEngine = DEV
 export function getIpcEngine(): IpcRunEngine | undefined {
   const engineBridge = bridge().engine;
   if (!engineBridge) return undefined;
-  ipc ??= new IpcRunEngine(engineBridge, briefFor, () => {
-    const { capUsd, modelProfile, contributorMode } = useSettings.getState();
-    return { capUsd, modelProfile, contributorMode };
-  });
+  ipc ??= new IpcRunEngine(
+    engineBridge,
+    briefFor,
+    () => {
+      const { capUsd, modelProfile, contributorMode } = useSettings.getState();
+      return { capUsd, modelProfile, contributorMode };
+    },
+    (id) => useProjects.getState().projects.find((p) => p.id === id)?.lastRunId,
+  );
   return ipc;
 }
 
@@ -64,16 +61,7 @@ export function onEngineKindChange(fn: (k: EngineKind) => void): () => void {
   return () => kindListeners.delete(fn);
 }
 
-/** Replay while a recorded run is open; back to the real engine when you leave it. */
-export function setReplaying(on: boolean): void {
-  const next: EngineKind = on ? 'replay' : getIpcEngine() ? 'ipc' : 'mock';
-  if (kind === next || (!on && kind === 'mock')) return;
-  kind = next;
-  for (const l of kindListeners) l(kind);
-}
-
 export function getEngine(): RunEngine {
-  if (kind === 'replay') return getReplayEngine();
   return (kind === 'ipc' && getIpcEngine()) || getMockEngine();
 }
 

@@ -11,6 +11,8 @@ export function useListeningChime() {
   useEffect(() => {
     const offMic = useUi.subscribe((s, prev) => {
       if (s.micListening !== prev.micListening) chime(s.micListening ? 'start' : 'stop');
+      // "Fitts" on its own: a chime says Fitts heard its name and is listening.
+      else if (s.wakeArmed && !prev.wakeArmed) chime('start');
     });
     const offMode = useSettings.subscribe((s, prev) => {
       if (s.talkMode === prev.talkMode) return;

@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import { DEV } from '../dev';
+import { TEST_BUILD } from '../dev';
 import { startRoute as demoStartRoute } from '../mock/sites';
 
 /** Where a project's site view starts: '/' (Phase 1's demos start deeper, dev builds only). */
-const startRoute = (projectId: string) => (DEV ? demoStartRoute(projectId) : '/');
+const startRoute = (projectId: string) => (TEST_BUILD ? demoStartRoute(projectId) : '/');
 
 interface SiteHistory {
   stack: string[];

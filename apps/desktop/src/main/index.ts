@@ -1,4 +1,5 @@
-import { app, BrowserWindow, session } from 'electron';
+import { IPC } from '@fitts/schema';
+import { app, BrowserWindow, ipcMain, session } from 'electron';
 import { join } from 'node:path';
 import { handleAssets, registerAssetScheme } from './asset-protocol';
 import { registerBridge } from './bridge';
@@ -9,11 +10,12 @@ import { Secrets } from './secrets';
 import { FixHost } from './fix/fix-host';
 import { FontStore } from './fonts/fonts';
 import { VoiceHost } from './voice';
-import { registerReplay } from './replay';
 import { registerTools } from './tools';
-import { recheck, registerVerify } from './verify-site';
+import { githubPages, recheck, registerVerify } from './verify-site';
+import { createGitHub, registerGitHub } from './github';
 import { SiteManager } from './site/manager';
 import { ProjectStore } from './store/projects';
+import { SAFE_ID } from './store/run-log';
 import { APP_ID, createMainWindow, ICON_PATH } from './window';
 
 // E2E runs point user data at a throwaway folder so they never touch real settings.
@@ -46,24 +48,45 @@ void app.whenReady().then(() => {
   const projects = new ProjectStore(userData);
   const sites = new SiteManager(userData, (id) => projects.get(id));
   host.onStep = (projectId, runId, step) => void sites.shot(projectId, runId, step);
-  const fixes = new FixHost((id) => projects.get(id), undefined, {
-    fonts: new FontStore(join(userData, 'fonts')),
-    vendorDir: app.isPackaged
-      ? join(process.resourcesPath, 'vendor')
-      : join(__dirname, '../../resources/vendor'),
-  });
+  const github = createGitHub(secrets);
+  registerGitHub(github);
+  const fixes = new FixHost(
+    (id) => projects.get(id),
+    () => github.prs(),
+    {
+      fonts: new FontStore(join(userData, 'fonts')),
+      vendorDir: app.isPackaged
+        ? join(process.resourcesPath, 'vendor')
+        : join(__dirname, '../../resources/vendor'),
+    },
+  );
   host.siteOps = async (projectId, op) =>
     op.op === 'fix'
       ? { op: 'fix', value: await fixes.call(projectId, op.call) }
       : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
+  sites.versions = fixes;
+  ipcMain.handle(IPC.runFinish, async (_e, projectId: unknown, runId: unknown) => {
+    if (typeof projectId !== 'string' || typeof runId !== 'string' || !SAFE_ID.test(runId)) return;
+    sites.closeVersions(projectId);
+    await fixes.finish(projectId, runId).catch(() => undefined);
+  });
   sites.onHeld = (projectId, held) => host.siteHeld(projectId, held);
-  registerReplay(userData);
-  registerTools();
+  registerTools(() =>
+    github.signedIn() ? (github.auth.status() as { login?: string }).login : undefined,
+  );
   const check = (method: 'dns' | 'file', domain: string, token: string) =>
     host.verifySite(method, domain, token);
-  registerVerify(check);
-  sites.recheck = (domain, verification) => recheck(domain, verification, check);
+  // GitHub Pages: through the sign-in when there is one, else the gh CLI.
+  const pages = () =>
+    github.signedIn()
+      ? github.api
+          .pagesSites()
+          .then((sites) => ({ sites }))
+          .catch((e: unknown) => ({ error: (e as Error).message }))
+      : githubPages();
+  registerVerify(check, pages);
+  sites.recheck = (domain, verification) => recheck(domain, verification, check, pages);
   new VoiceHost(
     (name) => secrets.get(name),
     (projectId, usage) => host.voiceUsage(projectId, usage),

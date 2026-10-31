@@ -22,6 +22,7 @@ interface SettingsState {
   notificationsAllowed: boolean;
   /** Dangerous mode: on for the current run only, so never persisted (§6.13). */
   dangerous: boolean;
+  /** A run's spending limit in dollars; 0 is no limit (the default). */
   capUsd: number;
   modelProfile: ModelProfile;
   contributorMode: boolean;
@@ -44,7 +45,7 @@ export const DEFAULT_SETTINGS = {
   micAllowed: false,
   notificationsAllowed: false,
   dangerous: false,
-  capUsd: 20,
+  capUsd: 0,
   modelProfile: 'quality' as ModelProfile,
   contributorMode: false,
   speaksAloud: false,
@@ -74,10 +75,12 @@ export const useSettings = create<SettingsState>()(
       name: 'fitts.settings',
       storage: createJSONStorage(() => localStorage),
       // v1: "Hold ⌥Space" became "Tap the mic button" (no push-to-talk key binding).
-      version: 1,
-      migrate: (persisted) => {
-        const s = persisted as { talkMode?: string };
+      // v2: no spending limit by default; the old default of $20 becomes "no limit".
+      version: 2,
+      migrate: (persisted, version) => {
+        const s = persisted as { talkMode?: string; capUsd?: number };
         if (s.talkMode === 'hold') s.talkMode = 'button';
+        if (version < 2 && s.capUsd === 20) s.capUsd = 0;
         return s;
       },
       partialize: ({

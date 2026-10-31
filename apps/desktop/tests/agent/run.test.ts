@@ -549,14 +549,28 @@ describe('the permission gate and modes (§13)', () => {
     await until(() => Boolean(question()));
     expect(question()).toMatchObject({
       text: 'Can I tap Open B?',
-      options: ['Go ahead', 'Skip it'],
+      options: ['Allow once', 'Allow on this page', 'Allow everything this run', 'Skip it'],
     });
     expect(site.log.some((l) => l.startsWith('click'))).toBe(false);
     run.answer(question()?.id ?? '', 'Skip it');
     await until(() => Boolean(question()));
     expect(site.log.some((l) => l.startsWith('click'))).toBe(false);
-    run.answer(question()?.id ?? '', 'Go ahead');
+    run.answer(question()?.id ?? '', 'Allow once');
     await until(() => site.log.some((l) => l.startsWith('click')));
+    // Every action shows in the chat, in one group.
+    await until(() => Boolean(state()?.chat.some((c) => c.type === 'steps')));
+    run.dispose();
+  });
+
+  it('Ask every action: "Allow everything this run" stops asking', async () => {
+    const { run, site, state } = setup({ mode: 'ask-every' });
+    run.start();
+    const question = () =>
+      state()?.chat.find((c) => c.type === 'question' && c.answer === undefined);
+    await until(() => Boolean(question()));
+    run.answer(question()?.id ?? '', 'Allow everything this run');
+    await until(() => site.log.filter((l) => l.startsWith('click')).length >= 2);
+    expect(state()?.chat.filter((c) => c.type === 'question')).toHaveLength(1);
     run.dispose();
   });
 
@@ -573,7 +587,7 @@ describe('the permission gate and modes (§13)', () => {
 });
 
 describe('media (§10)', () => {
-  it('outlines each shown finding’s element with SAM and draws mockups, as assets', async () => {
+  it('outlines each shown finding’s element with SAM, as an asset, and draws no fix mockups', async () => {
     const outlines: { box: unknown }[] = [];
     const edits: string[] = [];
     const media = {
@@ -603,16 +617,16 @@ describe('media (§10)', () => {
     run.start();
     await skipLogin(state, run);
     await until(() =>
-      Boolean(state()?.findings.find((f) => f.title === 'Tap target is too small')?.assets?.mockup),
+      Boolean(state()?.findings.find((f) => f.title === 'Tap target is too small')?.assets?.mask),
     );
     const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    // The fix panel shows the real fixed site, so a finding gets no Muse Image picture.
     expect(f?.assets).toEqual({
       shot: 'fitts-asset://demo-chat/run-1/assets/shot-_.jpg',
       mask: `fitts-asset://demo-chat/run-1/assets/mask-${f?.id ?? ''}.svg`,
-      mockup: `fitts-asset://demo-chat/run-1/assets/mockup-${f?.id ?? ''}.png`,
     });
     expect(outlines[0]?.box).toEqual({ left: 10, top: 20, width: 28, height: 20 });
-    expect(edits[0]).toContain('Give it at least 44×44px');
+    expect(edits).toEqual([]);
     run.dispose();
   });
 });

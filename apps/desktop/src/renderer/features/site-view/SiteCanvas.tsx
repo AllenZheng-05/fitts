@@ -44,12 +44,18 @@ export function SiteCanvas({
   interactive,
   cursor,
   onElementClick,
+  onNeedsWheel,
 }: {
   projectId: string;
   interactive: boolean;
   cursor?: string | undefined;
   /** Reports what the user clicked while driving ("You clicked …", Phase 1 §7.3). */
   onElementClick?: ((ref: string, label: string) => void) | undefined;
+  /**
+   * Browsing without the wheel: scrolling and hovering always reach the site; a click or a key
+   * asks this first (Take the wheel?), with the action to do once you have it.
+   */
+  onNeedsWheel?: ((then: () => void) => void) | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -76,8 +82,8 @@ export function SiteCanvas({
     });
   }, [projectId]);
 
-  // "Fit": the site window follows the panel's size (debounced 150ms). A device: the window is
-  // the device's size (main emulates it), drawn scaled down to fit the panel, centered.
+  // The site window is the device's size (main emulates it; "Your screen" by default), drawn
+  // scaled down to fit the panel, centered.
   const device = useProjectDevice(projectId);
   const view = useDevice((s) => s.views[projectId]) ?? { scale: 1, x: 0, y: 0 };
   useEffect(() => {
@@ -87,26 +93,16 @@ export function SiteCanvas({
     const box = boxRef.current;
     const site = bridge().site;
     if (!box || !site) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
       const { width, height } = entry.contentRect;
-      if (device) {
-        const scale = Math.min(width / device.width, height / device.height, 1);
-        useDevice
-          .getState()
-          .setView(projectId, { scale, x: Math.max(0, (width - device.width * scale) / 2), y: 0 });
-        return;
-      }
-      useDevice.getState().setView(projectId, { scale: 1, x: 0, y: 0 });
-      clearTimeout(timer);
-      timer = setTimeout(() => site.resize(projectId, width, height), 150);
+      const scale = Math.min(width / device.width, height / device.height, 1);
+      useDevice
+        .getState()
+        .setView(projectId, { scale, x: Math.max(0, (width - device.width * scale) / 2), y: 0 });
     });
     observer.observe(box);
-    return () => {
-      clearTimeout(timer);
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, [projectId, device]);
   /** Panel px to site px. */
   const toSite = (x: number, y: number) => ({
@@ -125,9 +121,26 @@ export function SiteCanvas({
   const send = (input: SiteInput) => {
     if (interactive) enqueue(() => bridge().site?.input(projectId, input));
   };
+  // Scrolling and hovering don't change anything, so they always go through.
+  const browse = (input: SiteInput) => {
+    if (interactive || onNeedsWheel) enqueue(() => bridge().site?.input(projectId, input));
+  };
   const mouse =
     (type: 'mouseDown' | 'mouseUp' | 'mouseMove') => (e: PointerEvent<HTMLDivElement>) => {
       const at = toSite(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+      const button = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+      if (!interactive && onNeedsWheel) {
+        if (type === 'mouseMove') browse({ kind: 'mouse', type, x: at.x, y: at.y });
+        // A click is the user's to make: ask to take the wheel, then make it.
+        if (type === 'mouseDown')
+          onNeedsWheel(() => {
+            const site = bridge().site;
+            const click = { kind: 'mouse' as const, ...at, button, clickCount: 1 };
+            site?.input(projectId, { ...click, type: 'mouseDown' });
+            site?.input(projectId, { ...click, type: 'mouseUp' });
+          });
+        return;
+      }
       if (type === 'mouseDown') {
         e.currentTarget.focus();
         if (interactive && onElementClick) {
@@ -137,11 +150,14 @@ export function SiteCanvas({
           });
         }
       }
-      const button = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
       send({ kind: 'mouse', type, x: at.x, y: at.y, button, clickCount: 1 });
     };
   const key = (type: 'keyDown' | 'keyUp') => (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive || e.key === 'Tab') return;
+    if (e.key === 'Tab') return;
+    if (!interactive) {
+      if (type === 'keyDown' && onNeedsWheel && e.key.length === 1) onNeedsWheel(() => undefined);
+      return;
+    }
     e.preventDefault();
     const name = KEY_NAMES[e.key] ?? e.key;
     send({ kind: 'key', type, keyCode: name, modifiers: modifiers(e) });
@@ -160,14 +176,14 @@ export function SiteCanvas({
         role="application"
         aria-label="Your site (live)"
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-        tabIndex={interactive ? 0 : -1}
+        tabIndex={interactive || onNeedsWheel ? 0 : -1}
         className="h-full w-full outline-none"
         style={{ cursor: cursor ? (CURSORS[cursor] ?? cursor) : undefined }}
         onPointerDown={mouse('mouseDown')}
         onPointerUp={mouse('mouseUp')}
         onPointerMove={mouse('mouseMove')}
         onWheel={(e: WheelEvent<HTMLDivElement>) =>
-          send({
+          browse({
             kind: 'wheel',
             ...toSite(e.nativeEvent.offsetX, e.nativeEvent.offsetY),
             deltaX: e.deltaX,
@@ -183,13 +199,9 @@ export function SiteCanvas({
           aria-hidden="true"
           className={cx(
             'pointer-events-none block origin-top-left',
-            device && 'rounded-card border-[1.5px] border-ink',
+            device.mobile && 'rounded-card border-[1.5px] border-ink',
           )}
-          style={
-            device
-              ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
-              : undefined
-          }
+          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
         />
       </div>
     </div>

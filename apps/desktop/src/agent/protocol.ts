@@ -59,6 +59,8 @@ export type SiteOp =
   | { op: 'release'; id: string; allow: boolean }
   // Media (§10): element boxes, a JPEG as PNG (Muse Image takes PNG), and saving an asset.
   | { op: 'rects'; refs: string[] }
+  /** Scrolls an element into view (to show what Fitts is about to touch). */
+  | { op: 'reveal'; ref: string }
   | { op: 'png'; jpegBase64: string }
   | { op: 'saveAsset'; runId: string; name: string; base64: string }
   /** A site the owner admires, screenshotted as design inspiration (never clicked). */
@@ -92,6 +94,8 @@ export type FixCall =
   | { fn: 'reset'; job: string }
   /** Runs the project's own test script in the job's worktree (TestRun). */
   | { fn: 'tests'; job: string }
+  /** Formats the job's changed files the project's way, then runs its CI checks (CiRun). */
+  | { fn: 'ci'; job: string }
   | { fn: 'discard'; job: string }
   /** `base`: open it against that branch instead of the default (a stacked PR). */
   | { fn: 'prOpen'; job: string; title: string; body: string; base?: string }
@@ -133,6 +137,13 @@ export interface VerifyResult {
 }
 
 /** The project's own tests in a worktree: `ran` is false when it has no test script. */
+/** A project's CI checks (lint, formatting, types) in a job's worktree. */
+export interface CiRun {
+  /** False when the project's workflows have no checks Fitts can run. */
+  ran: boolean;
+  checks: { name: string; ok: boolean; summary: string }[];
+}
+
 export interface TestRun {
   ran: boolean;
   ok: boolean;
@@ -178,6 +189,7 @@ export type SiteOpResult =
   | { op: 'network'; requests: RequestRecord[] }
   | { op: 'released' }
   | { op: 'rects'; rects: Record<string, SiteRect> }
+  | { op: 'revealed' }
   | { op: 'png'; pngBase64: string }
   | { op: 'saved'; url: string }
   | { op: 'reference'; ok: boolean; url: string; shots: string[]; style: string; error?: string }

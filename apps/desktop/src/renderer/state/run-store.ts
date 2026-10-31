@@ -1,13 +1,12 @@
 import type { RunState } from '@fitts/schema';
 import { create } from 'zustand';
-import { DEV } from '../dev';
+import { TEST_BUILD } from '../dev';
 import { DEMO_CHAT } from '../mock/fixtures/projects';
 import {
   getEngine,
   getEngineKind,
   getIpcEngine,
   getMockEngine,
-  getReplayEngine,
   onEngineKindChange,
   type EngineKind,
 } from './engine';
@@ -24,7 +23,7 @@ interface RunStore {
 
 export const useRunStore = create<RunStore>((set) => ({
   runs: {},
-  activeProjectId: useProjects.getState().lastOpenId ?? (DEV ? DEMO_CHAT : ''),
+  activeProjectId: useProjects.getState().lastOpenId ?? (TEST_BUILD ? DEMO_CHAT : ''),
   scenarioId: null,
   setActiveProject: (projectId) => set({ activeProjectId: projectId }),
 }));
@@ -35,6 +34,8 @@ const mirror = (source: EngineKind) => (projectId: string, state: RunState) => {
   if (source !== getEngineKind()) return;
   const previous = useRunStore.getState().runs[projectId];
   useRunStore.setState((s) => ({ runs: { ...s.runs, [projectId]: state } }));
+  if (source === 'ipc' && previous?.runId !== state.runId)
+    useProjects.getState().setLastRun(projectId, state.runId);
   if (
     previous?.brief !== state.brief &&
     JSON.stringify(previous?.brief) !== JSON.stringify(state.brief)
@@ -42,10 +43,9 @@ const mirror = (source: EngineKind) => (projectId: string, state: RunState) => {
     useProjects.getState().setBrief(projectId, state.brief);
   }
 };
-if (DEV) getMockEngine().subscribeAll(mirror('mock'));
+if (TEST_BUILD) getMockEngine().subscribeAll(mirror('mock'));
 getIpcEngine()?.subscribeAll(mirror('ipc'));
-getReplayEngine().subscribeAll(mirror('replay'));
-// Switching engines (into or out of a replay): show what the new engine knows right away.
+// Switching engines (to the Scenario panel's): show what the new engine knows right away.
 onEngineKindChange(() => {
   const engine = getEngine();
   const runs: Record<string, RunState> = {};

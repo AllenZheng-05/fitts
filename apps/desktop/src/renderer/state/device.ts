@@ -1,9 +1,8 @@
-// Which device each project's site is seen on (SPEC-phase2 §5, device sizes), and how the
-// canvas fits that device into the panel. "Fit" is a desktop browser the panel's size.
-import { DEVICES, type SiteDevice } from '@fitts/schema';
+// Which device each site is seen on (SPEC-phase2 §5, device sizes), and how the canvas fits
+// that device into the panel. The default is "Your screen": a desktop browser the size of the
+// display Fitts is on, drawn scaled down to fit the panel.
+import { DEVICES, SCREEN_DEVICE, type SiteDevice } from '@fitts/schema';
 import { create } from 'zustand';
-
-export const FIT = 'fit';
 
 /** Where the site's frame sits in the panel: site px × scale, plus the offset. */
 export interface SiteView {
@@ -28,12 +27,33 @@ export const useDevice = create<DeviceState>((set) => ({
   setView: (projectId, view) => set((s) => ({ views: { ...s.views, [projectId]: view } })),
 }));
 
-export const deviceFor = (id: string | undefined): SiteDevice | null =>
-  DEVICES.find((d) => d.id === id) ?? null;
+/** The display Fitts is on, in CSS px (main measures the same display). */
+export function screenDevice(): SiteDevice {
+  const width = typeof screen === 'undefined' ? 1440 : screen.width;
+  const height = typeof screen === 'undefined' ? 900 : screen.height;
+  return {
+    id: SCREEN_DEVICE,
+    label: `Your screen · ${width}×${height}`,
+    width,
+    height,
+    mobile: false,
+  };
+}
 
-/** The project's device, or null for "Fit". */
-export const useProjectDevice = (projectId: string) =>
-  useDevice((s) => deviceFor(s.byProject[projectId]));
+export const deviceFor = (id: string | undefined): SiteDevice =>
+  DEVICES.find((d) => d.id === id) ?? screenDevice();
+
+let screenCache: SiteDevice | undefined;
+
+/** The site's device; "Your screen" unless the user picked another. */
+export const useProjectDevice = (projectId: string): SiteDevice =>
+  useDevice((s) => {
+    const id = s.byProject[projectId];
+    if (id && id !== SCREEN_DEVICE) return deviceFor(id);
+    // One object per session, so the selector's result stays stable.
+    screenCache ??= screenDevice();
+    return screenCache;
+  });
 
 /** The current frame placement, read outside React (overlays, input). */
 export const siteView = (projectId: string): SiteView =>

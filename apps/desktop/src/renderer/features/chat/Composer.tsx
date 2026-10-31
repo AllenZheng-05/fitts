@@ -23,6 +23,9 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
   const pointingAt = useUi((s) => s.draftPointingAt);
   const pointing = useUi((s) => s.pointing);
   const listening = useUi((s) => s.micListening);
+  const armed = useUi((s) => s.wakeArmed);
+  const wake = useUi((s) => s.wake);
+  const hearing = listening || armed;
   const micPartial = useUi((s) => s.micPartial);
   const talkMode = useSettings((s) => s.talkMode);
   const toggleMic = useMicToggle(run);
@@ -74,7 +77,7 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
         </span>
       )}
       <form
-        className="flex gap-2"
+        className="flex items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           send();
@@ -83,17 +86,24 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
         <label htmlFor={MESSAGE_BOX_ID} className="sr-only">
           {copy.composer.label}
         </label>
-        <input
+        {/* Grows with what you write, up to about eight lines, then scrolls. Enter sends;
+            Shift+Enter starts a new line. */}
+        <textarea
           id={MESSAGE_BOX_ID}
-          type="text"
+          rows={1}
           autoComplete="off"
-          value={listening ? micPartial || copy.composer.listening : draft}
-          readOnly={listening}
+          value={hearing ? micPartial || copy.composer.listening : draft}
+          readOnly={hearing}
           placeholder={auditing ? copy.composer.placeholderRun : copy.composer.placeholderInterview}
           onChange={(e) => useUi.getState().set({ draft: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            send();
+          }}
           className={cx(
-            'min-h-12 min-w-0 flex-1 rounded-card border border-ink bg-card px-3.5 text-[15px] placeholder:text-muted',
-            listening && 'text-cobalt-ink',
+            'max-h-[196px] min-h-12 min-w-0 flex-1 resize-none rounded-card border border-ink bg-card px-3.5 py-[11px] text-[15px] leading-[1.45] field-sizing-content placeholder:text-muted',
+            hearing && 'text-cobalt-ink',
           )}
         />
         {acting && (
@@ -117,15 +127,37 @@ export function Composer({ run, above }: { run: RunState; above?: ReactNode }) {
           />
         )}
       </form>
-      <span className="text-[12px] text-muted">
+      <span
+        role={talkMode === 'wake' ? 'status' : undefined}
+        className={cx(
+          'text-[12px]',
+          talkMode === 'wake' && wake.status === 'trouble' ? 'text-sun-ink' : 'text-muted',
+        )}
+      >
         {talkMode === 'typing'
           ? copy.composer.hintTyping
-          : talkMode === 'wake'
-            ? copy.composer.hintWake
-            : copy.composer.hint}
+          : talkMode !== 'wake'
+            ? copy.composer.hint
+            : armed
+              ? copy.composer.hintArmed
+              : wake.status === 'trouble'
+                ? format(copy.composer.hintWakeTrouble, {
+                    why: copy.composer.wakeWhy[wakeWhy(wake.reason)],
+                  })
+                : wake.status === 'starting'
+                  ? copy.composer.hintWakeStarting
+                  : copy.composer.hintWake}
       </span>
     </div>
   );
+}
+
+/** Why "Always listening" can't hear, in words (main's reasons are terse). */
+function wakeWhy(reason: string | undefined): keyof typeof copy.composer.wakeWhy {
+  if (reason === 'no key') return 'key';
+  if (reason === 'offline') return 'offline';
+  if (reason === 'mic') return 'mic';
+  return 'other';
 }
 
 /**

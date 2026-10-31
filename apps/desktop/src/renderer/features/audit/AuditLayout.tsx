@@ -1,44 +1,89 @@
 import type { RunState } from '@fitts/schema';
-import { useEffect } from 'react';
-import { BeforeAfterSlider } from '../../components/BeforeAfterSlider';
+import { useEffect, useState } from 'react';
 import { Button } from '../../components/Button';
 import { Chip } from '../../components/Chip';
+import { SegmentedControl } from '../../components/SegmentedControl';
 import { copy } from '../../copy';
 import { format, formatClock } from '../../lib/format';
-import { DEV } from '../../dev';
-import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
+import { TEST_BUILD } from '../../dev';
+import { ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine, recordUserClick } from '../../state/engine';
 import { useLiveSite } from '../../state/live-site';
-import { useProject } from '../../state/projects';
 import { useAuditOnly } from '../../state/projects';
-import { useSite, useSiteRoute } from '../../state/site';
+import { useSite } from '../../state/site';
+import { fixedBranches, useSiteVersion } from '../../state/site-versions';
 import { useUi } from '../../state/ui';
 import { ChatPanel } from '../chat/ChatPanel';
-import { FINDING_PANEL_INSET, FindingPanel } from '../finding-panel/FindingPanel';
+import { FindingPanel } from '../finding-panel/FindingPanel';
 import { Overlays } from '../site-view/Overlays';
 import { SiteView } from '../site-view/SiteView';
 import { FindingsTray } from './FindingsTray';
 import { SiteMap } from './SiteMap';
+import { CollapsedPanel, ResizeHandle } from '../../components/ResizeHandle';
+import { panelSize, useLayout } from '../../state/layout';
 
 /** Audit & fix (SPEC §6.4): site map | site view | chat, above the findings tray. */
 export function AuditLayout({ run }: { run: RunState }) {
+  // Every panel but the site view can be dragged bigger or smaller, or collapsed.
+  const panels = useLayout((s) => s.panels);
+  const l = copy.layout;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5">
       <div className="flex min-h-0 flex-1 gap-3.5">
-        <SiteMap run={run} />
+        {panels.siteMap.collapsed ? (
+          <CollapsedPanel panel="siteMap" side="left" label={l.siteMap} />
+        ) : (
+          <SiteMap run={run} width={panelSize(panels.siteMap, 'siteMap')} />
+        )}
+        <ResizeHandle panel="siteMap" side="left" label={l.resizeSiteMap} />
         <AuditSiteView run={run} />
-        <ChatPanel run={run} className="w-[400px] flex-none" />
+        <ResizeHandle panel="chat" side="right" label={l.resizeChat} />
+        {panels.chat.collapsed ? (
+          <CollapsedPanel panel="chat" side="right" label={l.chat} />
+        ) : (
+          <ChatPanel run={run} className="flex-none" width={panelSize(panels.chat, 'chat')} />
+        )}
       </div>
-      <FindingsTray run={run} />
+      <ResizeHandle panel="tray" side="bottom" label={l.resizeTray} />
+      {panels.tray.collapsed ? (
+        <CollapsedPanel panel="tray" side="bottom" label={l.tray} />
+      ) : (
+        <FindingsTray run={run} height={panels.tray.size ?? undefined} />
+      )}
+    </div>
+  );
+}
+
+/** "Take the wheel?" over the site, when you click it (or press back) while Fitts drives. */
+function WheelAsk({ onTake, onCancel }: { onTake: () => void; onCancel: () => void }) {
+  return (
+    <div
+      role="alertdialog"
+      aria-labelledby="wheel-ask"
+      className="absolute top-3 left-1/2 z-30 flex w-[min(440px,90%)] -translate-x-1/2 flex-col gap-2 rounded-card border-[1.5px] border-ink bg-card p-3.5 shadow-hero"
+    >
+      <span id="wheel-ask" className="text-[14px] font-semibold">
+        {copy.site.wheelAsk}
+      </span>
+      <span className="text-[13px] text-ink-2">{copy.site.wheelAskBody}</span>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" onClick={onCancel}>
+          {copy.site.wheelNotNow}
+        </Button>
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the answer is what's asked */}
+        <Button size="sm" variant="primary" autoFocus onClick={onTake}>
+          {copy.site.wheelTake}
+        </Button>
+      </div>
     </div>
   );
 }
 
 function AuditSiteView({ run }: { run: RunState }) {
+  const [wheelAsk, setWheelAsk] = useState<(() => void) | null>(null);
   const highlightsOn = useUi((s) => s.highlightsOn);
   const beforeAfter = useUi((s) => s.beforeAfter);
   const pointing = useUi((s) => s.pointing);
-  const { route } = useSiteRoute(run.projectId);
   const driving = run.activity === 'user-driving';
   const rewound = run.rewindStep !== undefined;
   const rewindFinding = rewound
@@ -54,13 +99,11 @@ function AuditSiteView({ run }: { run: RunState }) {
   const testingRoute = run.routes.find((r) => r.status === 'testing')?.path;
   // On the live site the real crawler drives navigation itself (SPEC-phase2 §6.1).
   const live = Boolean(useLiveSite(run.projectId));
-  // A recorded run (§12.3): its step shots stand in for the site.
-  const replaying = Boolean(useProject(run.projectId)?.replay);
   useEffect(() => {
     if (driving || live) return;
     const target =
       rewindFinding?.route ??
-      (DEV && attentionRef ? ROUTE_FOR_REF[attentionRef] : undefined) ??
+      (TEST_BUILD && attentionRef ? ROUTE_FOR_REF[attentionRef] : undefined) ??
       testingRoute;
     if (target) useSite.getState().navigate(run.projectId, target);
   }, [driving, live, rewindFinding?.route, attentionRef, testingRoute, run.projectId]);
@@ -68,13 +111,24 @@ function AuditSiteView({ run }: { run: RunState }) {
   const problems = rewindFinding
     ? run.overlays.problems.filter((p) => p.ref === rewindFinding.elementRef)
     : run.overlays.problems;
-  const showOverlays = highlightsOn && !driving && !beforeAfter;
+  // Before/After: the run's verified fixes, merged, served beside the live site.
+  const branches = auditOnly ? [] : fixedBranches(run);
+  const showAfter = beforeAfter && branches.length > 0;
+  const afterId = useSiteVersion(
+    run.projectId,
+    run.runId,
+    'after',
+    showAfter ? { kind: 'preview', branches } : null,
+  );
+  const showOverlays = highlightsOn && !driving && !showAfter;
 
   const ui = useUi.getState();
-  const findingOpen = useUi((s) => s.openFindingId !== null);
   return (
     <SiteView
+      key={showAfter ? afterId : run.projectId}
       projectId={run.projectId}
+      siteId={showAfter ? afterId : undefined}
+      onNeedsWheel={driving ? undefined : (then) => setWheelAsk(() => then)}
       className="flex-1"
       interactive={driving}
       onElementClick={(_ref, label) => {
@@ -100,24 +154,26 @@ function AuditSiteView({ run }: { run: RunState }) {
             <>
               <Button
                 size="sm"
-                variant={highlightsOn ? 'dark' : 'secondary'}
+                variant={highlightsOn && problems.length > 0 ? 'dark' : 'secondary'}
                 aria-pressed={highlightsOn}
+                // Outlines only exist once Fitts has found something on this page.
+                disabled={problems.length === 0}
+                title={problems.length === 0 ? copy.site.highlightsNone : undefined}
                 className="font-semibold"
                 onClick={() => ui.set({ highlightsOn: !highlightsOn })}
               >
                 {copy.site.highlights}
               </Button>
-              {/* Phase 1's mock comparison; a real run compares in the Finding panel. */}
-              {DEV && !auditOnly && (
-                <Button
-                  size="sm"
-                  variant={beforeAfter ? 'dark' : 'secondary'}
-                  aria-pressed={beforeAfter}
-                  className="font-semibold"
-                  onClick={() => ui.set({ beforeAfter: !beforeAfter })}
-                >
-                  {copy.site.beforeAfter}
-                </Button>
+              {branches.length > 0 && (
+                <SegmentedControl
+                  label={copy.site.beforeAfter}
+                  selected={showAfter ? 'after' : 'before'}
+                  onSelect={(id) => ui.set({ beforeAfter: id === 'after' })}
+                  segments={[
+                    { id: 'before', label: copy.site.before },
+                    { id: 'after', label: copy.site.after },
+                  ]}
+                />
               )}
             </>
           )}
@@ -127,15 +183,16 @@ function AuditSiteView({ run }: { run: RunState }) {
         </>
       }
       overlay={(surface) =>
-        DEV && beforeAfter && !auditOnly ? (
-          <BeforeAfterSlider
-            fill
-            before={renderSite(run.projectId, { route, navigate: () => undefined, variant: 'now' })}
-            after={renderSite(run.projectId, {
-              route,
-              navigate: () => undefined,
-              variant: 'fixed',
-            })}
+        wheelAsk ? (
+          <WheelAsk
+            onTake={() => {
+              const then = wheelAsk;
+              setWheelAsk(null);
+              getEngine().takeWheel(run.projectId);
+              // Do what you tried to do, once the wheel is yours.
+              setTimeout(then, 150);
+            }}
+            onCancel={() => setWheelAsk(null)}
           />
         ) : showOverlays ? (
           <Overlays
@@ -146,13 +203,11 @@ function AuditSiteView({ run }: { run: RunState }) {
         ) : null
       }
       panel={<FindingPanel run={run} />}
-      shotIsSite={replaying}
       shot={
-        rewound || replaying
-          ? `fitts-asset://${run.projectId}/${run.runId}/shots/${rewound ? (run.rewindStep ?? 0) : Math.max(1, run.step)}.jpg`
+        rewound
+          ? `fitts-asset://${run.projectId}/${run.runId}/shots/${run.rewindStep ?? 0}.jpg`
           : undefined
       }
-      contentInsetRight={findingOpen ? FINDING_PANEL_INSET : undefined}
       footer={
         <div className="flex flex-none justify-between gap-3 border-t border-ink px-3.5 py-2 font-mono text-[12px] text-muted">
           <span>{format(copy.site.step, { step: run.step, total: run.stepEstimate })}</span>

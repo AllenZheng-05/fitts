@@ -30,7 +30,7 @@ import {
   type Inspiration,
   type ThemeFit,
 } from '../review/themefit';
-import { directionInstruction, findingInstruction, outlineSvg, type Media } from '../llm/media';
+import { directionInstruction, outlineSvg, type Media } from '../llm/media';
 
 /** api-trouble retries on its own after this long (§6.3). */
 export const API_RETRY_MS = 12_000;
@@ -71,7 +71,6 @@ export interface RunDeps {
 
 /** Media per run (§10): SAM outlines for the top shown findings, mockups for fewer. */
 const MAX_OUTLINES = 12;
-const MAX_MOCKUPS = 4;
 
 /** Theme-fit looks at this many routes' screenshots (§8.3). */
 const THEME_ROUTES = 3;
@@ -117,6 +116,11 @@ export class RealRun {
   private finalized = false;
   /** The open "Can I …?" question (Ask every action), resolved false if the run moves on. */
   private pendingAsk: ((ok: boolean) => void) | undefined;
+  /** Ask every action: "Allow everything this run", and the pages where you allowed it all. */
+  private allowAll = false;
+  private readonly allowedOn = new Set<string>();
+  /** The chat's latest "steps" group, while Fitts's actions keep coming without a break. */
+  private stepsItem: { id: string; steps: { label: string; costUsd: number }[] } | undefined;
   /** The request the gate modal is holding, and the action that sent it (§13). */
   private heldReq: { held: HeldRequest; gateId: string } | undefined;
   private acting: { name: string; route: string } | undefined;
@@ -411,6 +415,27 @@ export class RealRun {
     if (!this.pipeline.busy) this.fixesSettled();
   }
 
+  /** "It is a problem": a dismissed finding is open again, with its pin back on the page. */
+  reopenFinding(findingId: string): void {
+    const f = this.state.findings.find((x) => x.id === findingId);
+    if (f?.status !== 'dismissed') return;
+    const pin = this.state.overlays.problems.length + 1;
+    this.emit([
+      { type: 'finding.updated', finding: { ...f, status: 'open' } },
+      ...(f.elementRef && !this.state.overlays.problems.some((p) => p.ref === f.elementRef)
+        ? [
+            {
+              type: 'overlay.set' as const,
+              overlays: {
+                ...this.state.overlays,
+                problems: [...this.state.overlays.problems, { ref: f.elementRef, pin }],
+              },
+            },
+          ]
+        : []),
+    ]);
+  }
+
   dismissFinding(findingId: string): void {
     const f = this.state.findings.find((x) => x.id === findingId);
     if (!f) return;
@@ -427,8 +452,8 @@ export class RealRun {
     this.say(copy.fitts.dismissFollowUp);
   }
 
-  retryChange(changeId: string): void {
-    this.pipeline?.retry(changeId);
+  retryChange(changeId: string, hint?: string): void {
+    this.pipeline?.retry(changeId, hint);
   }
 
   undoChange(changeId: string): void {
@@ -503,8 +528,21 @@ export class RealRun {
       return false;
     }
     if (mode !== 'ask-every') return true;
+    // What you've already allowed: everything this run, or everything on this page.
+    if (this.allowAll || this.allowedOn.has(routeOf(from))) return true;
+    // Show what Fitts wants to touch first: scrolled into view, outlined.
+    await this.deps.site.reveal?.(action.ref).catch(() => undefined);
     const verb = action.kind === 'type' ? `type in ${action.name}` : `tap ${action.name}`;
-    const ok = await this.ask(format(copy.fitts.askToAct, { action: verb }));
+    const p = copy.fitts.permission;
+    const answer = await this.choose(format(copy.fitts.askToAct, { action: verb }), [
+      p.once,
+      p.page,
+      p.run,
+      copy.fitts.skipIt,
+    ]);
+    if (answer === p.page) this.allowedOn.add(routeOf(from));
+    if (answer === p.run) this.allowAll = true;
+    const ok = answer !== copy.fitts.skipIt;
     if (!ok) {
       this.coverage.skip(from, action.ref, 'you skipped it');
       this.say(copy.fitts.skippedAction);
@@ -512,8 +550,33 @@ export class RealRun {
     return ok && !this.finished;
   }
 
+  /**
+   * Every action shows in the chat (Allen's feedback): actions in a row gather in one "steps"
+   * group, which shows the latest and opens to show them all. Anything else in the chat starts
+   * a new group.
+   */
+  private logAction(label: string): void {
+    const last = this.state.chat.at(-1);
+    const current = this.stepsItem && last?.id === this.stepsItem.id ? this.stepsItem : undefined;
+    const steps = [...(current?.steps ?? []), { label, costUsd: 0 }].slice(-200);
+    const item = { id: current?.id ?? this.id(), type: 'steps' as const, steps };
+    this.stepsItem = { id: item.id, steps };
+    this.emit([{ type: current ? 'chat.item.updated' : 'chat.item', item }]);
+  }
+
   /** A blocking "Can I …?" question with Go ahead / Skip it. */
   private ask(text: string): Promise<boolean> {
+    return this.choose(text, [copy.fitts.goAhead, copy.fitts.skipIt]).then(
+      (answer) => answer === copy.fitts.goAhead,
+    );
+  }
+
+  /**
+   * A blocking question with its own buttons; resolves with the one pressed, or the last option
+   * (the "no") when the run moves on without an answer.
+   */
+  private choose(text: string, options: string[]): Promise<string> {
+    const no = options[options.length - 1] ?? '';
     return new Promise((resolve) => {
       const id = this.id();
       this.emit([
@@ -524,21 +587,21 @@ export class RealRun {
             type: 'question',
             blocking: true,
             text,
-            options: [copy.fitts.goAhead, copy.fitts.skipIt],
+            options,
           },
         },
         { type: 'waiting.changed', waitingFor: `question:${id}` },
       ]);
       this.setActivity('waiting-on-user');
-      const done = (ok: boolean) => {
+      const done = (answer: string) => {
         this.pendingAsk = undefined;
         this.handlers.delete(id);
-        resolve(ok);
+        resolve(answer);
       };
-      this.pendingAsk = done;
+      this.pendingAsk = (ok) => done(ok ? (options[0] ?? '') : no);
       this.handlers.set(id, (answer) => {
         if (!this.finished && this.state.activity === 'waiting-on-user') this.setActivity('acting');
-        done(answer === copy.fitts.goAhead);
+        done(options.includes(answer) ? answer : no);
       });
     });
   }
@@ -672,6 +735,8 @@ export class RealRun {
     if (!shot) return;
     const png = await shot.png().catch(() => null);
     if (!png) return;
+    const size = this.pages.get(route)?.size;
+    const aspect = size && size.height > 0 ? size.width / size.height : undefined;
     await Promise.all(
       directions.map(async (d) => {
         const out = await media.edit(
@@ -682,6 +747,7 @@ export class RealRun {
           },
           png,
           directionInstruction({ ...d, detail: describeDirection(d) }),
+          aspect,
         );
         if (!out) return;
         this.mockupPngs.set(d.id, out);
@@ -995,9 +1061,9 @@ export class RealRun {
   }
 
   /**
-   * §10, in the background: SAM outlines the element in each shown finding's shot; Muse Image
-   * draws a mockup of the fix for the most serious few. Failures leave the DOM box and the
-   * placeholder. Every result is cached on the finding (`assets`).
+   * §10, in the background: SAM outlines the element in each shown finding's shot. A failure
+   * leaves the DOM box. Results are cached on the finding (`assets`). Findings no longer get a
+   * Muse Image mockup: the fix panel shows the real fixed site instead (Allen's feedback).
    */
   private async media(shown: Finding[]): Promise<void> {
     const media = this.deps.media;
@@ -1041,25 +1107,6 @@ export class RealRun {
         // Keep the DOM box.
       }
     }
-    await Promise.all(
-      ranked.slice(0, MAX_MOCKUPS).map(async (f) => {
-        const shot = await this.routeShot(f.route);
-        if (!shot) return;
-        try {
-          const png = await media.edit(
-            ctx(f.id),
-            await shot.png(),
-            findingInstruction(f.title, f.fix),
-          );
-          if (!png) return;
-          setAssets(f.id, {
-            mockup: await this.deps.site.saveAsset(this.state.runId, `mockup-${f.id}.png`, png),
-          });
-        } catch {
-          // Keep the placeholder.
-        }
-      }),
-    );
   }
 
   /** Adds findings; shown ones get a chat card and a numbered pin (§8.2: suggestions don't). */
@@ -1129,6 +1176,7 @@ export class RealRun {
       if (action.kind === 'navigate') {
         if (this.coverage.routeDone(from)) this.coverage.setStatus(from, 'done');
         await this.deps.site.navigate(action.path);
+        this.logAction(format(copy.fitts.did.opened, { path: action.path }));
         this.history.push(`opened ${action.path}`);
         this.pages.get(routeOf(from))?.evidence.trace.push(`opened ${action.path}`);
       } else {
@@ -1153,6 +1201,11 @@ export class RealRun {
           this.retryOn.delete(arrived);
         }
         const line = `${label}${result.navigated ? ` → ${result.path}` : ''}`;
+        this.logAction(
+          format(action.kind === 'click' ? copy.fitts.did.tapped : copy.fitts.did.typed, {
+            name: action.name || action.ref,
+          }) + (result.navigated && arrived !== routeOf(from) ? ` → ${result.path}` : ''),
+        );
         this.history.push(line);
         this.pages.get(routeOf(from))?.evidence.trace.push(line);
         if (this.coverage.routeDone(from)) this.coverage.setStatus(from, 'done');
@@ -1471,6 +1524,46 @@ export class RealRun {
 
   setMode(mode: Mode): void {
     this.emit([{ type: 'mode.changed', mode }]);
+  }
+
+  /**
+   * "Replay it": Fitts pauses, opens the page where it found the problem on the live site,
+   * scrolls to the element and outlines it, and says what to look at. Resume carries on.
+   */
+  async showFinding(findingId: string): Promise<void> {
+    const f = this.state.findings.find((x) => x.id === findingId);
+    if (!f) return;
+    if (this.state.activity === 'acting') this.setActivity('paused');
+    if (this.state.rewindStep !== undefined) this.emit([{ type: 'rewind.set' }]);
+    try {
+      await this.deps.site.navigate(f.route);
+      if (f.elementRef) await this.deps.site.reveal?.(f.elementRef);
+    } catch {
+      this.say(format(copy.fitts.showFindingFailed, { route: f.route }));
+      return;
+    }
+    this.emit([
+      {
+        type: 'overlay.set',
+        overlays: {
+          problems: this.state.overlays.problems,
+          ...(f.elementRef
+            ? {
+                attention: {
+                  ref: f.elementRef,
+                  label: format(copy.fitts.showFindingLabel, { title: f.title }),
+                },
+              }
+            : {}),
+        },
+      },
+    ]);
+    this.say(
+      format(
+        this.state.phase === 'done' ? copy.fitts.showFindingDone : copy.fitts.showFindingPaused,
+        { title: f.title, route: f.route },
+      ),
+    );
   }
 
   rewindTo(step: number | null): void {

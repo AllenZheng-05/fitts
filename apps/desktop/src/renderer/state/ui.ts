@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getEngine, getReplayEngine, setReplaying } from './engine';
+import { getEngine } from './engine';
 import { useProjects } from './projects';
 import { useRunStore } from './run-store';
 import { useSettings } from './settings';
@@ -36,6 +36,12 @@ interface UiState {
   micListening: boolean;
   /** What Transcribe has heard so far, shown in the message box (SPEC-phase2 §14). */
   micPartial: string;
+  /** "Always listening": whether Fitts can hear, and why not (shown under the message box). */
+  wake: { status: 'off' | 'starting' | 'listening' | 'trouble'; reason?: string };
+  /** "Fitts" was just said on its own: the next thing said is for Fitts. */
+  wakeArmed: boolean;
+  /** The mic button was let go and Transcribe is still sending the last words. */
+  micFinishing: boolean;
   /** Site-view toggles during the audit (§6.4). */
   highlightsOn: boolean;
   beforeAfter: boolean;
@@ -55,10 +61,14 @@ interface UiState {
   set: (patch: Partial<UiFields>) => void;
 }
 
+/** A call on one fix in a batch: fix it, skip it for now, or it isn't a problem. */
+export type Decision = 'fix' | 'skip' | 'dismiss';
+
 export interface BatchReview {
   /** The `approval.batch` chat item being reviewed. */
   itemId: string;
-  decisions: Record<string, 'fix' | 'skip'>;
+  /** Your call on each fix so far; nothing happens until you press Go ahead. */
+  decisions: Record<string, Decision>;
 }
 
 type UiFields = Omit<
@@ -95,6 +105,9 @@ export const useUi = create<UiState>((set, get) => ({
   draftPointingAt: null,
   micListening: false,
   micPartial: '',
+  wake: { status: 'off' },
+  wakeArmed: false,
+  micFinishing: false,
   highlightsOn: true,
   beforeAfter: false,
   redesignCompare: true,
@@ -123,13 +136,8 @@ export const useUi = create<UiState>((set, get) => ({
   openProject: (projectId) => {
     useProjects.getState().setLastOpen(projectId);
     useRunStore.getState().setActiveProject(projectId);
-    // A recorded run plays on the replay engine; every other project on the real one (§12.3).
-    const replay = useProjects.getState().projects.find((p) => p.id === projectId)?.replay;
-    setReplaying(Boolean(replay));
     const engine = getEngine();
-    if (replay && !getReplayEngine().getState(projectId)) {
-      void import('./actions').then((a) => a.openReplay());
-    } else if (!engine.getState(projectId)) {
+    if (!engine.getState(projectId)) {
       engine.startInterview(projectId);
       engine.setMode(projectId, useSettings.getState().defaultMode);
     }

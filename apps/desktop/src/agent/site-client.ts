@@ -35,6 +35,8 @@ export interface Site {
   release(id: string, allow: boolean): Promise<void>;
   // Media (§10)
   rects(refs: string[]): Promise<Record<string, SiteRect>>;
+  /** Scrolls an element into view, to show what Fitts is about to touch. */
+  reveal?(ref: string): Promise<void>;
   png(jpegBase64: string): Promise<string>;
   saveAsset(runId: string, name: string, base64: string): Promise<string>;
   /** The fix pipeline's privileged half in main (§9). */
@@ -112,6 +114,9 @@ export class SiteRpc {
         return { ok: r.ok, shots: r.shots, style: r.style };
       },
       rects: async (refs) => (await expect({ op: 'rects', refs }, 'rects')).rects,
+      reveal: async (ref) => {
+        await expect({ op: 'reveal', ref }, 'revealed');
+      },
       png: async (jpegBase64) => (await expect({ op: 'png', jpegBase64 }, 'png')).pngBase64,
       saveAsset: async (runId, name, base64) =>
         (await expect({ op: 'saveAsset', runId, name, base64 }, 'saved')).url,

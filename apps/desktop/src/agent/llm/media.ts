@@ -49,6 +49,13 @@ export const directionInstruction = (d: {
 }) =>
   `Restyle this web page screenshot in the "${d.name}" direction: colors ${d.swatches.join(', ')}, typeface ${d.typeface}. ${d.notes}${d.detail ? ` ${d.detail}` : ''} Remove decorative elements that don't fit. Keep the same content. Photorealistic UI, no annotations.`;
 
+/** The picture size nearest a screenshot's shape: wide, tall or square. */
+export function sizeFor(aspect: number): '1536x1024' | '1024x1536' | '1024x1024' {
+  if (aspect >= 1.2) return '1536x1024';
+  if (aspect <= 0.83) return '1024x1536';
+  return '1024x1024';
+}
+
 export class Media {
   private readonly client: OpenAI;
 
@@ -137,20 +144,35 @@ export class Media {
     }
   }
 
-  /** Muse Image edit of a PNG → a PNG (base64), or null. */
-  async edit(ctx: MediaContext, pngBase64: string, prompt: string): Promise<string | null> {
+  /**
+   * Muse Image edit of a PNG → a PNG (base64), or null. `aspect` is the screenshot's width over
+   * its height, so the picture comes back the page's shape (a wide browser window, not a square
+   * crop of one); if the service won't take a size, it's asked again without one.
+   */
+  async edit(
+    ctx: MediaContext,
+    pngBase64: string,
+    prompt: string,
+    aspect?: number,
+  ): Promise<string | null> {
     if (!ctx.allowed()) return null;
     const started = Date.now();
-    try {
+    const size = aspect === undefined ? undefined : sizeFor(aspect);
+    const once = async (withSize: boolean) => {
       const res = await this.client.images.edit({
         model: IMAGE_MODEL,
         image: await toFile(Buffer.from(pngBase64, 'base64'), 'shot.png', { type: 'image/png' }),
         prompt,
+        ...(withSize && size ? { size } : {}),
       });
       this.record(ctx, 'image', IMAGE_MODEL, IMAGE_USD, started);
       return res.data?.[0]?.b64_json ?? null;
+    };
+    try {
+      return await once(true);
     } catch {
-      return null;
+      if (!size) return null;
+      return once(false).catch(() => null);
     }
   }
 }

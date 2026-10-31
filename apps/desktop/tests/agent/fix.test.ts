@@ -9,7 +9,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { diffOf, FixPipeline, judge, prBody, type Fixer } from '../../src/agent/fix/pipeline';
 import { taskFile } from '../../src/agent/fix/fixer';
-import type { FixCall, VerifyResult } from '../../src/agent/protocol';
+import type { CiRun, FixCall, VerifyResult } from '../../src/agent/protocol';
 import type { Check } from '../../src/agent/review/aggregate';
 import type { Site } from '../../src/agent/site-client';
 
@@ -129,7 +129,7 @@ describe('task file, PR body, diff', () => {
 });
 
 /** A fake main: jobs, verification results by attempt, and a dry-run PR registry. */
-function harness(mode: RunState['mode'], verdicts: VerifyResult[]) {
+function harness(mode: RunState['mode'], verdicts: VerifyResult[], ciRuns: CiRun[] = []) {
   let state = {
     runId: 'run-1',
     mode,
@@ -152,6 +152,8 @@ function harness(mode: RunState['mode'], verdicts: VerifyResult[]) {
           return Promise.resolve({ ok: true });
         case 'verify':
           return Promise.resolve(verdicts.shift() ?? verify([]));
+        case 'ci':
+          return Promise.resolve(ciRuns.shift());
         case 'diff':
           return Promise.resolve('+++ b/src/styles.css\n-a\n+b\n');
         case 'commit':
@@ -228,6 +230,7 @@ describe('the fix pipeline (§9)', () => {
     expect(h.calls.map((c) => c.fn)).toEqual([
       'prepare',
       'tests',
+      'ci',
       'patch',
       'verify',
       'diff',
@@ -236,6 +239,43 @@ describe('the fix pipeline (§9)', () => {
     ]);
     expect(s.chat.some((c) => c.type === 'fix.result')).toBe(true);
     expect(h.idle()).toBe(1);
+  });
+
+  it('a fix that breaks a CI check that passed before is rolled back; the PR names the checks', async () => {
+    const lint = (ok: boolean) => ({
+      name: 'pnpm lint',
+      ok,
+      summary: ok ? '' : 'src/a.css: error',
+    });
+    const broken = harness(
+      'autonomous',
+      [verify([failing('target-size', [])])],
+      [
+        { ran: true, checks: [lint(true)] },
+        { ran: true, checks: [lint(false)] },
+      ],
+    );
+    broken.pipeline.start(['run-1-f1']);
+    await broken.settled();
+    expect(broken.state().changes[0]).toMatchObject({
+      status: 'rolled-back',
+      reason: 'your CI check “pnpm lint” fails with this change: src/a.css: error',
+    });
+
+    // A check that already failed before the change doesn't count against it.
+    const ok = harness(
+      'autonomous',
+      [verify([failing('target-size', [])])],
+      [
+        { ran: true, checks: [lint(true), { name: 'pnpm typecheck', ok: false, summary: '' }] },
+        { ran: true, checks: [lint(true), { name: 'pnpm typecheck', ok: false, summary: '' }] },
+      ],
+    );
+    ok.pipeline.start(['run-1-f1']);
+    await ok.settled();
+    expect(ok.state().changes[0]?.status).toBe('verified');
+    const pr = ok.calls.find((c) => c.fn === 'prOpen');
+    expect(pr && 'body' in pr ? pr.body : '').toContain('Your CI checks pass on this branch');
   });
 
   it('a failing fix is rolled back with its reason, then retried and verified with a new PR', async () => {
@@ -300,7 +340,9 @@ describe('the fix pipeline (§9)', () => {
       return Promise.resolve(false);
     };
     await h.settled();
-    expect(asked).toBe('Can I open a pull request for “Tap target is too small”?');
+    expect(asked).toBe(
+      'Can I push fitts/h7-tap-target-1 to GitHub and open a pull request for “Tap target is too small”?',
+    );
     expect(h.state().changes[0]).toMatchObject({ status: 'verified' });
     expect(h.state().changes[0]?.prNumber).toBeUndefined();
   });

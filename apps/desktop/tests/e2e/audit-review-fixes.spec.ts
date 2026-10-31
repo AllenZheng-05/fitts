@@ -45,7 +45,7 @@ test("a short window gives the open Finding panel the tray's height", async () =
   await page.setViewportSize({ width: 1200, height: 720 });
   await expect(tray(page)).toBeHidden();
   const panel = page.getByRole('dialog', { name: 'One action, three names' });
-  await expect(panel.getByRole('slider', { name: 'Compare before and after' })).toBeInViewport();
+  await expect(panel.getByRole('tab', { name: 'Live preview' })).toBeInViewport();
   await panel.getByRole('button', { name: 'Close' }).click();
   await expect(tray(page)).toBeVisible();
 });

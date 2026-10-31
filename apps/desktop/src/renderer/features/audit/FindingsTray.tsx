@@ -38,7 +38,7 @@ function statusLine(f: Finding): { text: string; className: string } {
 }
 
 /** Findings tray (SPEC §6.4): title, lens filters, a horizontal list of cards, timeline. */
-export function FindingsTray({ run }: { run: RunState }) {
+export function FindingsTray({ run, height }: { run: RunState; height?: number | undefined }) {
   const filter = useUi((s) => s.findingsFilter);
   const selectedId = useUi((s) => s.openFindingId);
   const route = useUi((s) => s.findingsRoute);
@@ -56,6 +56,8 @@ export function FindingsTray({ run }: { run: RunState }) {
         // In a short window an open Finding panel needs the height more than the tray does.
         selectedId !== null && '[@media(max-height:859px)]:hidden',
       )}
+      // Resized by the user: the cards scroll inside it.
+      style={height ? { height } : undefined}
     >
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="tray-title" className="font-display text-[16px] font-bold">
@@ -87,7 +89,12 @@ export function FindingsTray({ run }: { run: RunState }) {
           ))}
         </div>
       </div>
-      <ul className="flex min-h-[78px] gap-2.5 overflow-x-auto pb-1">
+      <ul
+        className={cx(
+          'flex min-h-[78px] gap-2.5 pb-1',
+          height ? 'min-h-0 flex-1 flex-wrap content-start overflow-y-auto' : 'overflow-x-auto',
+        )}
+      >
         {shown.map((f) => {
           const line = statusLine(f);
           const selected = f.id === selectedId;
@@ -132,11 +139,18 @@ const DOT_TONE: Record<Severity, string> = {
   0: 'bg-neutral-tint',
 };
 
-/** Start time, cobalt progress, a severity dot per finding (buttons that rewind), playhead. */
+/**
+ * What happened so far, from the start to now: a severity dot per finding where it was found
+ * (buttons that rewind to it), and the playhead at now, or at the moment you rewound to. It's
+ * a history, not a progress bar: there's no end to estimate. Hidden until there's a finding.
+ */
 function Timeline({ run }: { run: RunState }) {
-  const total = Math.max(run.stepEstimate, 1);
-  const progress = Math.min(1, run.step / total);
-  const pct = (n: number) => `${Math.min(100, Math.max(0, n * 100))}%`;
+  const shown = run.findings.filter((f) => f.lane !== 'suggestion');
+  if (shown.length === 0) return null;
+  const span = Math.max(run.elapsedMs, ...shown.map((f) => f.atMs), 1);
+  const pct = (ms: number) => `${Math.min(100, Math.max(0, (ms / span) * 100))}%`;
+  const rewound = shown.find((f) => f.stepIndex === run.rewindStep);
+  const head = rewound ? rewound.atMs : span;
   return (
     <div className="flex items-center gap-3">
       <span className="font-mono text-[11px] text-muted">0:00</span>
@@ -144,35 +158,33 @@ function Timeline({ run }: { run: RunState }) {
         <div className="absolute inset-x-0 top-[9px] h-1 rounded-pill bg-track" />
         <div
           className="absolute top-[9px] left-0 h-1 rounded-pill bg-cobalt"
-          style={{ width: pct(progress) }}
+          style={{ width: pct(head) }}
         />
-        {run.findings
-          .filter((f) => f.lane !== 'suggestion')
-          .map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              aria-label={format(copy.audit.rewindTo, { title: f.title })}
-              aria-pressed={run.rewindStep === f.stepIndex}
-              onClick={() => getEngine().rewindTo(run.projectId, f.stepIndex)}
-              // A 24px target (WCAG 2.5.8) around the 18px dot.
-              className="group absolute -top-px flex size-6 -translate-x-1/2 items-center justify-center rounded-full"
-              style={{ left: pct(f.stepIndex / total) }}
-            >
-              <span
-                aria-hidden="true"
-                className={cx(
-                  'size-[18px] rounded-full border-[1.5px] border-ink group-hover:scale-110',
-                  DOT_TONE[f.severity],
-                  run.rewindStep === f.stepIndex && 'ring-2 ring-cobalt ring-offset-1',
-                )}
-              />
-            </button>
-          ))}
+        {shown.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            aria-label={format(copy.audit.rewindTo, { title: f.title })}
+            aria-pressed={run.rewindStep === f.stepIndex}
+            onClick={() => getEngine().rewindTo(run.projectId, f.stepIndex)}
+            // A 24px target (WCAG 2.5.8) around the 18px dot.
+            className="group absolute -top-px flex size-6 -translate-x-1/2 items-center justify-center rounded-full"
+            style={{ left: pct(f.atMs) }}
+          >
+            <span
+              aria-hidden="true"
+              className={cx(
+                'size-[18px] rounded-full border-[1.5px] border-ink group-hover:scale-110',
+                DOT_TONE[f.severity],
+                run.rewindStep === f.stepIndex && 'ring-2 ring-cobalt ring-offset-1',
+              )}
+            />
+          </button>
+        ))}
         <span
           aria-hidden="true"
           className="absolute top-0 h-[22px] w-[3px] -translate-x-1/2 rounded-pill bg-ink"
-          style={{ left: pct(progress) }}
+          style={{ left: pct(head) }}
         />
       </div>
       <span className="font-mono text-[11px] text-muted">

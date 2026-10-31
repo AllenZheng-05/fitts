@@ -9,7 +9,8 @@ import { cx } from '../../lib/cx';
 import { format, formatUsd } from '../../lib/format';
 import { speak } from '../../lib/speech';
 import { RichText } from '../../components/RichText';
-import { checkKey, storeKey } from '../../lib/keys';
+import { checkKey, storeKey, useKeyInfo } from '../../lib/keys';
+import { GitHubSection } from './GitHubSection';
 import { removeProject, setDangerous, setPermissionMode } from '../../state/actions';
 import { useProjects } from '../../state/projects';
 import {
@@ -101,7 +102,7 @@ function Section({
 function RunTab() {
   const s = useSettings();
   const [typed, setTyped] = useState('');
-  const [cap, setCap] = useState(formatUsd(s.capUsd));
+  const [cap, setCap] = useState(s.capUsd > 0 ? formatUsd(s.capUsd) : '');
   const [capError, setCapError] = useState<string | undefined>();
   const legendId = useId();
   const unlocked = typed.trim() === copy.settings.dangerPhrase || s.dangerous;
@@ -162,15 +163,18 @@ function RunTab() {
           error={capError}
           hint={copy.settings.capHint}
           onChange={(e) => setCap(e.target.value)}
+          placeholder={copy.settings.capNone}
           onBlur={() => {
-            const amount = Number(cap.replace(/[$,\s]/g, ''));
-            if (!Number.isFinite(amount) || amount <= 0) {
+            const typed = cap.replace(/[$,\s]/g, '');
+            // Empty is "no limit".
+            const amount = typed ? Number(typed) : 0;
+            if (!Number.isFinite(amount) || amount < 0 || (typed && amount === 0)) {
               setCapError(copy.settings.capError);
               return;
             }
             setCapError(undefined);
             s.set({ capUsd: amount });
-            setCap(formatUsd(amount));
+            setCap(amount > 0 ? formatUsd(amount) : '');
           }}
         />
         <span className="text-[14px] font-semibold">{copy.settings.profile}</span>
@@ -186,6 +190,9 @@ function RunTab() {
             { id: 'open', label: copy.settings.profiles.open, disabled: !s.keys.baseten },
           ]}
         />
+        <p className="text-[13px] leading-normal text-ink-2">
+          <RichText text={copy.settings.profileHelp[s.modelProfile]} />
+        </p>
         {!s.keys.baseten && (
           <span className="text-[13px] text-muted">
             {copy.settings.openWeightsNeedsKey}{' '}
@@ -319,12 +326,14 @@ function KeysTab() {
         ))}
       </ul>
       <p className="text-[13px] text-muted">{copy.settings.keysNote}</p>
+      <GitHubSection />
     </Section>
   );
 }
 
 function KeyRow({ name }: { name: KeyName }) {
   const added = useSettings((s) => s.keys[name]);
+  const info = useKeyInfo((s) => s.info[name]);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [invalid, setInvalid] = useState(false);
@@ -338,6 +347,12 @@ function KeyRow({ name }: { name: KeyName }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <strong className="text-[15px]">{row.name}</strong>
           <span className="text-[13px] text-muted">{row.hint}</span>
+          {info?.saved && info.last4 && (
+            <span className="font-mono text-[12px] text-ink-2">
+              {format(copy.settings.keyInUse, { last4: info.last4 })}
+              {info.source === 'env' && ` · ${copy.settings.keyFromEnv}`}
+            </span>
+          )}
         </div>
         <Chip tone={added ? 'mint' : 'neutral'}>
           {added ? copy.settings.keyWorks : copy.settings.keyMissing}

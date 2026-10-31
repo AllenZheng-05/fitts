@@ -68,6 +68,10 @@ class Controller {
   }
 }
 
+/** 3 for "run-3"; 0 for none. */
+const runNumberOf = (runId: string | undefined) =>
+  Number(/^run-(\d+)$/.exec(runId ?? '')?.[1] ?? 0);
+
 function blankRun(projectId: string, runNumber: number, mode: Mode, brief: Brief): RunState {
   return {
     runId: `run-${runNumber}`,
@@ -102,6 +106,8 @@ export interface MockRunEngineOptions {
   profileFor: (projectId: string) => MockProfile;
   /** The project's saved brief, used when it has no run yet. */
   briefFor?: (projectId: string) => Brief;
+  /** The project's last run ("run-3"), so a new run never reuses its id and branches. */
+  lastRunFor?: (projectId: string) => string | undefined;
 }
 
 /**
@@ -141,6 +147,28 @@ export class MockRunEngine implements RunEngine {
   }
 
   // ── RunEngine: interview ────────────────────────────────────────────────────
+
+  /**
+   * New run after a real one (the agent ran the audit itself): the next run number, the brief
+   * kept, and Fitts opens by asking what this run is for instead of what the site is.
+   */
+  startNextRun(projectId: string, last: RunState, opener: string, replies: string[] = []): void {
+    const ctrl = this.ensure(projectId);
+    ctrl.runNumber = Math.max(ctrl.runNumber, runNumberOf(last.runId)) + 1;
+    this.resetController(ctrl);
+    ctrl.state = blankRun(projectId, ctrl.runNumber, last.mode, { ...last.brief });
+    ctrl.interviewStep = ctrl.profile.interview.length;
+    this.mutate(ctrl, (_s, ctx) => {
+      ctx.say(opener);
+      ctx.post({ type: 'brief' });
+      if (replies.length) ctx.post({ type: 'quick-replies', options: replies });
+    });
+  }
+
+  /** One line from Fitts in the run's chat (the agent's notes, like "your site isn't up"). */
+  note(projectId: string, text: string): void {
+    this.mutate(this.ensure(projectId), (_s, ctx) => ctx.say(text));
+  }
 
   startInterview(projectId: string): void {
     const previous = this.runs.get(projectId);
@@ -385,6 +413,19 @@ export class MockRunEngine implements RunEngine {
     });
   }
 
+  /** The scripted run has no live site: "Replay it" rewinds to the step, as in Phase 1. */
+  showFinding(projectId: string, findingId: string): void {
+    const step = this.getState(projectId)?.findings.find((f) => f.id === findingId)?.stepIndex;
+    if (step !== undefined) this.rewindTo(projectId, step);
+  }
+
+  reopenFinding(projectId: string, findingId: string): void {
+    this.withRun(projectId, (s) => {
+      const finding = s.findings.find((f) => f.id === findingId);
+      if (finding?.status === 'dismissed') finding.status = 'open';
+    });
+  }
+
   respondGate(projectId: string, gateId: string, decision: 'deny' | 'other' | 'allow'): void {
     this.withRun(projectId, (s, ctx) => {
       const ctrl = this.ensure(projectId);
@@ -572,6 +613,13 @@ export class MockRunEngine implements RunEngine {
     const profile = this.profile(projectId);
     const ctrl = new Controller(profile, mode ?? old?.state.mode ?? profile.defaultMode);
     if (old) ctrl.runNumber = old.runNumber;
+    else {
+      const last = runNumberOf(this.options.lastRunFor?.(projectId));
+      if (last >= ctrl.runNumber) {
+        ctrl.runNumber = last + 1;
+        ctrl.state = blankRun(projectId, ctrl.runNumber, ctrl.state.mode, {});
+      }
+    }
     this.runs.set(projectId, ctrl);
     return ctrl;
   }

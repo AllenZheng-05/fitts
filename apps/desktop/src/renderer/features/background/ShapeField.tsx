@@ -49,6 +49,17 @@ function tokenColor(name: ShapeColor): string {
 
 type Stats = NonNullable<Window['__fittsShapes']>;
 
+/**
+ * Where each shape last was (px from the window's center). Changing the motion setting rebuilds
+ * the field, and the shapes carry on from where they were instead of jumping to new places.
+ */
+const lastAt = new Map<string, { x: number; y: number }>();
+const fromLast = (specs: ShapeSpec[]) =>
+  specs.map((s) => {
+    const at = lastAt.get(s.id);
+    return at ? { ...s, x: at.x, y: at.y } : s;
+  });
+
 /** Full-window canvas fixed behind the UI. */
 export function ShapeField({ mode }: { mode: FieldMode }) {
   const running = useFieldRunning(mode);
@@ -147,7 +158,7 @@ function Shape({ spec, meshRef }: { spec: ShapeSpec; meshRef?: (m: Mesh | null) 
 /** Reduced motion or "Still": the same shapes, placed, with no physics. */
 function StillShapes() {
   const { width, height } = useThree((s) => s.size);
-  const specs = useMemo(() => layout('still', width, height), [width, height]);
+  const specs = useMemo(() => fromLast(layout('still', width, height)), [width, height]);
   useStats('still', false, () => []);
   return (
     <>
@@ -162,7 +173,7 @@ function StillShapes() {
 
 function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) {
   const { width, height } = useThree((s) => s.size);
-  const [specs] = useState(() => layout(mode, width, height));
+  const [specs] = useState(() => fromLast(layout(mode, width, height)));
   const [drops, setDrops] = useState<ShapeSpec[]>([]);
   const bodies = useRef(new Map<string, RapierRigidBody>());
   const meshes = useRef(new Map<Mesh, string>());
@@ -242,6 +253,7 @@ function MovingShapes({ mode, running }: { mode: FieldMode; running: boolean }) 
       }
       const size = sizes.get(id) ?? 20;
       const t = body.translation();
+      lastAt.set(id, { x: t.x, y: t.y });
 
       // Drift the heading a little; near an edge, turn back toward the middle.
       w.heading += (Math.random() - 0.5) * 1.4 * dt;

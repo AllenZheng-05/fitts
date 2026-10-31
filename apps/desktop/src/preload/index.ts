@@ -4,6 +4,8 @@ import {
   type Detection,
   type EngineEvents,
   type FittsBridge,
+  type GitHubStatus,
+  type KeyInfo,
   type KeyName,
   type Platform,
   type RunState,
@@ -43,11 +45,16 @@ const bridge: FittsBridge = {
     test: (name: KeyName, value?: string) =>
       ipcRenderer.invoke(IPC.keysTest, name, value) as Promise<{ ok: boolean; message: string }>,
     has: () => ipcRenderer.invoke(IPC.keysHas) as Promise<Record<KeyName, boolean>>,
+    info: () => ipcRenderer.invoke(IPC.keysInfo) as Promise<Record<KeyName, KeyInfo>>,
+    envDefaults: () => ipcRenderer.invoke(IPC.keysEnvDefaults) as Promise<{ voiceId?: string }>,
   },
   site: {
     detect: (folder) => ipcRenderer.invoke(IPC.siteDetect, folder) as Promise<Detection | null>,
     open: (projectId) => ipcRenderer.send(IPC.siteOpen, projectId),
     close: (projectId) => ipcRenderer.send(IPC.siteClose, projectId),
+    openVersion: (siteId, projectId, runId, version) =>
+      ipcRenderer.send(IPC.siteOpenVersion, siteId, projectId, runId, version),
+    openInBrowser: (siteId) => ipcRenderer.send(IPC.siteOpenInBrowser, siteId),
     resize: (projectId, width, height) =>
       ipcRenderer.send(IPC.siteResize, projectId, width, height),
     device: (projectId, device) => ipcRenderer.send(IPC.siteDevice, projectId, device?.id ?? null),
@@ -87,10 +94,20 @@ const bridge: FittsBridge = {
         NonNullable<FittsBridge['verify']>['githubPages']
       >,
   },
-  replay: {
-    open: () =>
-      ipcRenderer.invoke(IPC.replayOpen) as ReturnType<NonNullable<FittsBridge['replay']>['open']>,
+  openLink: (url) => ipcRenderer.send(IPC.openLink, url),
+  github: {
+    status: () => ipcRenderer.invoke(IPC.githubStatus) as Promise<GitHubStatus>,
+    signIn: () => ipcRenderer.invoke(IPC.githubSignIn) as Promise<GitHubStatus>,
+    cancel: () => ipcRenderer.send(IPC.githubCancel),
+    signOut: () => ipcRenderer.send(IPC.githubSignOut),
+    onStatus: (handler) => {
+      const listener = (_e: unknown, status: GitHubStatus) => handler(status);
+      ipcRenderer.on(IPC.githubEvent, listener);
+      return () => ipcRenderer.removeListener(IPC.githubEvent, listener);
+    },
   },
+  finishRun: (projectId, runId) =>
+    ipcRenderer.invoke(IPC.runFinish, projectId, runId) as Promise<void>,
   tools: () => ipcRenderer.invoke(IPC.toolsCheck) as ReturnType<NonNullable<FittsBridge['tools']>>,
   voice: {
     start: (mode, projectId) =>

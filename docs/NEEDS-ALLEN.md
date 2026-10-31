@@ -82,19 +82,35 @@ The download buttons point at `releases/latest/download/Fitts-Setup.exe` (and
 bare repo (`tests/bench/p9.bench.ts`: 8 verified PRs, rollback and retry, undo, revert).
 Opening real PRs, View PR, and undo on GitHub need you. Follow `scripts/real-pr-check.md`.
 
-## 4. Create the ElevenLabs "Fitts" voice, then the voice check (15 min)
+## 4. The voice check (10 min)
 
-**Why:** Fitts can't speak with ElevenLabs yet. The account has no voices of its own, and on
-the free plan the API refuses library voices ("Free users cannot use library voices via the
-API"). Until a voice exists, Fitts uses the system voice, as designed. Listening also needs
-your mic.
+**Why:** the "Fitts" voice exists now (`hqtfv6GKvF2d5FpBDEh7`, in `.env.local`). In a
+development build Settings fills the voice ID in from `.env.local` on its own; in a release,
+paste it in Settings › Voice & appearance › ElevenLabs voice ID. Listening needs your mic.
 
-1. In ElevenLabs › Voices, create the "Fitts" voice (a voice design or a clone) and copy its
-   ID. `pnpm tsx scripts/verify/p11-voices.ts` lists the account's voices.
-2. Add `ELEVENLABS_VOICE_ID=<id>` to `.env.local`, then run
-   `pnpm tsx scripts/verify/p11-tts.ts`. It should print `ok: true`.
-3. Paste the ID in Settings › Voice & appearance › ElevenLabs voice ID.
+1. Optional: `pnpm tsx scripts/verify/p11-tts.ts` should print `ok: true` (one short line).
 4. Follow `scripts/voice-check.md`: mic, speakers, barge-in, always listening, fallback.
+
+## 4b. Register the Fitts GitHub App (10 min) — Sign in with GitHub
+
+**Why:** Fitts now signs you in to GitHub itself (Settings › Keys › GitHub) instead of quietly
+using `gh`. That needs a GitHub App, which only you can register. Until then Settings says
+it isn't set up, and Fitts falls back to `gh` as before.
+
+1. Go to github.com › Settings › Developer settings › GitHub Apps › **New GitHub App**.
+2. Name: `Fitts` (or `Fitts by Allen` if taken). Homepage URL: `https://fitts.allenzheng.com`.
+   Callback URL: the same (device flow doesn't use it). Leave "Expire user authorization
+   tokens" **on** (Fitts refreshes them).
+3. Check **Enable Device Flow**. Under Webhook, uncheck **Active**.
+4. Repository permissions: **Contents: Read and write**, **Pull requests: Read and write**,
+   **Checks: Read-only**, **Pages: Read-only** (Metadata: Read-only is automatic). Nothing
+   else, no account permissions.
+5. "Where can this GitHub App be installed?": **Any account** if others will use Fitts, else
+   **Only on this account**. Create it.
+6. Send me the **Client ID** (starts with `Iv`; it's public, not a secret) and the app's URL
+   name (the part after `github.com/apps/`). I'll put both in `src/main/github/auth.ts`.
+7. In Fitts: Settings › Keys › GitHub › **Sign in with GitHub**, enter the code on GitHub,
+   then **Choose which repositories Fitts may use** and pick AllenZheng (and fitts if you like).
 
 ## 5. Publish the beta release and install it fresh on Windows (20 min, after 1)
 

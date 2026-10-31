@@ -43,7 +43,13 @@ export interface Listening {
 export async function listen(
   mode: TalkSessionMode,
   projectId: string,
-  on: { partial?: (text: string) => void; final?: (text: string) => void; ended?: () => void },
+  on: {
+    partial?: (text: string) => void;
+    final?: (text: string) => void;
+    ended?: () => void;
+    /** Why there's no session ("no key", "offline", no mic). */
+    failed?: (reason: string) => void;
+  },
 ): Promise<Listening | null> {
   const bridge = voiceBridge();
   if (!bridge) return null;
@@ -63,9 +69,12 @@ export async function listen(
       on.ended?.();
     }
   });
-  const started = await bridge.start(mode, projectId).catch(() => ({ ok: false }));
+  const started: { ok: boolean; reason?: string } = await bridge
+    .start(mode, projectId)
+    .catch((e: unknown) => ({ ok: false, reason: e instanceof Error ? e.message : '' }));
   if (!started.ok) {
     off();
+    on.failed?.(started.reason ?? '');
     return null;
   }
   let mic: MicCapture;
@@ -74,6 +83,7 @@ export async function listen(
   } catch {
     bridge.cancel();
     off();
+    on.failed?.('mic');
     return null;
   }
   return {

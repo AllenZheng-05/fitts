@@ -1,7 +1,6 @@
 import type { Finding, RunState } from '@fitts/schema';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { BeforeAfterSlider } from '../../components/BeforeAfterSlider';
 import { Button } from '../../components/Button';
 import { Chip, SeverityBadge } from '../../components/Chip';
 import { IconButton } from '../../components/IconButton';
@@ -9,19 +8,20 @@ import { ProgressBar } from '../../components/StatusChips';
 import { Tabs } from '../../components/Tabs';
 import { useOverlay } from '../../components/overlay/useOverlay';
 import { copy } from '../../copy';
+import { openPr } from '../../lib/links';
 import { format } from '../../lib/format';
-import { DEV } from '../../dev';
+import { TEST_BUILD } from '../../dev';
 import { LIVE_FINDINGS } from '../../mock/fixtures/demo-chat';
-import { renderSite, ROUTE_FOR_REF } from '../../mock/sites';
 import { getEngine } from '../../state/engine';
 import { useAuditOnly } from '../../state/projects';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
-import { MESSAGE_BOX_ID } from '../site-view/SiteView';
-import { decide, pendingBatchFor, type Batch } from './review';
-
-/** Width of the panel over the site view; the site shifts left by the same amount (§6.5). */
-export const FINDING_PANEL_INSET = 'max(calc(56% + 12px), 452px)';
+import { SegmentedControl } from '../../components/SegmentedControl';
+import { useSiteVersion } from '../../state/site-versions';
+import { RetryControls } from '../chat/RetryControls';
+import { MESSAGE_BOX_ID, SiteView } from '../site-view/SiteView';
+import type { Decision } from '../../state/ui';
+import { decide, finishReview, pendingBatchFor, type Batch } from './review';
 
 /** The check a verified fix passed, shown in the mint footer. */
 function checkFor(f: Finding): string {
@@ -50,9 +50,6 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
   const close = () => useUi.getState().set({ openFindingId: null });
   useOverlay({ open: true, onClose: close, containerRef: ref, trapFocus: false });
   const titleId = `finding-title-${finding.id}`;
-  // Show the page where the finding's element lives (e.g. step 2 for the NEXT button).
-  const previewRoute =
-    (DEV && finding.elementRef && ROUTE_FOR_REF[finding.elementRef]) || finding.route;
   // Part of a batch Fitts is waiting on: step through it and decide each fix (§6.6).
   const batch = finding.status === 'open' ? pendingBatchFor(run, finding.id) : undefined;
 
@@ -81,6 +78,11 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
                 total: finding.agreement.total,
               })}
             </Chip>
+            {finding.agreement.measured && (
+              <Chip tone="cobalt" className="px-[9px] py-[3px]">
+                {copy.finding.measuredChip}
+              </Chip>
+            )}
           </div>
           <h2 id={titleId} className="font-display text-[21px] font-bold">
             {finding.title}
@@ -93,7 +95,7 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
         />
       </div>
 
-      {batch && <ReviewBar batch={batch} finding={finding} />}
+      {batch && <ReviewBar run={run} batch={batch} finding={finding} />}
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
         <p className="text-[14px] leading-normal">
@@ -110,64 +112,7 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
             {
               id: 'live',
               label: copy.finding.livePreview,
-              content: finding.assets?.shot ? (
-                // A real run: the page when Fitts found it, with SAM's outline (§10).
-                <div className="relative h-[200px] overflow-hidden rounded-control border border-ink bg-paper">
-                  <img
-                    src={finding.assets.shot}
-                    alt={copy.finding.shotAlt}
-                    className="absolute inset-0 size-full object-contain"
-                  />
-                  {finding.assets.mask && (
-                    <img
-                      src={finding.assets.mask}
-                      alt=""
-                      className="pointer-events-none absolute inset-0 size-full object-contain"
-                    />
-                  )}
-                </div>
-              ) : DEV ? (
-                // Phase 1's mock comparison (dev and e2e builds).
-                <BeforeAfterSlider
-                  className="h-[200px]"
-                  before={<MiniSite run={run} route={previewRoute} variant="now" />}
-                  after={<MiniSite run={run} route={previewRoute} variant="fixed" />}
-                />
-              ) : (
-                // The step shot from when Fitts found it.
-                <div className="relative h-[200px] overflow-hidden rounded-control border border-ink bg-paper">
-                  <img
-                    src={`fitts-asset://${run.projectId}/${run.runId}/shots/${Math.max(1, finding.stepIndex)}.jpg`}
-                    alt={copy.finding.shotAlt}
-                    className="absolute inset-0 size-full object-contain"
-                  />
-                </div>
-              ),
-            },
-            {
-              id: 'mockup',
-              label: copy.finding.mockup,
-              content: finding.assets?.mockup ? (
-                <div className="relative h-[200px] overflow-hidden rounded-control border border-ink bg-paper">
-                  <img
-                    src={finding.assets.mockup}
-                    alt={format(copy.finding.mockupAlt, { title: finding.title })}
-                    className="absolute inset-0 size-full object-contain"
-                  />
-                  <span className="absolute top-2 left-2 rounded-tag border border-ink bg-card px-2 py-0.5 text-[12px] font-bold">
-                    {copy.finding.mockupLabel}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex h-[200px] flex-col items-center justify-center gap-2 rounded-control border border-dashed border-ink-faint bg-lilac-tint p-4 text-center">
-                  <span className="rounded-tag border border-ink bg-card px-2 py-0.5 text-[12px] font-bold">
-                    {copy.finding.mockupLabel}
-                  </span>
-                  <span className="max-w-[320px] text-[13px] text-lilac-ink">
-                    {copy.finding.mockupHint}
-                  </span>
-                </div>
-              ),
+              content: <LivePreview run={run} finding={finding} />,
             },
             {
               id: 'evidence',
@@ -207,21 +152,64 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
   );
 }
 
-/** The site at half size, so a whole page fits in a preview pane. */
-function MiniSite({
-  run,
-  route,
-  variant,
-}: {
-  run: RunState;
-  route: string;
-  variant: 'now' | 'fixed';
-}) {
+/**
+ * The fix, live: what Fitts saw when it found the problem, and once a fix is verified, the
+ * fixed version of the site itself, on the finding's page, to use like the real thing.
+ */
+function LivePreview({ run, finding }: { run: RunState; finding: Finding }) {
+  const change = run.changes.find((c) => c.findingIds.includes(finding.id));
+  const branch = change?.status === 'verified' ? change.branch : undefined;
+  const [view, setView] = useState<'before' | 'after'>(branch ? 'after' : 'before');
+  const showAfter = view === 'after' && Boolean(branch);
+  const siteId = useSiteVersion(
+    run.projectId,
+    run.runId,
+    `fix-${finding.id}`,
+    showAfter && branch ? { kind: 'branch', branch, path: finding.route } : null,
+  );
+  const shot =
+    finding.assets?.shot ??
+    `fitts-asset://${run.projectId}/${run.runId}/shots/${Math.max(1, finding.stepIndex)}.jpg`;
   return (
-    <div className="pointer-events-none h-full overflow-hidden" inert>
-      <div className="h-[200%] w-[200%] origin-top-left scale-50">
-        {renderSite(run.projectId, { route, navigate: () => undefined, variant })}
-      </div>
+    <div className="flex flex-col gap-2">
+      {branch && (
+        <SegmentedControl
+          label={copy.finding.livePreview}
+          selected={view}
+          onSelect={(id) => setView(id === 'after' ? 'after' : 'before')}
+          segments={[
+            { id: 'before', label: copy.finding.previewBefore },
+            { id: 'after', label: copy.finding.previewAfter },
+          ]}
+        />
+      )}
+      {showAfter ? (
+        <SiteView
+          key={siteId}
+          projectId={run.projectId}
+          siteId={siteId}
+          interactive
+          label={copy.finding.previewAfter}
+          className="h-[380px]"
+        />
+      ) : (
+        // The page when Fitts found it, with SAM's outline (§10).
+        <div className="relative h-[260px] overflow-hidden rounded-control border border-ink bg-paper">
+          <img
+            src={shot}
+            alt={copy.finding.shotAlt}
+            className="absolute inset-0 size-full object-contain"
+          />
+          {finding.assets?.mask && (
+            <img
+              src={finding.assets.mask}
+              alt=""
+              className="pointer-events-none absolute inset-0 size-full object-contain"
+            />
+          )}
+        </div>
+      )}
+      {!branch && <p className="text-[13px] text-muted">{copy.finding.previewPending}</p>}
     </div>
   );
 }
@@ -240,6 +228,14 @@ function Reviewers({ run, finding }: { run: RunState; finding: Finding }) {
             {who} {copy.finding.flagged}
           </li>
         ))}
+        {finding.agreement.measured && (
+          <li>
+            <span aria-hidden="true" className="font-extrabold text-cobalt-ink">
+              ✓
+            </span>{' '}
+            {copy.finding.measuredBy}
+          </li>
+        )}
         {missing > 0 && (
           <li className="text-muted">
             <span aria-hidden="true">○</span> {missing} {copy.finding.notFlagged}
@@ -248,7 +244,11 @@ function Reviewers({ run, finding }: { run: RunState; finding: Finding }) {
       </ul>
       <button
         type="button"
-        onClick={() => getEngine().rewindTo(run.projectId, finding.stepIndex)}
+        onClick={() => {
+          // Fitts takes the site there; the panel steps aside so you can see it.
+          getEngine().showFinding(run.projectId, finding.id);
+          useUi.getState().set({ openFindingId: null });
+        }}
         className="self-start text-[13px] font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
       >
         {copy.finding.replay}
@@ -257,13 +257,13 @@ function Reviewers({ run, finding }: { run: RunState; finding: Finding }) {
   );
 }
 
-const NONE: Record<string, 'fix' | 'skip'> = {};
+const NONE: Record<string, Decision> = {};
 
 /**
  * "Fix 2 of 3" while reviewing a batch: where you are, how many are left, your call on this
  * one, and arrows to move between the fixes.
  */
-function ReviewBar({ batch, finding }: { batch: Batch; finding: Finding }) {
+function ReviewBar({ run, batch, finding }: { run: RunState; batch: Batch; finding: Finding }) {
   const decisions = useUi((s) => (s.review?.itemId === batch.id ? s.review.decisions : NONE));
   const ids = batch.findingIds;
   const index = ids.indexOf(finding.id);
@@ -282,10 +282,15 @@ function ReviewBar({ batch, finding }: { batch: Batch; finding: Finding }) {
       </span>
       {decision && (
         <Chip tone={decision === 'fix' ? 'mint' : 'neutral'} className="px-2 py-0.5">
-          {decision === 'fix' ? copy.finding.decidedFix : copy.finding.decidedSkip}
+          {decision === 'fix'
+            ? copy.finding.decidedFix
+            : decision === 'skip'
+              ? copy.finding.decidedSkip
+              : copy.finding.decidedDismiss}
         </Chip>
       )}
       <span className="flex-1" />
+      {left === 0 && <GoAhead run={run} batch={batch} decisions={decisions} />}
       <IconButton
         aria-label={copy.finding.previousFix}
         disabled={index <= 0}
@@ -302,9 +307,30 @@ function ReviewBar({ batch, finding }: { batch: Batch; finding: Finding }) {
   );
 }
 
+/** "Go ahead with 2 fixes": sends every call in the batch at once. */
+function GoAhead({
+  run,
+  batch,
+  decisions,
+}: {
+  run: RunState;
+  batch: Batch;
+  decisions: Record<string, Decision>;
+}) {
+  const n = batch.findingIds.filter((id) => decisions[id] === 'fix').length;
+  return (
+    <Button size="sm" variant="primary" onClick={() => finishReview(run, batch)}>
+      {n > 0 ? format(copy.finding.goAhead, { n }) : copy.finding.goAheadNone}
+    </Button>
+  );
+}
+
 /** Footer by state (SPEC §6.5): ask actions, fixing, fixed, and the after-states. */
 function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batch?: Batch }) {
   const engine = getEngine();
+  const decision = useUi((s) =>
+    batch && s.review?.itemId === batch.id ? s.review.decisions[finding.id] : undefined,
+  );
   const toast = useToasts((s) => s.show);
   const change = run.changes.find((c) => c.findingIds.includes(finding.id));
   const auditOnly = useAuditOnly(run.projectId);
@@ -325,10 +351,7 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
           {format(copy.finding.fixed, { check: checkFor(finding) })}
         </span>
         {change.prNumber && (
-          <Button
-            size="md"
-            onClick={() => toast(format(copy.items.prToast, { n: change.prNumber ?? 0 }))}
-          >
+          <Button size="md" onClick={() => openPr(change)}>
             {format(copy.items.viewPr, { n: change.prNumber })}
           </Button>
         )}
@@ -344,13 +367,7 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
         <span className="flex-[1_1_180px] font-bold text-sun-ink">
           {format(copy.finding.rolledBack, { reason: change.reason ?? '' })}
         </span>
-        <Button
-          size="md"
-          variant="sun"
-          onClick={() => engine.retryChange(run.projectId, change.id)}
-        >
-          {copy.finding.tryAgain}
-        </Button>
+        <RetryControls run={run} change={change} size="md" />
       </div>
     );
   }
@@ -371,7 +388,13 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
   if (finding.status === 'dismissed') {
     return (
       <div className={`${bar} bg-neutral-tint`}>
-        <span className="font-semibold text-neutral-ink">{copy.finding.dismissed}</span>
+        <span className="flex-[1_1_180px] font-semibold text-neutral-ink">
+          {copy.finding.dismissed}
+        </span>
+        {/* Changed your mind: it's open again, to fix or review. */}
+        <Button size="md" onClick={() => engine.reopenFinding(run.projectId, finding.id)}>
+          {copy.finding.reopen}
+        </Button>
       </div>
     );
   }
@@ -413,17 +436,20 @@ ${copy.finding.fixPrefix} ${finding.fix}`,
       {batch ? (
         <>
           <Button
-            variant="primary"
+            variant={decision === 'fix' ? 'dark' : 'primary'}
             size="md"
+            aria-pressed={decision === 'fix'}
             className="min-h-11 flex-[2_1_100px]"
-            onClick={() => decide(run, batch, finding.id, 'fix')}
+            onClick={() => decide(batch, finding.id, 'fix')}
           >
             {copy.finding.approveFix}
           </Button>
           <Button
             size="md"
+            variant={decision === 'skip' ? 'dark' : 'secondary'}
+            aria-pressed={decision === 'skip'}
             className="min-h-11 flex-[1_1_70px]"
-            onClick={() => decide(run, batch, finding.id, 'skip')}
+            onClick={() => decide(batch, finding.id, 'skip')}
           >
             {copy.finding.skipFix}
           </Button>
@@ -444,7 +470,7 @@ ${copy.finding.fixPrefix} ${finding.fix}`,
         onClick={() => {
           useUi.getState().set({
             draft:
-              DEV && finding.id === LIVE_FINDINGS.names.id
+              TEST_BUILD && finding.id === LIVE_FINDINGS.names.id
                 ? copy.finding.changePrefill
                 : copy.finding.changePrefillGeneric,
           });
@@ -455,12 +481,16 @@ ${copy.finding.fixPrefix} ${finding.fix}`,
       </Button>
       <Button
         size="md"
+        variant={decision === 'dismiss' ? 'dark' : 'secondary'}
+        aria-pressed={batch ? decision === 'dismiss' : undefined}
         className="min-h-11 flex-[1_1_100px]"
         onClick={() => {
-          engine.dismissFinding(run.projectId, finding.id);
-          // In a batch review, "not a problem" also counts as skipping its fix.
-          if (batch) decide(run, batch, finding.id, 'skip');
-          else useUi.getState().set({ openFindingId: null });
+          // In a batch review it's a call like the others, sent with Go ahead.
+          if (batch) decide(batch, finding.id, 'dismiss');
+          else {
+            engine.dismissFinding(run.projectId, finding.id);
+            useUi.getState().set({ openFindingId: null });
+          }
         }}
       >
         {copy.finding.notProblem}

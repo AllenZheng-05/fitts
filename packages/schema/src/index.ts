@@ -30,16 +30,42 @@ export interface FittsBridge {
   voice?: VoiceBridge;
   /** Live-site ownership checks (§4.2): DNS, a file or meta tag, GitHub Pages via gh. */
   verify?: VerifyBridge;
-  /** The bundled recorded run for judges (§12.3): no keys needed. */
-  replay?: {
-    open(): Promise<{
-      projectId: string;
-      runId: string;
-      events: { ts: number; event: RunEvent }[];
-    } | null>;
-  };
+  /**
+   * "Finished" on Done: removes the run's worktrees (its branches stay, so the user can check
+   * them out), then the run is over.
+   */
+  finishRun?: (projectId: string, runId: string) => Promise<void>;
+  /** Opens a pull request (or another GitHub page) in the user's browser. https only. */
+  openLink?: (url: string) => void;
   /** What's installed on this computer, for Welcome's chips (each null when missing). */
   tools?: () => Promise<ToolsStatus>;
+  /** Sign in with GitHub (the Fitts GitHub App, device flow): PRs, pushes, Pages. */
+  github?: GitHubBridge;
+}
+
+/**
+ * Fitts's GitHub sign-in: `code` while the user enters the code on github.com, `unavailable`
+ * when this build has no GitHub App configured.
+ */
+export type GitHubStatus =
+  | { state: 'signed-out' }
+  | {
+      state: 'signed-in';
+      login: string;
+      /** Where to choose which repositories Fitts may use (the app's install page). */
+      installUrl?: string;
+    }
+  | { state: 'code'; code: string; url: string }
+  | { state: 'error'; message: string }
+  | { state: 'unavailable' };
+
+export interface GitHubBridge {
+  status(): Promise<GitHubStatus>;
+  /** Starts the device flow; resolves with the code to show. */
+  signIn(): Promise<GitHubStatus>;
+  cancel(): void;
+  signOut(): void;
+  onStatus(handler: (status: GitHubStatus) => void): () => void;
 }
 
 export interface ToolsStatus {
@@ -151,13 +177,35 @@ export const DEVICES: SiteDevice[] = [
   { id: 'android', label: 'Android · 360×800', width: 360, height: 800, mobile: true },
 ];
 
+/**
+ * Another version of the site to look at beside the live one: one fix's branch, or the run's
+ * preview (its verified branches merged). Main serves it from a worktree on its own port.
+ */
+export type SiteVersion = (
+  { kind: 'branch'; branch: string } | { kind: 'preview'; branches: string[] }
+) & {
+  /** The page it opens on (the project's start page if absent). */
+  path?: string;
+};
+
+/** A version's site id: the project's id, `.v.`, then a short name ("chat.v.after"). */
+export const versionSiteId = (projectId: string, name: string) =>
+  `${projectId}.v.${name.replace(/[^\w-]/g, '-').slice(0, 40)}`;
+
+/** "Your screen": the size of the display Fitts is on, the site view's default. */
+export const SCREEN_DEVICE = 'screen';
+
 export interface SiteBridge {
   /** Real detection, or null when the folder doesn't exist. */
   detect(folder: string): Promise<Detection | null>;
   /** Starts (or reuses) the project's dev server and opens its site window. */
   open(projectId: string): void;
   close(projectId: string): void;
+  /** Serves a version of the site under `siteId` (see versionSiteId); close it with close(). */
+  openVersion(siteId: string, projectId: string, runId: string, version: SiteVersion): void;
   resize(projectId: string, width: number, height: number): void;
+  /** Opens the page a site (or version) is on in the user's own browser (localhost only). */
+  openInBrowser(siteId: string): void;
   /** Look like a device (null: a desktop browser the panel's size). */
   device(projectId: string, device: SiteDevice | null): void;
   input(projectId: string, input: SiteInput): void;
@@ -194,6 +242,7 @@ export const ENGINE_METHODS = [
   'answerQuestion',
   'approveFixes',
   'dismissFinding',
+  'reopenFinding',
   'respondGate',
   'setMode',
   'pickDirection',
@@ -201,6 +250,7 @@ export const ENGINE_METHODS = [
   'undoChange',
   'retryChange',
   'rewindTo',
+  'showFinding',
   'updateBrief',
 ] as const;
 export type EngineMethod = (typeof ENGINE_METHODS)[number];
@@ -215,6 +265,8 @@ export interface EngineCall {
   method: EngineMethod | StubEngineMethod;
   args: unknown[];
   brief?: Brief;
+  /** The project's last run, so a new run takes the next number (never reusing branches). */
+  lastRunId?: string;
   /** The settings a run reads when it starts (budget cap, models). */
   settings?: {
     capUsd: number;
@@ -246,12 +298,26 @@ export interface StoreBridge {
 
 export type KeyName = 'meta' | 'elevenlabs' | 'baseten';
 
+/**
+ * What the renderer may know about a key: whether there is one, its last 4 characters (so you
+ * can tell which key it is), and where it came from: saved in Settings, or the repo's
+ * .env.local (development builds only).
+ */
+export interface KeyInfo {
+  saved: boolean;
+  last4?: string;
+  source?: 'settings' | 'env';
+}
+
 export interface KeysBridge {
   set(name: KeyName, value: string): Promise<void>;
   clear(name: KeyName): Promise<void>;
   /** Checks a key (the stored one if `value` is omitted) with its provider. */
   test(name: KeyName, value?: string): Promise<{ ok: boolean; message: string }>;
   has(): Promise<Record<KeyName, boolean>>;
+  info(): Promise<Record<KeyName, KeyInfo>>;
+  /** Development builds: settings .env.local fills in (the ElevenLabs voice). */
+  envDefaults(): Promise<{ voiceId?: string }>;
 }
 
 /** IPC channel names shared by main and preload. */
@@ -260,6 +326,9 @@ export const IPC = {
   saveTextFile: 'fitts:save-text-file',
   notify: 'fitts:notify',
   notificationClick: 'fitts:notification-click',
+  openLink: 'fitts:open-link',
+  runFinish: 'fitts:run-finish',
+  siteOpenInBrowser: 'fitts:site-open-in-browser',
   engineCall: 'fitts:engine-call',
   engineEvents: 'fitts:engine-events',
   engineStates: 'fitts:engine-states',
@@ -269,9 +338,12 @@ export const IPC = {
   keysClear: 'fitts:keys-clear',
   keysTest: 'fitts:keys-test',
   keysHas: 'fitts:keys-has',
+  keysInfo: 'fitts:keys-info',
+  keysEnvDefaults: 'fitts:keys-env-defaults',
   siteDetect: 'fitts:site-detect',
   siteOpen: 'fitts:site-open',
   siteClose: 'fitts:site-close',
+  siteOpenVersion: 'fitts:site-open-version',
   siteResize: 'fitts:site-resize',
   siteDevice: 'fitts:site-device',
   siteInput: 'fitts:site-input',
@@ -289,8 +361,12 @@ export const IPC = {
   voiceSpeak: 'fitts:voice-speak',
   voiceAudio: 'fitts:voice-audio',
   voiceStopSpeaking: 'fitts:voice-stop-speaking',
-  replayOpen: 'fitts:replay-open',
   toolsCheck: 'fitts:tools-check',
+  githubStatus: 'fitts:github-status',
+  githubSignIn: 'fitts:github-sign-in',
+  githubCancel: 'fitts:github-cancel',
+  githubSignOut: 'fitts:github-sign-out',
+  githubEvent: 'fitts:github-event',
   verifyCheck: 'fitts:verify-check',
   verifyPages: 'fitts:verify-pages',
 } as const;
@@ -321,11 +397,15 @@ export interface Project {
   verification?: SiteVerification;
   /** SPEC-phase2 §12.2: where the site view opens (demo/chat uses /compose). */
   startPath?: string;
-  /** SPEC-phase2 §12.3: a bundled recorded run, played back (no site, no keys). */
-  replay?: { runId: string };
 }
 
 export interface Brief {
+  /**
+   * The whole brief as one paragraph in the owner's words: what the user sees and edits (one
+   * box). The fields below are kept in step with it by the model, for the parts of Fitts that
+   * need them (reviewers, the design library). Addition (Phase 2 feedback).
+   */
+  summary?: string;
   for?: string;
   who?: string;
   feel?: string;
@@ -357,7 +437,11 @@ export interface Finding {
   finding: string;
   fix: string;
   route: string;
-  agreement: { agreeing: number; total: number; who: string[] };
+  /**
+   * How many of the reviewers flagged it (each counts once), and whether one of Fitts's own
+   * measurements (a probe) found it too. `measured` is an addition (Phase 2 feedback).
+   */
+  agreement: { agreeing: number; total: number; who: string[]; measured?: boolean };
   evidence: string[];
   elementRef?: string;
   stepIndex: number;
@@ -569,13 +653,21 @@ export interface RunEngine {
   answerQuestion(projectId: string, itemId: string, answer: string): void;
   approveFixes(projectId: string, findingIds: string[]): void;
   dismissFinding(projectId: string, findingId: string): void;
+  /** Addition (Phase 2 feedback): "It is a problem": a dismissed finding is open again. */
+  reopenFinding(projectId: string, findingId: string): void;
   respondGate(projectId: string, gateId: string, decision: 'deny' | 'other' | 'allow'): void;
   setMode(projectId: string, mode: Mode): void;
   pickDirection(projectId: string, directionId: string): void;
   decideWording(projectId: string, itemId: string, decision: 'keep' | 'undo'): void;
   undoChange(projectId: string, changeId: string): void;
-  retryChange(projectId: string, changeId: string): void;
+  /** `hint`: the user's note for the next attempt ("the focus styles are in theme.css"). */
+  retryChange(projectId: string, changeId: string, hint?: string): void;
   rewindTo(projectId: string, stepIndex: number | null): void;
+  /**
+   * Addition (Phase 2 feedback): "Replay it": Fitts pauses and takes the live site to where it
+   * found the problem, scrolled to the element and outlined, so you see it for yourself.
+   */
+  showFinding(projectId: string, findingId: string): void;
   /** Addition to §9.2: the Brief popover's Save (§6.10). Fitts acknowledges in chat. */
   updateBrief(projectId: string, brief: Brief): void;
 }

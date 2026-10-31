@@ -18,6 +18,7 @@ import {
 } from '@fitts/schema';
 import { appendFileSync } from 'node:fs';
 import { profileFor } from '../renderer/mock/profiles';
+import { copy } from '../renderer/copy';
 import { MockRunEngine } from '../renderer/state/mock-engine';
 import { BudgetGuard } from './ledger/budget';
 import { CostLedger, withLedger } from './ledger/ledger';
@@ -29,7 +30,7 @@ import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
 import { RealRun } from './orchestrator/run';
 import { ReviewerPanel } from './review/reviewers';
 import { themeFit } from './review/themefit';
-import { interviewTurn } from './interview/interview';
+import { briefFromSummary, interviewTurn } from './interview/interview';
 import { runFixer } from './fix/fixer';
 import { runRedesigner } from './fix/redesign';
 import { Media } from './llm/media';
@@ -42,13 +43,19 @@ const port = process.parentPort;
 const send = (message: AgentMessage) => port.postMessage(message);
 
 const briefs = new Map<string, Brief>();
+/** Each project's last run id, from the renderer, so new runs never reuse one. */
+const lastRuns = new Map<string, string>();
 const settings = new Map<string, NonNullable<EngineCall['settings']>>();
 /** Profile per project; "Switch to Economy" on the 80% card changes it (§2). */
 const profiles = new Map<string, Profile>();
 /** API keys from main (safeStorage, or .env.local in dev builds). */
 export const keys: Partial<Record<KeyName, string>> = {};
 
-const engine = new MockRunEngine({ profileFor, briefFor: (id) => briefs.get(id) ?? {} });
+const engine = new MockRunEngine({
+  profileFor,
+  briefFor: (id) => briefs.get(id) ?? {},
+  lastRunFor: (id) => lastRuns.get(id),
+});
 const ledger = new CostLedger();
 const budget = new BudgetGuard();
 /** The model clients for the current keys (recorded as fixtures when FITTS_RECORD_LLM is set). */
@@ -153,6 +160,35 @@ async function llmPing(projectId: string): Promise<void> {
       reasoning: { effort: 'minimal' },
     });
   }
+}
+
+/** A model call's context for a project's current run. */
+function ctxFor(projectId: string) {
+  const s = realRuns.get(projectId)?.state ?? raw.get(projectId);
+  const set = settings.get(projectId);
+  return {
+    runId: s?.runId ?? 'run-1',
+    projectId,
+    contributor: contributorFor(projectId, set?.contributorMode ?? false),
+    allowed: () => {
+      const now = realRuns.get(projectId)?.state ?? sent.get(projectId);
+      return !now || budget.allowed(now.cost.spentUsd, now.cost.capUsd);
+    },
+  };
+}
+
+/** The interview's model for a project's profile. */
+function interviewModel(projectId: string): string {
+  const set = settings.get(projectId);
+  const contributor = contributorFor(projectId, set?.contributorMode ?? false);
+  const profile = profiles.get(projectId) ?? set?.modelProfile ?? 'quality';
+  return modelFor('interview', profile, { contributor, baseten: Boolean(keys.baseten) }).model;
+}
+
+/** The brief paragraph the owner saved differs from the run's (so its fields need re-reading). */
+function briefChanged(projectId: string, next: Brief | undefined): boolean {
+  const current = (realRuns.get(projectId)?.state ?? raw.get(projectId))?.brief;
+  return Boolean(next?.summary?.trim()) && next?.summary !== current?.summary;
 }
 
 /** One real interview turn on a live project (§6.2); the scripted step if the model can't. */
@@ -261,7 +297,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
             fixer: (
               task: string,
               tools: Parameters<typeof runFixer>[4],
-              opts: { findingId: string; onStep: (line: string) => void },
+              opts: Parameters<typeof runFixer>[5],
             ) => {
               // Dev and tests only (P9's rollback check): the Nth fix job makes no change.
               fixJobs += 1;
@@ -359,8 +395,17 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
     case 'dismissFinding':
       run.dismissFinding(String(args[0]));
       return true;
+    case 'reopenFinding':
+      run.reopenFinding(String(args[0]));
+      return true;
+    case 'showFinding':
+      void run.showFinding(String(args[0]));
+      return true;
     case 'retryChange':
-      run.retryChange(String(args[0]));
+      run.retryChange(
+        String(args[0]),
+        typeof args[1] === 'string' ? args[1].trim().slice(0, 500) : undefined,
+      );
       return true;
     case 'undoChange':
       run.undoChange(String(args[0]));
@@ -383,9 +428,21 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
     case 'updateBrief':
       run.updateBrief(args[0] as Brief);
       return true;
-    case 'startInterview':
+    case 'startInterview': {
+      // New run: the real run ends and the next one starts, with the brief kept, on the next
+      // run number. Fitts asks what this run is for, not what the site is.
+      const last = run.state;
+      run.dispose();
+      realRuns.delete(projectId);
+      engine.startNextRun(
+        projectId,
+        last,
+        copy.fitts.interviewNextRun,
+        copy.fitts.interviewNextRunReplies,
+      );
+      return true;
+    }
     case 'startAudit':
-      // A new interview (New run) leaves the real run; the stub plays the interview again.
       run.dispose();
       realRuns.delete(projectId);
       return false;
@@ -396,9 +453,10 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
 
 const allowed = new Set<string>([...ENGINE_METHODS, ...STUB_ENGINE_METHODS]);
 
-function call({ projectId, method, args, brief, settings: set }: EngineCall): void {
+function call({ projectId, method, args, brief, lastRunId, settings: set }: EngineCall): void {
   if (!allowed.has(method)) throw new Error(`unknown engine method: ${method}`);
   if (brief) briefs.set(projectId, brief);
+  if (lastRunId) lastRuns.set(projectId, lastRunId);
   if (set) settings.set(projectId, set);
   if (method === 'setSpeed') {
     const speed = args[0];
@@ -411,22 +469,33 @@ function call({ projectId, method, args, brief, settings: set }: EngineCall): vo
     );
     return;
   }
+  // The owner edited their brief (one paragraph): the fields are re-read from it first.
+  if (method === 'updateBrief' && online() && briefChanged(projectId, args[0] as Brief)) {
+    const next = args[0] as Brief;
+    void briefFromSummary(caller, ctxFor(projectId), interviewModel(projectId), next.summary ?? '')
+      .catch(() => next)
+      .then((brief) => {
+        if (!callReal(projectId, 'updateBrief', [brief])) engine.updateBrief(projectId, brief);
+      });
+    return;
+  }
   if (callReal(projectId, method, args)) return;
-  // The real interview, on a live project with a key (the stub keeps the interview's state).
+  // The real interview, with a key: a conversation with the model, whether or not the site is
+  // up yet (the stub keeps the interview's state: the opener, the brief card, the ready bar).
   const answering =
     method === 'answerInterview' ||
     (method === 'sendMessage' && !(args[1] as { pointingAt?: string } | undefined)?.pointingAt);
-  if (
-    answering &&
-    raw.get(projectId)?.phase === 'interview' &&
-    liveSites.get(projectId)?.status === 'running' &&
-    online()
-  ) {
+  if (answering && raw.get(projectId)?.phase === 'interview' && online()) {
     const spoken = Boolean((args[1] as { spoken?: boolean } | undefined)?.spoken);
     void realInterviewTurn(projectId, typeof args[0] === 'string' ? args[0] : '', spoken);
     return;
   }
   if (method === 'startAudit' && startRealAudit(projectId, set)) return;
+  // A real run never falls back to Phase 1's scripted audit: it waits for the site.
+  if (method === 'startAudit' && online()) {
+    engine.note(projectId, copy.fitts.siteNotReady);
+    return;
+  }
   if (method === 'answerQuestion') {
     const item = raw.get(projectId)?.chat.find((c) => c.id === args[0]);
     if (item?.type === 'state' && item.stateKind === 'budget-warning' && args[1] === 'economy')

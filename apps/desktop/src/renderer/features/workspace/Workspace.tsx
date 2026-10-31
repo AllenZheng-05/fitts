@@ -4,7 +4,7 @@ import { Chip } from '../../components/Chip';
 import { Button } from '../../components/Button';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
-import { DEV } from '../../dev';
+import { TEST_BUILD } from '../../dev';
 import { getEngineKind } from '../../state/engine';
 import { useProject } from '../../state/projects';
 import { useActiveRun, useRunStore } from '../../state/run-store';
@@ -39,8 +39,8 @@ export function Workspace() {
   }, [run, project]);
 
   // The project's real site (SPEC-phase2 §5): main starts its dev server and site window.
-  // A live site opens too, after main re-checks that it's yours (§4.2); never a replay.
-  const siteId = project && !project.replay ? project.id : null;
+  // A live site opens too, after main re-checks that it's yours (§4.2).
+  const siteId = project ? project.id : null;
   useEffect(() => {
     if (siteId) openLiveSite(siteId);
   }, [siteId]);
@@ -55,7 +55,7 @@ export function Workspace() {
         <h1 className="sr-only">{format(copy.workspace.heading, { name })}</h1>
         {run?.phase === 'interview' && <InterviewLayout run={run} />}
         {run?.phase === 'audit' &&
-          (isRedesigning(run, !DEV || getEngineKind() !== 'mock') ? (
+          (isRedesigning(run, !TEST_BUILD || getEngineKind() !== 'mock') ? (
             <RedesignLayout run={run} />
           ) : (
             <AuditLayout run={run} />

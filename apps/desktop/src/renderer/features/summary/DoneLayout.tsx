@@ -6,51 +6,94 @@ import { Select } from '../../components/fields';
 import { FittsAvatar } from '../../components/brand/FittsAvatar';
 import { RichText } from '../../components/RichText';
 import { copy } from '../../copy';
+import { openPr } from '../../lib/links';
 import { bridge } from '../../lib/bridge';
 import { cx } from '../../lib/cx';
 import { format, formatUsd } from '../../lib/format';
 import { buildReport, mathLine, runStats, type RunStats } from '../../lib/report';
-import { DEV } from '../../dev';
+import { TEST_BUILD } from '../../dev';
 import { DEMO_PAST_RUNS } from '../../mock/fixtures/demo-chat';
 import { DEMO_CHAT } from '../../mock/fixtures/projects';
 import { startRoute } from '../../mock/sites';
 import { getEngine } from '../../state/engine';
 import { useProject } from '../../state/projects';
 import { useSite } from '../../state/site';
+import { fixedBranches, useSiteVersion } from '../../state/site-versions';
+import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToasts } from '../../state/toasts';
+import { useUi } from '../../state/ui';
 import { currentDirection } from '../redesign/redesign';
 import { appliedRedesign } from '../redesign/redesign';
-import { RedesignShots } from '../redesign/RedesignShots';
+import { RetryControls } from '../chat/RetryControls';
+import { ResizeHandle } from '../../components/ResizeHandle';
+import { panelSize, useLayout } from '../../state/layout';
 import { SiteView } from '../site-view/SiteView';
 
 /** How many verified changes show before "See all N changes". */
 const COLLAPSED = 4;
 
-/** Done (SPEC §6.8): a preview of every fix combined beside the run summary. */
+/**
+ * Done (SPEC §6.8): the site beside the run summary, with a switch between the site as it was
+ * and the preview branch (every verified fix merged), both real and usable.
+ */
 export function DoneLayout({ run }: { run: RunState }) {
   const project = useProject(run.projectId);
   const stats = runStats(run);
   const runNumber = run.runId.replace('run-', '');
 
-  // The preview opens on the page that shows the fixes best.
+  // The preview opens on the page that shows the fixes best (Phase 1's stand-ins only).
   useEffect(() => {
-    useSite.getState().navigate(run.projectId, startRoute(run.projectId, true));
+    if (TEST_BUILD) useSite.getState().navigate(run.projectId, startRoute(run.projectId, true));
   }, [run.projectId]);
 
-  const previewUrl = DEV && run.projectId === DEMO_CHAT ? 'localhost:5180' : project?.url;
-  // A real redesign shows its own before and after of every page (SPEC-phase2 §8.3).
+  const previewUrl = TEST_BUILD && run.projectId === DEMO_CHAT ? 'localhost:5180' : project?.url;
   const redesign = appliedRedesign(run);
+  const doneSite = useLayout((s) => s.panels.doneSite);
+  const branches = fixedBranches(run);
+  const [view, setView] = useState<'before' | 'after'>('after');
+  const showAfter = view === 'after' && branches.length > 0;
+  const afterId = useSiteVersion(
+    run.projectId,
+    run.runId,
+    'after',
+    showAfter ? { kind: 'preview', branches } : null,
+  );
   return (
     <>
       <SiteView
+        key={showAfter ? afterId : run.projectId}
         projectId={run.projectId}
+        siteId={showAfter ? afterId : undefined}
         label={copy.done.preview}
-        className="w-[520px] flex-none"
-        interactive={!redesign}
+        className="flex-none"
+        style={{ width: panelSize(doneSite, 'doneSite') }}
+        interactive
         variant="fixed"
         direction={currentDirection(run)}
-        addressHost={previewUrl}
-        overlay={redesign ? () => <RedesignShots run={run} fill /> : undefined}
+        addressHost={TEST_BUILD ? previewUrl : undefined}
+        toolbarEnd={
+          <>
+            {branches.length > 0 && (
+              <SegmentedControl
+                label={copy.site.beforeAfter}
+                selected={showAfter ? 'after' : 'before'}
+                onSelect={(id) => setView(id === 'after' ? 'after' : 'before')}
+                segments={[
+                  { id: 'before', label: copy.site.before },
+                  { id: 'after', label: copy.site.after },
+                ]}
+              />
+            )}
+            {!TEST_BUILD && project?.kind === 'local' && (
+              <Button
+                size="sm"
+                onClick={() => bridge().site?.openInBrowser(showAfter ? afterId : run.projectId)}
+              >
+                {copy.done.openInBrowser}
+              </Button>
+            )}
+          </>
+        }
         header={
           <span className="text-[12px] text-muted">
             {redesign ? (
@@ -64,7 +107,7 @@ export function DoneLayout({ run }: { run: RunState }) {
               copy.done.previewAsIs
             ) : (
               <RichText
-                text={format(DEV ? copy.done.previewCaption : copy.done.previewLiveCaption, {
+                text={format(TEST_BUILD ? copy.done.previewCaption : copy.done.previewLiveCaption, {
                   branch: `**fitts/preview-run-${runNumber}**`,
                   n: stats.fixed,
                 })}
@@ -73,6 +116,7 @@ export function DoneLayout({ run }: { run: RunState }) {
           </span>
         }
       />
+      <ResizeHandle panel="doneSite" side="left" label={copy.layout.resizeDone} />
       <RunSummary run={run} stats={stats} />
     </>
   );
@@ -84,7 +128,7 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
   const [pastRunId, setPastRunId] = useState<string | null>(null);
   const titleId = useId();
   const runNumber = run.runId.replace('run-', '');
-  const pastRuns = DEV && run.projectId === DEMO_CHAT ? DEMO_PAST_RUNS : [];
+  const pastRuns = TEST_BUILD && run.projectId === DEMO_CHAT ? DEMO_PAST_RUNS : [];
   const past = pastRuns.find((r) => r.runId === pastRunId);
   const closing =
     stats.found === 0
@@ -138,13 +182,10 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
           >
             {copy.done.exportReport}
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => getEngine().startInterview(run.projectId)}
-          >
+          <Button size="sm" onClick={() => getEngine().startInterview(run.projectId)}>
             {copy.done.newRun}
           </Button>
+          <FinishButton run={run} />
         </div>
       </div>
 
@@ -170,6 +211,32 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * "Finished": the run is over. Its worktrees go (the branches stay, so any of them can be
+ * checked out), and you're back with all your projects.
+ */
+function FinishButton({ run }: { run: RunState }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="primary"
+      size="sm"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        void (bridge().finishRun?.(run.projectId, run.runId) ?? Promise.resolve())
+          .catch(() => undefined)
+          .then(() => {
+            setBusy(false);
+            useUi.getState().goWelcome();
+          });
+      }}
+    >
+      {busy ? copy.done.finishing : copy.done.finished}
+    </Button>
   );
 }
 
@@ -222,7 +289,6 @@ function ChangeList({ run }: { run: RunState }) {
 
 function ChangeRow({ run, change }: { run: RunState; change: Change }) {
   const engine = getEngine();
-  const toast = useToasts((s) => s.show);
   const rolledBack = change.status === 'rolled-back';
   const retrying = change.status === 'retrying';
   const undone = change.status === 'undone';
@@ -240,7 +306,7 @@ function ChangeRow({ run, change }: { run: RunState; change: Change }) {
   return (
     <li
       className={cx(
-        'flex min-h-[50px] items-center gap-2.5 rounded-control px-2.5 py-2',
+        'flex min-h-[50px] flex-wrap items-center gap-2.5 rounded-control px-2.5 py-2',
         rolledBack || retrying
           ? // Sun, not red: a rollback is safe; red is only for destructive actions and stop.
             'border border-dashed border-sun bg-sun-tint'
@@ -250,7 +316,16 @@ function ChangeRow({ run, change }: { run: RunState; change: Change }) {
     >
       {badge}
       <span className={cx('flex-1 text-[14px] font-semibold', undone && 'text-muted')}>
-        {(rolledBack || retrying) && change.reason ? change.reason : change.title}
+        {change.title}
+        {/* What happened last time, or what Fitts is doing now. */}
+        {(rolledBack || retrying) && change.reason && (
+          <span className="block text-[12px] font-normal text-ink-2">
+            {format(copy.done.rolledBackWhy, { reason: change.reason })}
+          </span>
+        )}
+        {retrying && run.nowText && (
+          <span className="block text-[12px] font-normal text-cobalt-ink">{run.nowText}</span>
+        )}
         {undone && (
           <span className="block text-[12px] font-normal">
             {change.merged
@@ -262,7 +337,7 @@ function ChangeRow({ run, change }: { run: RunState; change: Change }) {
       {change.prNumber && !rolledBack && !retrying && !undone && (
         <button
           type="button"
-          onClick={() => toast(format(copy.items.prToast, { n: change.prNumber ?? 0 }))}
+          onClick={() => openPr(change)}
           className="font-mono text-[13px] text-cobalt-ink underline hover:text-cobalt-deep"
         >
           PR #{change.prNumber}
@@ -276,13 +351,7 @@ function ChangeRow({ run, change }: { run: RunState; change: Change }) {
           {copy.done.retrying}
         </span>
       ) : rolledBack ? (
-        <Button
-          size="inline"
-          variant="sun"
-          onClick={() => engine.retryChange(run.projectId, change.id)}
-        >
-          {copy.done.tryAgain}
-        </Button>
+        <RetryControls run={run} change={change} />
       ) : undone ? (
         <Button size="inline" onClick={() => engine.retryChange(run.projectId, change.id)}>
           {copy.done.redo}

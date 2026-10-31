@@ -32,13 +32,13 @@ test('Finding panel (Ask): open, change the fix, not a problem, Esc', async () =
   await expect(panel).toContainText('Severity 3 · Major');
   await expect(panel).toContainText('H4 Consistency and standards');
   await expect(panel).toContainText('4 of 5 agree');
-  await expect(panel.getByRole('slider', { name: 'Compare before and after' })).toBeVisible();
+  // Not fixed yet: the page as Fitts found it, and a note that the fixed version comes after.
+  await expect(panel.getByText('Once I’ve fixed and checked this')).toBeVisible();
   await expectNoSeriousA11yViolations(page);
 
   await panel.getByRole('tab', { name: 'Evidence' }).click();
   await expect(panel).toContainText('Novice flagged it');
-  await panel.getByRole('tab', { name: 'Mockup' }).click();
-  await expect(panel).toContainText('Mockup · not code');
+  await expect(panel.getByRole('tab', { name: 'Mockup' })).toHaveCount(0);
 
   await panel.getByRole('button', { name: 'Change the fix' }).click();
   await expect(messageBox(page)).toHaveValue('For the button names, instead…');
@@ -56,6 +56,11 @@ test('Finding panel (Ask): open, change the fix, not a problem, Esc', async () =
   await expect(panel).toBeHidden();
   await expect(chat(page)).toContainText('Want to tell me why? It helps next time.');
   await expect(card).toContainText('Not a problem');
+
+  // Changed your mind: it's open again, ready to fix.
+  await card.click();
+  await panel.getByRole('button', { name: 'It is a problem' }).click();
+  await expect(panel.getByRole('button', { name: 'Fix it' })).toBeVisible();
 });
 
 test('Finding panel: Fix it shows the fixing footer', async () => {
@@ -79,7 +84,8 @@ test('Finding panel (Autonomous): fixed footer and undo', async () => {
   await expect(panel).toContainText('Fixed and verified ✓ · label check passes');
   await expectNoSeriousA11yViolations(page);
   await panel.getByRole('button', { name: 'View PR #12' }).click();
-  await expect(page.getByText('PR #12 opens on GitHub in Phase 2.')).toBeVisible();
+  // The scripted run's PRs aren't on GitHub, so there's nothing to open.
+  await expect(page.getByText('That was a practice run')).toBeVisible();
   await panel.getByRole('button', { name: 'Undo' }).click();
   await expect(panel).toContainText('Undone · PR #12 closed');
 });
@@ -145,10 +151,20 @@ test('batch approval: review each steps through every fix, then answers the batc
   await expect(panel).toContainText('Approved');
   await panel.getByRole('button', { name: 'Next fix' }).click();
 
-  // Skip the second, approve the third: the batch is answered with two of three.
+  // Skip the second, approve the third. Nothing is sent yet: every call can still change.
   await panel.getByRole('button', { name: 'Skip' }).click();
   await expect(panel).toContainText('Fix 3 of 3');
+  await panel.getByRole('button', { name: 'Not a problem' }).click();
+  await expect(panel).toContainText('0 left to decide');
+  await expect(panel).toBeVisible();
+  // Changed my mind: approve it instead.
   await panel.getByRole('button', { name: 'Approve fix' }).click();
+  await expect(panel.getByRole('button', { name: 'Approve fix' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  // Go ahead sends them: the batch is answered with two of three.
+  await panel.getByRole('button', { name: 'Go ahead · fix 2' }).click();
   await expect(panel).toBeHidden();
   await expect(card).toContainText('Approved 2 of 3');
 });
@@ -210,7 +226,7 @@ test('edge-state cards answer through the engine', async () => {
   await loadScenario(page, 'Nothing found');
   await chat(page).getByRole('button', { name: 'See what I checked' }).click();
   await chat(page)
-    .getByRole('button', { name: /Show \d+ steps I took/ })
+    .getByRole('button', { name: /Show all \d+ steps/ })
     .click();
   await expect(chat(page)).toContainText('Keyboard-only pass through each flow');
 });

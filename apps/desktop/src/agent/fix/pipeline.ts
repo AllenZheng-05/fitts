@@ -16,11 +16,19 @@ import type {
 } from '@fitts/schema';
 import { PAGE_PROBES } from '@fitts/probes';
 import { specFonts } from '@fitts/styles';
-import type { AssetsResult, TestRun, VerifyPagesResult, VerifyResult } from '../protocol';
+import type { AssetsResult, CiRun, TestRun, VerifyPagesResult, VerifyResult } from '../protocol';
+
+/** Before any change: the project's tests and its CI checks, to compare a fix against. */
+interface Baseline {
+  tests: TestRun;
+  ci: CiRun;
+}
+
+const NO_CI: CiRun = { ran: false, checks: [] };
 import { problems, type Check } from '../review/aggregate';
 import type { Direction } from '../review/themefit';
 import type { Site } from '../site-client';
-import { taskFile, type FixTools } from './fixer';
+import { ciLine, fixBudget, taskFile, type FixTools } from './fixer';
 import {
   fixedByRedesign,
   judgeRedesign,
@@ -60,8 +68,15 @@ export interface PipelineHost {
 export type Fixer = (
   task: string,
   tools: FixTools,
-  opts: { findingId: string; onStep: (line: string) => void },
-) => Promise<{ patched: number; summary: string }>;
+  opts: {
+    findingId: string;
+    onStep: (line: string) => void;
+    /** The step budget (fixBudget). */
+    budget?: number;
+    /** At the budget while still making progress: keep going? */
+    more?: (steps: number) => Promise<boolean>;
+  },
+) => Promise<{ patched: number; summary: string; notes?: string }>;
 
 export type Redesigner = (
   task: string,
@@ -92,9 +107,14 @@ interface Pending {
   findingId: string;
   changeId?: string;
   retryReason?: string;
+  /** The user's note for a retry. */
+  hint?: string;
   /** The mode when the fix was started (a change since Autonomous asks before the PR). */
   mode: Mode;
 }
+
+/** "No change made…" → "no change made…" (a reason inside a sentence). */
+const lowerFirst = (s: string) => s.replace(/^[A-Z](?![A-Z])/, (c) => c.toLowerCase());
 
 const slug = (s: string) =>
   s
@@ -129,6 +149,7 @@ export function prBody(
   check: Check | undefined,
   summary: string,
   tested = false,
+  ci: string[] = [],
 ): string {
   return [
     `**${f.heuristic ?? f.lens}** · severity ${f.severity}`,
@@ -144,7 +165,7 @@ export function prBody(
     '',
     `## Verification`,
     check
-      ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).${tested ? ' Your test suite still passes on this branch.' : ''}`
+      ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).${tested ? ' Your test suite still passes on this branch.' : ''}${ciLine(ci)}`
       : 'Re-checked by the reviewer panel.',
     '',
     `## Repro`,
@@ -182,9 +203,13 @@ export class FixPipeline {
   /** Each wording card's change, so "Undo this" can revert just that line. */
   private readonly wording = new Map<string, WordingChange & { changeId: string }>();
   /** The project's own tests on an untouched worktree, once per starting point (HEAD, redesign). */
-  private readonly testBaselines = new Map<string, Promise<TestRun>>();
+  private readonly testBaselines = new Map<string, Promise<Baseline>>();
+  /** Jobs whose CI checks passed, by check name (for the PR body). */
+  private readonly ciJobs = new Map<string, string[]>();
   /** Jobs whose change kept the project's tests passing (the PR says so). */
   private readonly testedJobs = new Set<string>();
+  /** What each finding's last attempt read and changed, so Try again starts from there. */
+  private readonly lastNotes = new Map<string, string>();
 
   constructor(
     private readonly host: PipelineHost,
@@ -207,31 +232,64 @@ export class FixPipeline {
    * The project's tests before any change, on this fresh worktree: once per starting point, so
    * later jobs reuse it. Tests that can't run count as "nothing to compare against".
    */
-  private baselineTests(job: string): Promise<TestRun> {
+  private baselineTests(job: string): Promise<Baseline> {
     const key = this.base ?? 'HEAD';
     let baseline = this.testBaselines.get(key);
     if (!baseline) {
-      baseline = (this.site.fix({ fn: 'tests', job }) as Promise<TestRun>).catch(() => ({
+      const tests = (this.site.fix({ fn: 'tests', job }) as Promise<TestRun>).catch(() => ({
         ran: false,
         ok: true,
         summary: '',
+      }));
+      const ci = (this.site.fix({ fn: 'ci', job }) as Promise<CiRun>).catch((): CiRun => ({
+        ran: false,
+        checks: [],
+      }));
+      baseline = Promise.all([tests, ci]).then(([t, c]) => ({
+        tests: t ?? { ran: false, ok: true, summary: '' },
+        ci: c ?? NO_CI,
       }));
       this.testBaselines.set(key, baseline);
     }
     return baseline;
   }
 
-  /** After a change that passed its checks: does the project's own test suite still pass? */
-  private async testsAfter(job: string, baseline: TestRun): Promise<string | null> {
+  /**
+   * After a change that passed its checks: does the project's own test suite still pass, and
+   * do its CI checks (lint, formatting, types)? Only what passed before the change counts.
+   */
+  private async testsAfter(job: string, baseline: Baseline): Promise<string | null> {
     // Tests that already failed (or never ran) before the change can't tell us anything.
-    if (!baseline?.ran || !baseline.ok) return null;
-    this.host.emit([{ type: 'now.changed', nowText: 'Running your tests' }]);
-    const after = (await this.site.fix({ fn: 'tests', job })) as TestRun;
-    if (after.ok) {
+    if (baseline.tests.ran && baseline.tests.ok) {
+      this.host.emit([{ type: 'now.changed', nowText: 'Running your tests' }]);
+      const after = (await this.site.fix({ fn: 'tests', job })) as TestRun;
+      if (!after.ok)
+        return `your tests fail with this change: ${after.summary.split('\n')[0] ?? 'see the test output'}`;
       this.testedJobs.add(job);
+    }
+    return this.ciAfter(job, baseline.ci);
+  }
+
+  /**
+   * The project's CI checks after the change: Fitts formats what it changed the project's way,
+   * then a check that passed before and fails now rolls the fix back (it would fail the PR).
+   */
+  private async ciAfter(job: string, before: CiRun): Promise<string | null> {
+    if (!before.ran) return null;
+    this.host.emit([{ type: 'now.changed', nowText: 'Running your CI checks' }]);
+    const after = ((await this.site.fix({ fn: 'ci', job }).catch(() => NO_CI)) ?? NO_CI) as CiRun;
+    const passed = new Map(before.checks.map((c) => [c.name, c.ok]));
+    const broke = after.checks.filter((c) => !c.ok && passed.get(c.name) !== false);
+    if (!broke.length) {
+      if (after.checks.length)
+        this.ciJobs.set(
+          job,
+          after.checks.map((c) => c.name),
+        );
       return null;
     }
-    return `your tests fail with this change: ${after.summary.split('\n')[0] ?? 'see the test output'}`;
+    const first = broke[0];
+    return `your CI check “${first?.name ?? ''}” fails with this change: ${first?.summary.split('\n')[0] ?? 'see its output'}`;
   }
 
   get busy(): boolean {
@@ -249,20 +307,32 @@ export class FixPipeline {
     this.pump();
   }
 
-  retry(changeId: string): void {
+  /**
+   * Try again (a rolled-back fix) or Redo (an undone one). A retry says in the chat what's
+   * different this time, starts from what the last attempt found, and takes the user's note.
+   */
+  retry(changeId: string, hint?: string): void {
     const c = this.host.state().changes.find((x) => x.id === changeId);
     const f = c && this.host.state().findings.find((x) => c.findingIds.includes(x.id));
-    if (!c || !f) return;
+    if (!c || !f || c.status === 'retrying') return;
     if (c.status === 'undone' && c.prNumber !== undefined) {
       void this.reopen(c);
       return;
     }
+    const last = c.reason ? ` Last time ${lowerFirst(c.reason)}.` : '';
+    const plan = hint
+      ? ` I’ll go by your note: “${hint}”.`
+      : this.lastNotes.has(f.id)
+        ? ' This time I’ll start from what I already found and take a different approach.'
+        : ' This time I’ll take a different approach.';
+    this.host.say(`Trying “${f.title}” again.${last}${plan}`);
     this.change({ ...c, status: 'retrying' });
     this.update(f.id, { status: 'fixing' });
     this.queue.push({
       findingId: f.id,
       changeId,
       ...(c.reason ? { retryReason: c.reason } : {}),
+      ...(hint ? { hint } : {}),
       mode: this.host.state().mode,
     });
     this.pump();
@@ -331,11 +401,18 @@ export class FixPipeline {
             error?: string;
           },
       };
-      const out = await this.fixer(taskFile(f, check, p.retryReason), tools, {
-        findingId: f.id,
-        onStep: (line) => this.host.emit([{ type: 'now.changed', nowText: line }]),
-      });
+      const out = await this.fixer(
+        taskFile(f, check, p.retryReason, this.lastNotes.get(f.id), p.hint),
+        tools,
+        {
+          findingId: f.id,
+          onStep: (line) => this.host.emit([{ type: 'now.changed', nowText: line }]),
+          budget: fixBudget(f, check),
+          more: (steps) => this.keepGoing(f, steps),
+        },
+      );
       summary = out.summary;
+      if (out.notes) this.lastNotes.set(f.id, out.notes);
       if (out.patched === 0) reason = summary ? `no change made: ${summary}` : 'no change made';
       else {
         this.host.emit([{ type: 'now.changed', nowText: `Checking the fix for “${f.title}”` }]);
@@ -354,6 +431,19 @@ export class FixPipeline {
       reason = (e as Error).message;
     }
     if (reason !== null) await this.fail(p, f, job, reason);
+  }
+
+  /**
+   * A fix past its step budget that's still making progress: Autonomous and Dangerous keep
+   * going; the ask modes ask, with what it has cost so far; Plan never gets here.
+   */
+  private keepGoing(f: Finding, steps: number): Promise<boolean> {
+    const mode = this.host.state().mode;
+    if (mode === 'autonomous' || mode === 'dangerous') return Promise.resolve(true);
+    const spent = this.host.costOf(f.id);
+    return this.host.ask(
+      `“${f.title}” is taking longer than usual: ${steps} steps so far${spent > 0 ? `, $${spent.toFixed(2)}` : ''}. I’m still finding new things. Can I keep going?`,
+    );
   }
 
   private async pass(
@@ -386,6 +476,7 @@ export class FixPipeline {
     };
     this.change(change, !p.changeId);
     this.update(f.id, { status: 'verified', diff, costUsd });
+    if (p.changeId) this.host.say(`That worked: “${f.title}” is fixed and checked.`);
     if (!p.changeId)
       this.host.emit([
         { type: 'chat.item', item: { id: this.host.id(), type: 'fix.result', changeId } },
@@ -406,10 +497,13 @@ export class FixPipeline {
     if (mode === 'plan') return;
     const startedAuto = p.mode === 'autonomous' || p.mode === 'dangerous';
     const nowAuto = mode === 'autonomous' || mode === 'dangerous';
+    // Ask every action asks before every push; a fix started in Autonomous asks if you've
+    // switched to an ask mode since.
     if (
-      startedAuto &&
-      !nowAuto &&
-      !(await this.host.ask(`Can I open a pull request for “${f.title}”?`))
+      ((startedAuto && !nowAuto) || mode === 'ask-every') &&
+      !(await this.host.ask(
+        `Can I push ${change.branch ?? 'the fix'} to GitHub and open a pull request for “${f.title}”?`,
+      ))
     )
       return;
     try {
@@ -417,7 +511,7 @@ export class FixPipeline {
         fn: 'prOpen',
         job,
         title: f.title,
-        body: prBody(f, check, summary, this.testedJobs.has(job)),
+        body: prBody(f, check, summary, this.testedJobs.has(job), this.ciJobs.get(job)),
         ...(this.base ? { base: this.base } : {}),
       })) as { number: number; url: string };
       this.change({ ...change, prNumber: pr.number, prUrl: pr.url });
@@ -451,6 +545,11 @@ export class FixPipeline {
       this.host.emit([
         { type: 'chat.item', item: { id: this.host.id(), type: 'fix.result', changeId } },
       ]);
+    // A retry that failed again says so, and what you can do next.
+    else if (p.changeId)
+      this.host.say(
+        `That didn’t work either: ${lowerFirst(reason)}. I put everything back. You can try again with a note for me (where the code lives, what you’d do), or leave it.`,
+      );
   }
 
   /** §9.4 undo: close an open PR (deleting its branch), or open a revert PR for a merged one. */
@@ -719,6 +818,7 @@ export class FixPipeline {
           wording,
           fixed,
           tested: this.testedJobs.has(prepared.job),
+          ci: this.ciJobs.get(prepared.job) ?? [],
         }),
       })) as { number: number; url: string };
       this.change({ ...change, prNumber: pr.number, prUrl: pr.url });

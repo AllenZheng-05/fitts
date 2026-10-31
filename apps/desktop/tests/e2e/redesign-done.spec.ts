@@ -54,7 +54,12 @@ test('Autonomous redesign: pick another direction, undo wording, reach Done', as
     'aria-pressed',
     'true',
   );
+  // A click opens the direction large; you choose it from there.
   await directions.getByRole('button', { name: 'Warm & personal' }).click();
+  const viewer = page.getByRole('dialog', { name: 'Warm & personal' });
+  await expect(viewer).toBeVisible();
+  await viewer.getByRole('button', { name: 'Choose this one' }).click();
+  await expect(viewer).toBeHidden();
   await expect(site.getByText('AFTER · WARM & PERSONAL')).toBeVisible();
 
   await page.getByRole('button', { name: 'Every page' }).click();
@@ -91,6 +96,11 @@ test('Redesign in an Ask mode waits for a pick', async () => {
   await page.waitForTimeout(2_000);
   await expect(chat(page)).not.toContainText('Applying the look');
   await directions.getByRole('button', { name: 'Classic & formal' }).click();
+  await expect(chat(page)).not.toContainText('Applying the look');
+  await page
+    .getByRole('dialog', { name: 'Classic & formal' })
+    .getByRole('button', { name: 'Choose this one' })
+    .click();
   await expect(chat(page)).toContainText('Applying the look');
 });
 

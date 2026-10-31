@@ -8,13 +8,13 @@ import { FittsEmblem } from '../../components/brand/FittsEmblem';
 import { copy } from '../../copy';
 import { bridge } from '../../lib/bridge';
 import { format } from '../../lib/format';
-import { checkKey, storeKey } from '../../lib/keys';
+import { checkKey, storeKey, useKeyInfo } from '../../lib/keys';
 import { useDetection } from '../../lib/use-detection';
 import { KEY_CHECK_MS, projectFromFolder } from '../../lib/new-project';
 import type { ToolsStatus } from '@fitts/schema';
-import { DEV } from '../../dev';
+import { TEST_BUILD } from '../../dev';
 import { LAST_RUN_CAPTIONS, MOCK_USER } from '../../mock/fixtures/projects';
-import { addAndOpenProject, openReplay } from '../../state/actions';
+import { addAndOpenProject } from '../../state/actions';
 import { useProjects } from '../../state/projects';
 import { useRunStore } from '../../state/run-store';
 import { useSettings, type UserMode } from '../../state/settings';
@@ -53,6 +53,7 @@ function SetupCard() {
   const settings = useSettings();
   const openSettings = useUi((s) => s.openSettings);
   const [key, setKey] = useState('');
+  const saved = useKeyInfo((s) => s.info.meta);
   const [checkedWorks, setKeyWorks] = useState(false);
   // A key main already holds (saved earlier) works until the user types a different one.
   const keyWorks = key ? checkedWorks : checkedWorks || settings.keys.meta;
@@ -109,6 +110,14 @@ function SetupCard() {
           label={copy.welcome.keyLabel}
           type="password"
           autoComplete="off"
+          hint={
+            !key && saved?.saved && saved.last4
+              ? format(copy.welcome.keySaved, {
+                  last4: saved.last4,
+                  from: saved.source === 'env' ? copy.welcome.keyFromEnv : '',
+                })
+              : undefined
+          }
           value={key}
           onChange={(e) => {
             setKey(e.target.value);
@@ -228,18 +237,6 @@ function SetupCard() {
           </span>
         )}
       </p>
-      {bridge().replay && (
-        <p className="-mt-2 text-[13px] text-ink-2">
-          {copy.welcome.replayLead}{' '}
-          <button
-            type="button"
-            onClick={() => void openReplay()}
-            className="font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
-          >
-            {copy.welcome.replayLink}
-          </button>
-        </p>
-      )}
     </section>
   );
 }
@@ -276,7 +273,7 @@ function PermissionChip({
 /** What main found on this computer; outside Electron (component tests), Phase 1's sample. */
 function useTools(): ToolsStatus | null {
   const [tools, setTools] = useState<ToolsStatus | null>(() =>
-    !bridge().tools && DEV ? { git: '2', gh: MOCK_USER.github, node: '22' } : null,
+    !bridge().tools && TEST_BUILD ? { git: '2', gh: MOCK_USER.github, node: '22' } : null,
   );
   useEffect(() => {
     const check = bridge().tools;
@@ -321,7 +318,9 @@ function WelcomeBack() {
     >
       <h2 id={headingId} className="font-display text-[22px] font-bold">
         {/* Phase 1's sample user and captions are for dev and e2e builds only. */}
-        {DEV ? format(copy.welcome.backTitle, { name: MOCK_USER.firstName }) : copy.welcome.back}
+        {TEST_BUILD
+          ? format(copy.welcome.backTitle, { name: MOCK_USER.firstName })
+          : copy.welcome.back}
       </h2>
       <ul className="flex max-h-[420px] flex-wrap gap-3 overflow-y-auto">
         {projects.map((project) => {
@@ -331,7 +330,7 @@ function WelcomeBack() {
           const caption =
             run?.phase === 'audit'
               ? format(copy.welcome.backRunning, { step: run.step })
-              : ((DEV ? LAST_RUN_CAPTIONS[project.id] : undefined) ??
+              : ((TEST_BUILD ? LAST_RUN_CAPTIONS[project.id] : undefined) ??
                 (run?.phase === 'done'
                   ? format(copy.welcome.backDone, { fixes, prs })
                   : copy.welcome.backNeverRun));

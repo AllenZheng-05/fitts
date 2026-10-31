@@ -7,8 +7,11 @@ import {
   type SiteInput,
   type SiteNav,
   type SiteStatus,
+  type SiteDevice,
+  type SiteVersion,
+  SCREEN_DEVICE,
 } from '@fitts/schema';
-import { BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { BrowserWindow, ipcMain, nativeImage, screen, shell } from 'electron';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectProject, devCommandOnPort } from '../projects/detect';
@@ -23,6 +26,24 @@ interface Live {
   window?: SiteWindow;
   status: SiteStatus;
   health?: ReturnType<typeof setInterval>;
+  /** A version (not the project's own site): frees its port when it closes. */
+  release?: () => void;
+}
+
+/** Where versions of a site come from: the FixHost's worktrees and ports. */
+export interface VersionSource {
+  viewDir(projectId: string, runId: string, version: SiteVersion): Promise<string>;
+  reservePort(): Promise<number>;
+  releasePort(port: number): void;
+}
+
+const PATH = /^\/[^\s]{0,300}$/;
+const BRANCH = /^fitts\/[\w./-]{1,120}$/;
+
+/** "Your screen": a desktop browser the size of the display Fitts is on, in CSS px. */
+function screenDevice(): SiteDevice {
+  const { width, height } = screen.getPrimaryDisplay().size;
+  return { id: SCREEN_DEVICE, label: 'Your screen', width, height, mobile: false };
 }
 
 const ASSET_NAME = /^[\w.-]+\.(jpg|png|svg)$/;
@@ -40,6 +61,8 @@ export class SiteManager {
     | undefined;
   /** A write from Fitts's action held for the gate goes to the agent (§13). */
   onHeld: ((projectId: string, held: HeldRequest) => void) | undefined;
+  /** Worktrees and ports for versions of a site, set by main. */
+  versions: VersionSource | undefined;
 
   constructor(
     private readonly root: string,
@@ -59,7 +82,72 @@ export class SiteManager {
     const status: SiteStatus = { ...(live?.status ?? { projectId, status: 'starting' }), ...patch };
     if (live) live.status = status;
     this.broadcast(IPC.siteStatus, status);
-    this.onStatus?.(status);
+    // Versions are only for looking at; the agent never drives them.
+    if (!live?.release) this.onStatus?.(status);
+  }
+
+  /**
+   * A version of the project's site under its own id (versionSiteId): a fix's branch or the
+   * run's preview, served from a worktree by its own dev server on a spare port. It's only
+   * for the user to look at and use; Fitts never acts on it.
+   */
+  async openVersion(
+    siteId: string,
+    projectId: string,
+    runId: string,
+    version: SiteVersion,
+  ): Promise<void> {
+    if (!SAFE_ID.test(runId) || !siteId.startsWith(`${projectId}.v.`) || !SAFE_ID.test(siteId))
+      return;
+    const branches = version.kind === 'branch' ? [version.branch] : version.branches;
+    if (!branches.every((b) => BRANCH.test(b))) return;
+    if (this.live.has(siteId)) this.close(siteId);
+    const project = this.projectFor(projectId);
+    const source = this.versions;
+    if (project?.kind !== 'local' || !source) {
+      this.broadcast(IPC.siteStatus, {
+        projectId: siteId,
+        status: 'unavailable',
+      } satisfies SiteStatus);
+      return;
+    }
+    const port = await source.reservePort();
+    const live: Live = {
+      server: new DevServer('', '', port),
+      status: { projectId: siteId, status: 'starting' },
+      release: () => source.releasePort(port),
+    };
+    this.live.set(siteId, live);
+    this.status(siteId, { status: 'starting' });
+    let dir: string;
+    try {
+      dir = await source.viewDir(projectId, runId, version);
+    } catch (e) {
+      if (this.live.get(siteId) === live)
+        this.status(siteId, { status: 'failed', log: [(e as Error).message] });
+      return;
+    }
+    if (this.live.get(siteId) !== live) return;
+    live.server = new DevServer(dir, devCommandOnPort(dir, port), port);
+    this.status(siteId, { url: live.server.url });
+    const ok = await live.server.start(90_000);
+    if (!ok || this.live.get(siteId) !== live) {
+      if (this.live.get(siteId) === live)
+        this.status(siteId, { status: 'failed', log: live.server.log });
+      else live.server.stop();
+      return;
+    }
+    const win = new SiteWindow(
+      siteId,
+      live.server.url,
+      (jpeg, w, h) => this.broadcast(IPC.siteFrame, siteId, jpeg, w, h),
+      (patch) => this.status(siteId, patch),
+    );
+    live.window = win;
+    const detection = await detectProject(dir);
+    const path = version.path && PATH.test(version.path) ? version.path : undefined;
+    await win.load(path ?? project.startPath ?? detection?.startPath ?? '/').catch(() => undefined);
+    this.status(siteId, { status: 'running' });
   }
 
   async open(projectId: string): Promise<void> {
@@ -70,7 +158,7 @@ export class SiteManager {
       return;
     }
     const project = this.projectFor(projectId);
-    if (project?.kind === 'live' && !project.replay) return this.openLive(projectId, project);
+    if (project?.kind === 'live') return this.openLive(projectId, project);
     const folder = project?.kind === 'local' ? project.folder : undefined;
     if (!project || !folder || !existsSync(folder)) {
       this.broadcast(IPC.siteStatus, { projectId, status: 'unavailable' } satisfies SiteStatus);
@@ -193,6 +281,9 @@ export class SiteManager {
         throw new Error('Fix calls go to the FixHost');
       case 'rects':
         return { op: 'rects', rects: await win.rects(request.refs) };
+      case 'reveal':
+        await win.reveal(request.ref).catch(() => undefined);
+        return { op: 'revealed' };
     }
   }
 
@@ -242,7 +333,13 @@ export class SiteManager {
     if (live.health) clearInterval(live.health);
     live.window?.destroy();
     live.server.stop();
+    live.release?.();
     this.live.delete(projectId);
+  }
+
+  /** Every version of a project's site (a run is finished; its worktrees go). */
+  closeVersions(projectId: string): void {
+    for (const id of [...this.live.keys()]) if (id.startsWith(`${projectId}.v.`)) this.close(id);
   }
 
   closeAll(): void {
@@ -304,6 +401,29 @@ export class SiteManager {
     ipcMain.on(IPC.siteClose, (_e, id: unknown) => {
       if (typeof id === 'string') this.close(id);
     });
+    // Only a page on a dev server on this computer: the URL comes from main, not the renderer.
+    ipcMain.on(IPC.siteOpenInBrowser, (_e, id: unknown) => {
+      const live = typeof id === 'string' ? this.live.get(id) : undefined;
+      const url = live?.status.url ?? live?.server.url;
+      if (url && /^http:\/\/localhost:\d+(\/|$)/.test(url)) void shell.openExternal(url);
+    });
+    ipcMain.on(
+      IPC.siteOpenVersion,
+      (_e, siteId: unknown, projectId: unknown, runId: unknown, version: unknown) => {
+        const v = version as SiteVersion | null;
+        const ok =
+          typeof siteId === 'string' &&
+          typeof projectId === 'string' &&
+          typeof runId === 'string' &&
+          v !== null &&
+          typeof v === 'object' &&
+          ((v.kind === 'branch' && typeof v.branch === 'string') ||
+            (v.kind === 'preview' &&
+              Array.isArray(v.branches) &&
+              v.branches.every((b) => typeof b === 'string')));
+        if (ok) void this.openVersion(siteId, projectId, runId, v);
+      },
+    );
     ipcMain.on(IPC.siteResize, (_e, id: unknown, w: unknown, h: unknown) => {
       if (typeof id === 'string' && typeof w === 'number' && typeof h === 'number')
         this.window(id)?.resize(w, h);
@@ -311,7 +431,10 @@ export class SiteManager {
     // Only a device Fitts offers, by id: the renderer never sets arbitrary emulation.
     ipcMain.on(IPC.siteDevice, (_e, id: unknown, deviceId: unknown) => {
       if (typeof id !== 'string') return;
-      const device = DEVICES.find((d) => d.id === deviceId) ?? null;
+      const device =
+        deviceId === SCREEN_DEVICE
+          ? screenDevice()
+          : (DEVICES.find((d) => d.id === deviceId) ?? null);
       void this.window(id)
         ?.emulate(device)
         .catch(() => undefined);

@@ -29,6 +29,7 @@ export class IpcRunEngine implements RunEngine {
     private readonly bridge: EngineBridge,
     private readonly briefFor: (projectId: string) => Brief | undefined = () => undefined,
     private readonly settingsFor: () => EngineCall['settings'] = () => undefined,
+    private readonly lastRunFor: (projectId: string) => string | undefined = () => undefined,
   ) {
     bridge.onEvents((batch) => this.apply(batch));
     // A renderer that reloads mid-run picks up every run main already knows.
@@ -59,11 +60,13 @@ export class IpcRunEngine implements RunEngine {
   ): void {
     const brief = this.briefFor(projectId);
     const settings = this.settingsFor();
+    const lastRunId = this.lastRunFor(projectId);
     this.bridge.call({
       projectId,
       method,
       args,
       ...(brief ? { brief } : {}),
+      ...(lastRunId ? { lastRunId } : {}),
       ...(settings ? { settings } : {}),
     });
   }
@@ -144,8 +147,16 @@ export class IpcRunEngine implements RunEngine {
   undoChange(projectId: string, changeId: string) {
     this.call(projectId, 'undoChange', changeId);
   }
-  retryChange(projectId: string, changeId: string) {
-    this.call(projectId, 'retryChange', changeId);
+  showFinding(projectId: string, findingId: string) {
+    this.call(projectId, 'showFinding', findingId);
+  }
+
+  reopenFinding(projectId: string, findingId: string) {
+    this.call(projectId, 'reopenFinding', findingId);
+  }
+
+  retryChange(projectId: string, changeId: string, hint?: string) {
+    this.call(projectId, 'retryChange', changeId, ...(hint ? [hint] : []));
   }
   rewindTo(projectId: string, stepIndex: number | null) {
     this.call(projectId, 'rewindTo', stepIndex);

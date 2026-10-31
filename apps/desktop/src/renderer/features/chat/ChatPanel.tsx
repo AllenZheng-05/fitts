@@ -17,11 +17,14 @@ export function ChatPanel({
   run,
   aboveComposer,
   className,
+  width,
 }: {
   run: RunState;
   /** Pinned above the message box, e.g. the interview's ready bar. */
   aboveComposer?: ReactNode;
   className?: string;
+  /** Its width, when the user resized it. */
+  width?: number | undefined;
 }) {
   const speaksAloud = useSettings((s) => s.speaksAloud);
   const speaking = useSpeech((s) => s.speaking);
@@ -37,6 +40,7 @@ export function ChatPanel({
         'flex min-h-0 min-w-0 flex-col overflow-hidden rounded-panel border-[1.5px] border-ink bg-card shadow-panel',
         className,
       )}
+      style={width ? { width } : undefined}
     >
       <div className="flex flex-none items-center gap-2.5 border-b border-ink px-3.5 py-2.5">
         <FittsAvatar size={36} speaking={speaking} />

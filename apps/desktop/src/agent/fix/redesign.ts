@@ -10,7 +10,7 @@ import type { CallContext, LlmCaller } from '../llm/call';
 import type { AssetsResult, VerifyPagesResult } from '../protocol';
 import { problems, type Check } from '../review/aggregate';
 import type { Direction } from '../review/themefit';
-import { fileHandlers, runToolLoop, TOOLS, type FixTools } from './fixer';
+import { ciLine, fileHandlers, runToolLoop, TOOLS, type FixTools } from './fixer';
 
 export const MAX_REDESIGN_STEPS = 48;
 
@@ -265,6 +265,8 @@ export function redesignPrBody(input: {
   fixed: Finding[];
   /** The project's own test suite passed on the branch. */
   tested?: boolean;
+  /** The project's CI checks that passed on the branch. */
+  ci?: string[];
 }): string {
   const d = input.direction;
   return [
@@ -296,6 +298,6 @@ export function redesignPrBody(input: {
       : []),
     '',
     '## Verification',
-    `Loaded every page on this branch's dev server (${input.routes.join(', ')}): each one renders, and no new problems at severity 2 or higher appeared (all page probes, focus, and 360, 768 and 1280px).${input.tested ? ' Your test suite still passes on this branch.' : ''}`,
+    `Loaded every page on this branch's dev server (${input.routes.join(', ')}): each one renders, and no new problems at severity 2 or higher appeared (all page probes, focus, and 360, 768 and 1280px).${input.tested ? ' Your test suite still passes on this branch.' : ''}${ciLine(input.ci)}`,
   ].join('\n');
 }

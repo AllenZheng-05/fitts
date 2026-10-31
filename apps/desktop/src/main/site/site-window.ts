@@ -19,6 +19,10 @@ const MOBILE_UA =
 import type { AxSnapshot, HeldRequest, OpTrace } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 
+/** What "Point at something" picks when the pointer is inside one: a control, as a whole. */
+const CONTROLS =
+  'a,button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="checkbox"],[role="switch"],[role="menuitem"],[role="option"]';
+
 /** Isolated world for Fitts's scripts (refs, rects); the page can't see them. */
 const WORLD = 1001;
 
@@ -423,9 +427,10 @@ export class SiteWindow {
     return this.evaluate<string | null>(`
       const el = document.elementFromPoint(${Number(x)}, ${Number(y)});
       if (!el) return null;
-      const target = el.closest('[data-ref],[data-testid],[data-fitts-ref]')
-        || el.closest('a,button,input,select,textarea,label,summary,[role],[tabindex]')
-        || el;
+      // The thing under the pointer: the control it's part of (a link, a button, a field), or
+      // else the innermost element itself (a heading, a picture, a paragraph). Never a big
+      // ancestor just because it has a ref or a role.
+      const target = el.closest(${JSON.stringify(CONTROLS)}) || el;
       return F.refOf(target);`);
   }
 
@@ -592,6 +597,13 @@ export class SiteWindow {
       ...result,
       trace: { feedback, requests, ...(rect ? { rect } : {}), ...(opened ? { opened } : {}) },
     };
+  }
+
+  /** Scrolls an element to the middle of the view, so the user sees what Fitts will touch. */
+  reveal(ref: string): Promise<void> {
+    return this.evaluate<void>(`
+      const el = F.find(${JSON.stringify(ref)});
+      if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });`);
   }
 
   /** A real click at the element's center, after scrolling it into view. */

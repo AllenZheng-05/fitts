@@ -7,10 +7,10 @@ import tailwindcss from '@tailwindcss/vite';
 // IIFE, imported with ?raw), so they are bundled rather than externalized.
 const externalizeDeps = { exclude: ['@fitts/schema', '@fitts/styles', '@fitts/probes'] };
 
-export default defineConfig(({ command }) => {
-  // Dev tools (gallery, Scenario panel) ship in `pnpm dev` and in e2e builds
-  // (FITTS_DEV_TOOLS=1), never in a plain production build.
-  const devTools = command === 'serve' || process.env['FITTS_DEV_TOOLS'] === '1';
+export default defineConfig((_env) => {
+  // The test harness (Phase 1's mock engine and stand-in sites, the Scenario panel, the
+  // gallery) is only in e2e builds (FITTS_DEV_TOOLS=1). `pnpm dev` is the real app.
+  const devTools = process.env['FITTS_DEV_TOOLS'] === '1';
 
   return {
     main: {

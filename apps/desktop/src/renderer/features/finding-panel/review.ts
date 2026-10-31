@@ -1,6 +1,6 @@
 import type { ChatItem, RunState } from '@fitts/schema';
 import { getEngine } from '../../state/engine';
-import { useUi } from '../../state/ui';
+import { useUi, type Decision } from '../../state/ui';
 
 export type Batch = Extract<ChatItem, { type: 'approval.batch' }>;
 
@@ -15,7 +15,7 @@ export function pendingBatchFor(run: RunState, findingId: string): Batch | undef
 }
 
 /** Your calls so far on `batch` ("Review each"). */
-export function decisionsFor(batch: Batch): Record<string, 'fix' | 'skip'> {
+export function decisionsFor(batch: Batch): Record<string, Decision> {
   const review = useUi.getState().review;
   return review?.itemId === batch.id ? review.decisions : {};
 }
@@ -23,7 +23,7 @@ export function decisionsFor(batch: Batch): Record<string, 'fix' | 'skip'> {
 /** The first fix in `batch` still waiting on you, looking after `fromId` first. */
 export function nextUndecided(
   batch: Batch,
-  decisions: Record<string, 'fix' | 'skip'>,
+  decisions: Record<string, Decision>,
   fromId?: string,
 ): string | undefined {
   const ids = batch.findingIds;
@@ -42,24 +42,29 @@ export function startReview(batch: Batch): void {
 }
 
 /**
- * Records your call on one fix and moves to the next undecided one. Once every fix has a
- * call, the batch is answered with the approved ones and the panel closes.
+ * Records (or changes) your call on one fix and moves to the next undecided one. Nothing is
+ * sent until you press Go ahead, so every call can be changed until then.
  */
-export function decide(
-  run: RunState,
-  batch: Batch,
-  findingId: string,
-  decision: 'fix' | 'skip',
-): void {
+export function decide(batch: Batch, findingId: string, decision: Decision): void {
   const decisions = { ...decisionsFor(batch), [findingId]: decision };
   const next = nextUndecided(batch, decisions, findingId);
-  const ui = useUi.getState();
-  if (next) {
-    ui.set({ review: { itemId: batch.id, decisions }, openFindingId: next });
-    return;
-  }
-  ui.set({ review: null, openFindingId: null });
-  getEngine().approveFixes(
+  useUi.getState().set({
+    review: { itemId: batch.id, decisions },
+    openFindingId: next ?? findingId,
+  });
+}
+
+/**
+ * Go ahead: the fixes you approved start, the ones that aren't problems are dismissed, and the
+ * skipped ones stay open. The batch is answered and the panel closes.
+ */
+export function finishReview(run: RunState, batch: Batch): void {
+  const decisions = decisionsFor(batch);
+  const engine = getEngine();
+  for (const id of batch.findingIds)
+    if (decisions[id] === 'dismiss') engine.dismissFinding(run.projectId, id);
+  useUi.getState().set({ review: null, openFindingId: null });
+  engine.approveFixes(
     run.projectId,
     batch.findingIds.filter((id) => decisions[id] === 'fix'),
   );

@@ -1,7 +1,8 @@
 /**
- * True in `pnpm dev` and e2e builds; false in a release. Phase 1's stand-ins (mock sites, demo
- * projects, the canned user and transcripts) are only reachable behind this flag: it's a
- * build-time constant, so a release bundle drops them entirely (scripts/check-release-bundle.mjs
- * checks that). Real users only ever see their own projects and their own sites.
+ * True only in e2e builds (FITTS_DEV_TOOLS=1). Phase 1's stand-ins (the mock engine and sites,
+ * demo projects, the canned user and transcripts, the Scenario panel) are the test harness and
+ * sit behind this flag: it's a build-time constant, so `pnpm dev` and a release drop them
+ * entirely (scripts/check-release-bundle.mjs checks the release). Users only ever see their own
+ * projects and their own sites.
  */
-export const DEV = __FITTS_DEV_TOOLS__;
+export const TEST_BUILD = __FITTS_DEV_TOOLS__;

@@ -44,13 +44,16 @@ async function siteRect(page: Page, ref: string) {
   );
 }
 
+/** How much the site is scaled down to fit the panel ("Your screen" is bigger than it). */
+async function canvasScale(page: Page) {
+  const box = await canvas(page).boundingBox();
+  const width = await canvas(page).evaluate((c: HTMLCanvasElement) => c.width);
+  return box && width ? box.width / width : 1;
+}
+
 /** Clicks a site element through the canvas, the way a user does while driving. */
 async function clickInSite(page: Page, ref: string) {
-  const rect = await siteRect(page, ref);
-  if (!rect) throw new Error(`no ${ref} in the site`);
-  const box = await canvas(page).boundingBox();
-  if (!box) throw new Error('no canvas');
-  await page.mouse.click(box.x + rect.left + rect.width / 2, box.y + rect.top + rect.height / 2);
+  await clickInSiteScaled(page, ref, await canvasScale(page));
 }
 
 test('demo/chat streams live, the user drives it in the interview, and point returns a ref', async () => {
@@ -79,8 +82,9 @@ test('demo/chat streams live, the user drives it in the interview, and point ret
   const to = await siteRect(page, 'compose-to');
   const box = await canvas(page).boundingBox();
   if (!to || !box) throw new Error('no To field');
-  await page.mouse.move(box.x + to.left + 10, box.y + to.top + to.height / 2);
-  await page.mouse.click(box.x + to.left + 10, box.y + to.top + to.height / 2);
+  const k = await canvasScale(page);
+  await page.mouse.move(box.x + (to.left + 10) * k, box.y + (to.top + to.height / 2) * k);
+  await page.mouse.click(box.x + (to.left + 10) * k, box.y + (to.top + to.height / 2) * k);
   await expect(page.getByText('pointing at #compose-to')).toBeVisible();
 });
 
@@ -119,8 +123,8 @@ test('see it on a phone: the site renders at 390×844, scaled into the panel, an
   await clickInSiteScaled(page, 'compose-next-1', scale);
   await expect(address(page)).toHaveValue(`localhost:${PORT}/compose/recipient`);
 
-  // Back to fitting the panel.
-  await page.getByLabel('See it on').selectOption('fit');
+  // Back to your own screen's size (the default), scaled into the panel.
+  await page.getByLabel('See it on').selectOption('screen');
   await expect
     .poll(() => canvas(page).evaluate((c: HTMLCanvasElement) => c.width), { timeout: 30_000 })
     .toBeGreaterThan(600);

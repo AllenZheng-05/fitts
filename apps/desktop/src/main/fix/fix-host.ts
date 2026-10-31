@@ -2,7 +2,7 @@
 // worktree, verification on the worktree's own dev server, commits, PRs and the preview branch.
 // The agent drives it over RPC (the fixer's model calls stay in the agent). Fitts only touches
 // the project's `.fitts-worktrees/` and its own `fitts/` branches.
-import type { Project } from '@fitts/schema';
+import type { Project, SiteVersion } from '@fitts/schema';
 import { PAGE_PROBES } from '@fitts/probes';
 import {
   appendFileSync,
@@ -12,6 +12,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -19,6 +20,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type {
   AssetsResult,
+  CiRun,
   FixCall,
   FontAsk,
   TestRun,
@@ -30,6 +32,7 @@ import { devCommandOnPort } from '../projects/detect';
 import { DevServer, responds } from '../site/dev-server';
 import { SiteWindow } from '../site/site-window';
 import { run } from '../spawn';
+import { ciChecks, FORMATTABLE, LINTABLE, type PackageManager } from './ci';
 import { prBackend, type PrBackend } from './pr';
 
 const git = (cwd: string, ...args: string[]) => run('git', args, { cwd, timeoutMs: 120_000 });
@@ -96,6 +99,8 @@ export class FixHost {
         return this.commit(call.job, call.message);
       case 'tests':
         return this.tests(call.job);
+      case 'ci':
+        return this.ci(call.job);
       case 'reset': {
         // Ignored files (node_modules) stay: `clean` without -x only removes untracked ones.
         const job = this.job(call.job);
@@ -197,6 +202,7 @@ export class FixHost {
 
   /** `pnpm install --offline --frozen-lockfile`; if that fails, link the project's node_modules. */
   private async dependencies(root: string, dir: string): Promise<void> {
+    if (existsSync(join(dir, 'node_modules'))) return;
     if (existsSync(join(dir, 'pnpm-lock.yaml'))) {
       // A project that isn't a workspace itself mustn't be adopted by one around its folder.
       const own = existsSync(join(dir, 'pnpm-workspace.yaml')) ? [] : ['--ignore-workspace'];
@@ -423,25 +429,107 @@ export class FixHost {
       // No package.json: nothing to run.
     }
     if (!script || /no test specified/i.test(script)) return { ran: false, ok: true, summary: '' };
-    const pm = existsSync(join(job.root, 'pnpm-lock.yaml'))
-      ? 'pnpm'
-      : existsSync(join(job.root, 'yarn.lock'))
-        ? 'yarn'
-        : 'npm';
-    const res = await run(pm, ['test'], {
+    const res = await run(packageManager(job.root), ['test'], {
       cwd: job.dir,
       timeoutMs: 240_000,
       env: { CI: '1' },
     });
-    // eslint-disable-next-line no-control-regex
-    const plain = `${res.stdout}\n${res.stderr}`.replace(/\u001b\[[0-9;]*m/g, '');
-    const lines = plain.split(/\r?\n/).filter((l) => l.trim());
-    const failing = lines.filter((l) => /\b(FAIL|✗|×|failed|Error)\b/.test(l)).slice(0, 6);
-    return {
-      ran: true,
-      ok: res.code === 0,
-      summary: (failing.length ? failing : lines.slice(-6)).join('\n').slice(0, 1200),
-    };
+    return { ran: true, ok: res.code === 0, summary: outputSummary(res.stdout, res.stderr) };
+  }
+
+  /**
+   * The project's CI checks in the worktree (ci.ts): first the files Fitts changed are
+   * formatted the project's way (Prettier, ESLint's fixes) when its CI checks them, then each
+   * check runs. The pipeline compares against the same checks before the change.
+   */
+  async ci(id: string): Promise<CiRun> {
+    const job = this.job(id);
+    const pm = packageManager(job.root);
+    const checks = ciChecks(job.dir, pm);
+    if (!checks.length) return { ran: false, checks: [] };
+    const changed = await this.changedFiles(job);
+    const exec = (tool: string, args: string[]) =>
+      run(pm === 'npm' ? 'npx' : pm, [...(pm === 'npm' ? [] : ['exec']), tool, ...args], {
+        cwd: job.dir,
+        timeoutMs: 120_000,
+      });
+    const pretty = changed.filter((f) => FORMATTABLE.test(f));
+    if (checks.some((c) => c.tool === 'prettier') && pretty.length)
+      await exec('prettier', ['--write', '--ignore-unknown', ...pretty]);
+    const lintable = changed.filter((f) => LINTABLE.test(f));
+    if (checks.some((c) => c.tool === 'eslint') && lintable.length)
+      await exec('eslint', ['--fix', ...lintable]);
+    const results: CiRun['checks'] = [];
+    for (const c of checks) {
+      const res = await run(c.command, c.args, {
+        cwd: job.dir,
+        timeoutMs: 240_000,
+        env: { CI: '1' },
+      });
+      results.push({
+        name: c.name,
+        ok: res.code === 0,
+        summary: outputSummary(res.stdout, res.stderr),
+      });
+    }
+    return { ran: true, checks: results };
+  }
+
+  /** The worktree's changed and new files (relative paths), never dependencies. */
+  private async changedFiles(job: Job): Promise<string[]> {
+    const res = await git(job.dir, 'status', '--porcelain', '--untracked-files=all');
+    return res.stdout
+      .split(/\r?\n/)
+      .map((l) => l.slice(3).trim().replace(/^"|"$/g, ''))
+      .map((l) => (l.includes(' -> ') ? (l.split(' -> ')[1] ?? l) : l))
+      .filter((l) => l && !l.startsWith('node_modules/') && existsSync(join(job.dir, l)));
+  }
+
+  /** A port for a dev server Fitts runs beside the project's own (verification, versions). */
+  async reservePort(): Promise<number> {
+    return this.freePort();
+  }
+
+  releasePort(port: number): void {
+    this.ports.delete(port);
+  }
+
+  /**
+   * A version of the site to look at (the Before/After switch, a fix's live preview), as a
+   * folder with its dependencies: the worktree that already has the branch, or a detached one
+   * made for viewing. `preview` merges the run's verified branches into its preview branch.
+   */
+  async viewDir(projectId: string, runId: string, version: SiteVersion): Promise<string> {
+    const root = this.root(projectId);
+    if (version.kind === 'preview') {
+      const { merged } = await this.preview(projectId, runId, version.branches);
+      if (version.branches.length && !merged.length) throw new Error('no fix merged cleanly');
+      const dir = join(root, '.fitts-worktrees', runId, 'preview');
+      await this.dependencies(root, dir);
+      return dir;
+    }
+    const list = await git(root, 'worktree', 'list', '--porcelain');
+    for (const block of list.stdout.split(/\r?\n\r?\n/)) {
+      const path = /^worktree (.+)$/m.exec(block)?.[1];
+      const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1];
+      if (path && branch === version.branch && existsSync(path)) return resolve(path);
+    }
+    const dir = join(
+      root,
+      '.fitts-worktrees',
+      runId,
+      `view-${version.branch.replace(/[^\w-]/g, '_')}`,
+    );
+    if (existsSync(dir)) await git(dir, 'checkout', '-q', '--detach', version.branch);
+    else {
+      await this.exclude(root);
+      mkdirSync(dirname(dir), { recursive: true });
+      const add = await git(root, 'worktree', 'add', '-q', '--detach', dir, version.branch);
+      if (add.code !== 0)
+        throw new Error(`git worktree add failed: ${add.stderr.trim().slice(0, 200)}`);
+    }
+    await this.dependencies(root, dir);
+    return dir;
   }
 
   private async freePort(): Promise<number> {
@@ -556,6 +644,25 @@ export class FixHost {
     return this.prOpen(id, title, body);
   }
 
+  /**
+   * "Finished": every worktree of the run is removed (`git worktree remove`), its folder goes,
+   * and git forgets them. The `fitts/` branches stay, so the user can check any of them out.
+   */
+  async finish(projectId: string, runId: string): Promise<void> {
+    const root = this.root(projectId);
+    const runDir = join(root, '.fitts-worktrees', runId);
+    for (const [id, job] of [...this.jobs])
+      if (job.projectId === projectId && job.runId === runId) this.jobs.delete(id);
+    const list = await git(root, 'worktree', 'list', '--porcelain');
+    for (const line of list.stdout.split(/\r?\n/)) {
+      const path = /^worktree (.+)$/.exec(line)?.[1];
+      if (path && resolve(path).startsWith(runDir + sep))
+        await git(root, 'worktree', 'remove', '--force', resolve(path));
+    }
+    await git(root, 'worktree', 'prune');
+    rmSync(runDir, { recursive: true, force: true });
+  }
+
   /** FINALIZE: every verified branch merged into `fitts/preview-<runId>` (§9.4). */
   async preview(projectId: string, runId: string, branches: string[]) {
     const root = this.root(projectId);
@@ -574,6 +681,22 @@ export class FixHost {
     }
     return { branch: name, merged };
   }
+}
+
+/** The project's package manager, by its lockfile. */
+function packageManager(root: string): PackageManager {
+  if (existsSync(join(root, 'pnpm-lock.yaml'))) return 'pnpm';
+  if (existsSync(join(root, 'yarn.lock'))) return 'yarn';
+  return 'npm';
+}
+
+/** The useful end of a command's output: its failing lines, or its last lines. Plain text. */
+function outputSummary(stdout: string, stderr: string): string {
+  // eslint-disable-next-line no-control-regex
+  const plain = `${stdout}\n${stderr}`.replace(/\u001b\[[0-9;]*m/g, '');
+  const lines = plain.split(/\r?\n/).filter((l) => l.trim());
+  const failing = lines.filter((l) => /\b(FAIL|✗|×|failed|Error|error)\b/.test(l)).slice(0, 6);
+  return (failing.length ? failing : lines.slice(-6)).join('\n').slice(0, 1200);
 }
 
 /** The worktree's dev command on its own port (see devCommandOnPort). */
