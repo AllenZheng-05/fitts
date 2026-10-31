@@ -12,7 +12,7 @@ RunEngine (22 methods, @fitts/schema) and SiteSurface interfaces. Spec: docs/SPE
 Phase 1's spec and docs/DECISIONS.md still govern the UI; don't change UI behavior unless
 SPEC-phase2 says to.
 Do one milestone (P0–P12) at a time, in order, each ending green and committed.
-Real network calls are allowed only in apps/desktop/src/agent/llm/, apps/desktop/src/main/voice/,
+Real network calls are allowed only in apps/desktop/src/agent/llm/, apps/desktop/src/main/voice/, apps/desktop/src/main/fonts/ (Fontsource, for redesign fonts)
 apps/desktop/src/agent/verify-site/ and the gh/git spawner. The renderer never makes network
 calls. Never log or commit API keys. Never run git or gh outside the project's
 .fitts-worktrees/ except the read-only checks in §4 and the PR steps in §9.3.

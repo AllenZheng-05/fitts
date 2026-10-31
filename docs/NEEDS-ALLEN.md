@@ -23,15 +23,20 @@ fixed (`2385cdb`).
 
 - `fitts-demo-2007`: your homepage as a 2007 site, on purpose (the "before"). Your previous
   design is commit `aeab71f`.
-- `fitts/redesign-quiet-confidence`: Fitts's verified redesign of it, from a real autonomous
-  run on a copy (dry-run PR): it fixed all 9 findings, and your 28 tests pass on it.
+- `fitts/redesign-launch-studio`: the newest verified redesign, from the design library: your
+  vision ("playful and modern, like a 3D product launch, name front and center", admiring
+  linear.app and rauno.me) as wide Unbounded type, self-hosted fonts and a lit three.js hero.
+  Real autonomous run on a copy (dry-run PR), $0.83.
+- `fitts/redesign-quiet-confidence`: the earlier verified redesign (before the library): it
+  fixed all 9 findings, and your 28 tests pass on it.
 
 For the demo:
 1. Deploy the "before": merge `fitts-demo-2007` into `main` and push (Cloudflare deploys it).
 2. Record Fitts on your real repo: open `C:\Users\Plasm\Projects\AllenZheng` in Fitts, in
    Autonomous mode, with `gh auth login` done, so it opens real PRs on
-   `AllenZheng-05/AllenZheng`. Expect about $1 and 5 minutes.
-3. Merge the redesign PR to deploy the "after" (or keep `fitts/redesign-quiet-confidence` as a
+   `AllenZheng-05/AllenZheng`. In the interview, say you want a new look and describe it (a
+   feeling, what to keep, a site or two you admire). Expect about $1 and 5–10 minutes.
+3. Merge the redesign PR to deploy the "after" (or keep `fitts/redesign-launch-studio` as a
    fallback). To get your old design back afterwards: `git revert` the merge, or restore
    `src/themes/default` from `aeab71f`.
 
@@ -144,7 +149,3 @@ wired.
 - **Temp folders:** delete the leftover benchmark folders (`fitts-p9-*`, `fitts-fix-*`) in
   `%TEMP%`. The session's permission rules blocked a wildcard delete there; the benches now
   clean up after themselves.
-- **CLAUDE.md network line:** the design library downloads redesign fonts from Fontsource in
-  `apps/desktop/src/main/fonts/`. Claude Code wasn't allowed to edit CLAUDE.md itself, so add
-  that folder to the "Real network calls are allowed only in …" list:
-  `apps/desktop/src/main/fonts/ (Fontsource, for redesign fonts)`.
