@@ -16,7 +16,9 @@ for this brief by kind, and the whole library catalog (parts by kind, with ids).
   name a font, put it in `headingFont` or `bodyFont` exactly as named; Fitts downloads it.
 - Nothing in `avoid` appears in any direction.
 - Sites they admire are inspiration: take what makes them work (type, color temperature,
-  density, shape, layout) and say what you took in `changes`. Never copy a site or its brand.
+  density, shape, layout) and say what you took in `changes`. Never copy a site or its brand:
+  `brand` is only ever the owner's own color (from `keep` or their current site), never a hex
+  taken from an admired site, and a hue you borrow from one should be shifted, not matched.
 - `boldness`: `close` keeps the current layout and structure and changes the surface (color,
   type, shape, decoration); `refresh` may change layout too; `new` may change everything.
   Without it, judge from the brief.

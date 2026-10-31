@@ -109,9 +109,14 @@ export interface FontAsk {
   weights: number[];
 }
 
-/** What `assets` put in the project: the stylesheet and three.js URLs, and fonts it couldn't get. */
+/** What `assets` put in the project: the stylesheet and three.js, and fonts it couldn't get. */
 export interface AssetsResult {
+  /** The fonts stylesheet's URL (served from the static folder). */
   fontsCss?: string;
+  /**
+   * three.js: a project path to import by relative path from source ("src/fitts/three/…") in a
+   * bundler project, or a URL ("/fitts/three/…") on a plain site.
+   */
   three?: string;
   fonts: { family: string; weights: number[] }[];
   missing: string[];

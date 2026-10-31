@@ -176,11 +176,12 @@ describe('a resolved spec', () => {
     });
     const md = specMarkdown(spec, {
       fontsCss: '/fitts/fonts.css',
-      three: '/fitts/three/three.module.js',
+      three: 'src/fitts/three/three.module.min.js',
     });
     expect(md).toContain('--accent: #c2410c;');
     expect(md).toContain('Keep the existing orange');
-    expect(md).toContain("import(/* @vite-ignore */ '/fitts/three/three.module.js')");
+    expect(md).toContain('at src/fitts/three/three.module.min.js. Import it');
+    expect(md).toContain('Never import it by a URL starting with /');
     expect(md).toContain('### decor: 3D hero object');
     expect(md).toContain('/fitts/fonts.css');
   });

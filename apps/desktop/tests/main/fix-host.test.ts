@@ -340,7 +340,7 @@ describe('a redesign’s assets', () => {
     })) as { fontsCss?: string; three?: string; missing: string[] };
     expect(res).toMatchObject({
       fontsCss: '/fitts/fonts.css',
-      three: '/fitts/three/three.module.min.js',
+      three: 'src/fitts/three/three.module.min.js',
       missing: ['Nope Sans'],
     });
     // A Vite project without public/ gets one; files land under public/fitts/.
@@ -349,7 +349,10 @@ describe('a redesign’s assets', () => {
     const css = readFileSync(join(dir, 'fonts.css'), 'utf8');
     expect(css).toContain('Archivo (OFL-1.1)');
     expect(css).toContain('url("/fitts/fonts/archivo-800.woff2")');
-    expect(existsSync(join(dir, 'three', 'three.module.min.js'))).toBe(true);
+    // three.js is code: beside the source, never in public/ (Vite won't import from there).
+    const wt = join(root, '.fitts-worktrees', 'run-3', 'redesign');
+    expect(existsSync(join(wt, 'src', 'fitts', 'three', 'three.module.min.js'))).toBe(true);
+    expect(existsSync(join(dir, 'three'))).toBe(false);
     await withAssets.call('app', { fn: 'discard', job: id });
   });
 

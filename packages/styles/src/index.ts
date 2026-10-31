@@ -215,14 +215,16 @@ export function specMarkdown(
         ? [`Accent: ${spec.type.accent.family} (${spec.type.accent.weights.join(', ')})`]
         : []),
       assets.fontsCss
-        ? `The font files are already in the project. Load them with the stylesheet at ${assets.fontsCss} (a <link> in the document head, or an @import at the top of the global CSS). Never load fonts from a CDN.`
+        ? `The font files are already in the project. Load them with a <link rel="stylesheet" href="${assets.fontsCss}"> in the document head (not a CSS @import: bundlers resolve those as source). Never load fonts from a CDN.`
         : 'If a font can’t be loaded, use its fallback stack.',
     ]),
     ...(spec.three && assets.three
       ? [
           '',
           '### three.js',
-          `three.js is already in the project at ${assets.three}. Load it only with a dynamic import inside a try block, from a small module of its own: \`const THREE = await import(/* @vite-ignore */ '${assets.three}')\`. Never add a three dependency or a CDN script.`,
+          assets.three.startsWith('/')
+            ? `three.js is already in the site at ${assets.three}. Load it from a small module of its own with a dynamic import inside a try block: \`const THREE = await import('${assets.three}')\`. Never add a three dependency or a CDN script.`
+            : `three.js is already in the project at ${assets.three}. Import it from a small module of its own by a relative path to that file (for example \`const THREE = await import('../fitts/three/three.module.min.js')\` from a module in src/components/), inside a try block so the page still works without it. Never import it by a URL starting with /, from public/, from a CDN, or as a "three" dependency.`,
         ]
       : []),
     '',

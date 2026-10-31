@@ -30,9 +30,10 @@ always holds.
    markup and layout for better hierarchy, alignment and rhythm, and remove decoration that
    fights the brief. Follow the layout's composition and the shape's component rules closely;
    that is what makes the look specific instead of generic.
-4. **Fonts and 3D are already in the project.** Load the fonts with the stylesheet the spec
-   names. When the spec includes a three.js part, build the scene in one small module of its
-   own that imports three from the path given, renders into one aria-hidden canvas, pauses when
+4. **Fonts and 3D are already in the project.** Load the fonts with a `<link>` to the
+   stylesheet the spec names, in the HTML head (or the framework's head). When the spec
+   includes a three.js part, build the scene in one small module of its own that imports three
+   exactly as the spec says, renders into one aria-hidden canvas, pauses when
    off screen, draws a single still frame under prefers-reduced-motion, and removes itself if
    WebGL is unavailable. Content never lives in the canvas.
 5. **Make each change with the tools.** `write_file` for new or fully rewritten files,

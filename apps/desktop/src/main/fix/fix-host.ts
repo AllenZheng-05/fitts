@@ -487,12 +487,19 @@ export class FixHost {
       );
       result.fontsCss = '/fitts/fonts.css';
     }
+    // three.js is code, not a static file: a bundler won't let source import from public/, so
+    // it goes beside the source (src/fitts/three/) and is imported by relative path. A plain
+    // site serves it from the root.
     const vendor = this.assetSources.vendorDir;
     if (three && vendor && existsSync(join(vendor, 'three', 'three.module.min.js'))) {
-      mkdirSync(join(out, 'three'), { recursive: true });
+      const bundled = staticDir(job.dir) !== job.dir;
+      const code = bundled && existsSync(join(job.dir, 'src')) ? join(job.dir, 'src') : job.dir;
+      const dest = join(code, 'fitts', 'three');
+      mkdirSync(dest, { recursive: true });
       for (const f of ['three.module.min.js', 'LICENSE'])
-        copyFileSync(join(vendor, 'three', f), join(out, 'three', f));
-      result.three = '/fitts/three/three.module.min.js';
+        copyFileSync(join(vendor, 'three', f), join(dest, f));
+      const path = relative(job.dir, join(dest, 'three.module.min.js')).split(sep).join('/');
+      result.three = bundled ? path : `/${path}`;
     }
     return result;
   }
