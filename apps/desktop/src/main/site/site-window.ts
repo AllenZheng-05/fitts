@@ -247,6 +247,7 @@ export class SiteWindow {
 
   /** Tabs through the page with real key presses; flags focus with no visible change. */
   async focusSweep(): Promise<ProbeItem[]> {
+    this.focus();
     const count = await this.probes<number>('return P.focusStart();');
     const items: ProbeItem[] = [];
     const seen = new Set<string>();
@@ -375,9 +376,28 @@ export class SiteWindow {
     else if (nav.kind === 'reload') this.wc.reload();
   }
 
+  /**
+   * Gives the hidden page keyboard focus, as a focused browser tab has: without it Tab moves
+   * nothing, focus rings and focus-opened menus don't show, and a native <select> never paints
+   * its list. The window itself stays hidden (offscreen windows have no native view to focus).
+   */
+  focus(): void {
+    const wc = this.wc;
+    if (wc.isDestroyed()) return;
+    const hidden = !this.win.isVisible();
+    wc.focus();
+    // macOS focuses the owning window along with its contents: keep it out of sight.
+    if (hidden && this.win.isVisible()) this.win.hide();
+  }
+
   input(input: SiteInput): void {
     const wc = this.wc;
-    if (input.kind === 'mouse') {
+    if (input.kind === 'focus') {
+      this.focus();
+    } else if (input.kind === 'key') {
+      void this.key(input);
+    } else if (input.kind === 'mouse') {
+      if (input.type === 'mouseDown') this.focus();
       wc.sendInputEvent({
         type: input.type,
         x: Math.round(input.x),
@@ -394,13 +414,41 @@ export class SiteWindow {
         deltaY: -input.deltaY,
         canScroll: true,
       });
-    } else {
-      wc.sendInputEvent({
-        type: input.type,
-        keyCode: input.keyCode,
-        modifiers: input.modifiers ?? [],
-      });
     }
+  }
+
+  /**
+   * A key through the DevTools protocol, with the browser's own key, code and keyCode: the
+   * page sees exactly what a real browser would send (sendInputEvent loses `code`, which many
+   * sites' shortcuts read). A printable key carries its text, so it also types.
+   */
+  private async key(input: Extract<SiteInput, { kind: 'key' }>): Promise<void> {
+    const dbg = this.wc.debugger;
+    if (!dbg.isAttached()) return;
+    const mods = input.modifiers ?? [];
+    const modifiers =
+      (mods.includes('alt') ? 1 : 0) |
+      (mods.includes('control') ? 2 : 0) |
+      (mods.includes('meta') ? 4 : 0) |
+      (mods.includes('shift') ? 8 : 0);
+    const command = mods.includes('control') || mods.includes('meta');
+    const text =
+      input.key === 'Enter' ? '\r' : input.key.length === 1 && !command ? input.key : undefined;
+    const editing = process.platform === 'darwin' && mods.includes('meta') ? macCommand(input) : [];
+    await dbg
+      .sendCommand('Input.dispatchKeyEvent', {
+        type: input.type === 'keyUp' ? 'keyUp' : text ? 'keyDown' : 'rawKeyDown',
+        key: input.key,
+        code: input.code,
+        windowsVirtualKeyCode: input.keyCode,
+        nativeVirtualKeyCode: input.keyCode,
+        modifiers,
+        ...(text && input.type === 'keyDown' ? { text, unmodifiedText: text } : {}),
+        ...(input.repeat ? { autoRepeat: true } : {}),
+        ...(input.location ? { location: input.location } : {}),
+        ...(editing.length && input.type === 'keyDown' ? { commands: editing } : {}),
+      })
+      .catch(() => undefined);
   }
 
   private async evaluate<T>(body: string): Promise<T> {
@@ -613,6 +661,7 @@ export class SiteWindow {
 
   private async clickAt(ref: string): Promise<SiteRect> {
     const before = this.path();
+    this.focus();
     const rect = await this.evaluate<SiteRect | null>(`
       const el = F.find(${JSON.stringify(ref)});
       if (!el) return null;
@@ -635,6 +684,7 @@ export class SiteWindow {
 
   private async typeInto(ref: string, text: string): Promise<null> {
     const before = this.path();
+    this.focus();
     const ok = await this.evaluate<boolean>(`
       const el = F.find(${JSON.stringify(ref)});
       if (!el) return false;
@@ -655,6 +705,7 @@ export class SiteWindow {
 
   async press(key: string) {
     const before = this.path();
+    this.focus();
     this.wc.sendInputEvent({ type: 'keyDown', keyCode: key });
     if (key.length === 1) this.wc.sendInputEvent({ type: 'char', keyCode: key });
     this.wc.sendInputEvent({ type: 'keyUp', keyCode: key });
@@ -677,6 +728,28 @@ export class SiteWindow {
 
   destroy(): void {
     if (!this.win.isDestroyed()) this.win.destroy();
+  }
+}
+
+/**
+ * macOS: ⌘A, ⌘C, ⌘X, ⌘V, ⌘Z and ⇧⌘Z are menu commands there, not key handling, so the page
+ * needs them named (Chromium's editing commands).
+ */
+function macCommand(input: Extract<SiteInput, { kind: 'key' }>): string[] {
+  const shift = input.modifiers?.includes('shift');
+  switch (input.code) {
+    case 'KeyA':
+      return ['selectAll'];
+    case 'KeyC':
+      return ['copy'];
+    case 'KeyX':
+      return ['cut'];
+    case 'KeyV':
+      return ['paste'];
+    case 'KeyZ':
+      return [shift ? 'redo' : 'undo'];
+    default:
+      return [];
   }
 }
 

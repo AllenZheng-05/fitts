@@ -84,3 +84,57 @@ describe('Transcribe (V5 protocol)', () => {
     expect(closed).toBe(true);
   });
 });
+
+describe('voice sessions (one at a time, by id)', () => {
+  it('a newer session replaces the old one; a late cancel for the old one leaves it alone', async () => {
+    const { VoiceHost } = await import('../../src/main/voice/index');
+    // Its own server: every connection gets a session, and endStream gets the final text.
+    const own = new WebSocketServer({ port: 0 });
+    await new Promise<void>((r) => own.once('listening', () => r()));
+    own.on('connection', (ws: ServerSocket) => {
+      let open = false;
+      ws.on('message', (data, isBinary) => {
+        if (isBinary) return;
+        const msg = JSON.parse((data as Buffer).toString('utf8')) as Record<string, unknown>;
+        if (!open) {
+          open = true;
+          ws.send(JSON.stringify({ type: 'sessionStarted', sessionId: 's' }));
+        } else if (msg['type'] === 'endStream') {
+          ws.send(JSON.stringify({ type: 'transcript', transcript: 'Hello' }));
+          ws.close(1000, 'No more transcript segments');
+        }
+      });
+    });
+    const address = own.address();
+    process.env['FITTS_TRANSCRIBE_URL'] =
+      `ws://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+    const events: { kind: string; session?: number }[] = [];
+    const wc = {
+      isDestroyed: () => false,
+      send: (_channel: string, e: { kind: string; session?: number }) => events.push(e),
+    } as never;
+    try {
+      const host = new VoiceHost(
+        () => 'test-key',
+        () => undefined,
+      );
+      const wake = await host.start(wc, 'ENDPOINTING', 'p');
+      const mic = await host.start(wc, 'PUSH_TO_TALK', 'p');
+      expect(wake.ok && mic.ok).toBe(true);
+      expect(mic.session).not.toBe(wake.session);
+      // "Always listening" cleans up after the mic button took over: nothing happens to it.
+      host.cancel(wake.session ?? -1);
+      host.audio(mic.session ?? -1, new ArrayBuffer(4800));
+      host.end(mic.session ?? -1);
+      await new Promise((r) => setTimeout(r, 150));
+      const closed = events.filter((e) => e.kind === 'closed').map((e) => e.session);
+      expect(closed).toContain(wake.session);
+      expect(events).toContainEqual(
+        expect.objectContaining({ kind: 'final', session: mic.session }),
+      );
+    } finally {
+      delete process.env['FITTS_TRANSCRIBE_URL'];
+      own.close();
+    }
+  });
+});

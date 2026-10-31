@@ -84,24 +84,34 @@ export interface ToolsStatus {
 /** Push to talk for the mic button; endpointing for "Always listening" (V5). */
 export type TalkSessionMode = 'PUSH_TO_TALK' | 'ENDPOINTING';
 
-/** What main tells the renderer about a voice session or a spoken line (§14). */
+/**
+ * What main tells the renderer about a voice session or a spoken line (§14). Session events
+ * carry the session's id: the mic button and "Always listening" each listen only to their own.
+ */
 export type VoiceEvent =
-  | { kind: 'partial'; text: string }
-  | { kind: 'final'; text: string }
+  | { kind: 'partial'; session: number; text: string }
+  | { kind: 'final'; session: number; text: string }
   /** The user started talking (barge-in). */
-  | { kind: 'speech' }
-  | { kind: 'error'; text: string }
-  | { kind: 'closed' }
+  | { kind: 'speech'; session: number }
+  | { kind: 'error'; session: number; text: string }
+  | { kind: 'closed'; session: number }
   | { kind: 'spoken'; id: number }
   | { kind: 'speakError'; id: number; text: string };
 
 export interface VoiceBridge {
-  /** Opens a Transcribe session; `ok: false` (offline, no key) means use the fallback. */
-  start(mode: TalkSessionMode, projectId: string): Promise<{ ok: boolean; reason?: string }>;
+  /**
+   * Opens a Transcribe session (closing any other); `ok: false` (offline, no key) means use the
+   * fallback. `session` names it in its events and in audio, end and cancel: a call for a
+   * session that has since been replaced does nothing.
+   */
+  start(
+    mode: TalkSessionMode,
+    projectId: string,
+  ): Promise<{ ok: boolean; reason?: string; session?: number }>;
   /** 24 kHz s16le mono PCM. */
-  audio(pcm: ArrayBuffer): void;
-  end(): void;
-  cancel(): void;
+  audio(session: number, pcm: ArrayBuffer): void;
+  end(session: number): void;
+  cancel(session: number): void;
   /** Streams one line with ElevenLabs; `ok: false` means use the OS voice. */
   speak(text: string, voiceId: string, projectId: string): Promise<{ ok: boolean; id: number }>;
   stopSpeaking(): void;
@@ -153,12 +163,22 @@ export type SiteInput =
       clickCount?: number;
     }
   | { kind: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
+  /**
+   * A key as the browser saw it (KeyboardEvent's key, code and keyCode), so the site gets the
+   * same key and code a real browser would give it: its own shortcuts work in the mirror.
+   */
   | {
       kind: 'key';
-      type: 'keyDown' | 'keyUp' | 'char';
-      keyCode: string;
+      type: 'keyDown' | 'keyUp';
+      key: string;
+      code: string;
+      keyCode: number;
       modifiers?: ('shift' | 'control' | 'alt' | 'meta')[];
-    };
+      repeat?: boolean;
+      location?: number;
+    }
+  /** The mirror got keyboard focus: the site's page takes focus too (keys, focus rings, menus). */
+  | { kind: 'focus' };
 
 export type SiteNav =
   { kind: 'path'; path: string } | { kind: 'back' } | { kind: 'forward' } | { kind: 'reload' };

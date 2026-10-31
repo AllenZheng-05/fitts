@@ -2106,3 +2106,47 @@ changes it led to, and the judgment calls in them:
 - **File and meta-tag verification got stricter.** The meta tag counts only inside the page's
   `<head>` (a tag in the body could be a visitor's post), and a check that was redirected must
   end on the same site (the domain, with or without www.).
+
+## Phase 2 — Allen's walkthrough feedback (round 2)
+
+- **Demo projects saved by older dev builds are dropped on load.** Before the test-build split,
+  `pnpm dev` seeded demo/chat, hartwell-site and a fake portfolio into userData/projects, and the
+  store kept them (with `lastOpenId` on one, so the app skipped Welcome). Outside test builds the
+  projects store now drops them when it loads. Each is matched by its id *and* its fixed
+  `createdAt`, so a real project that happens to be called "portfolio" stays.
+- **Every voice session has an id.** Main's events (`partial`, `final`, `speech`, `error`,
+  `closed`) carry it, and `audio`, `end` and `cancel` name it: a call for a replaced session does
+  nothing. Before, pressing the mic during "Always listening" started a push-to-talk session that
+  the wake listener's cleanup cancelled a render later (cancel took no id), so the mic did
+  nothing in that mode. A session the server ended also never unregistered its listener, so
+  after one reconnect every phrase was handled twice and the old session's late "closed" could
+  tear down the new one.
+- **Always listening reopens quietly.** A session that stayed open more than 5s and then closed
+  (Transcribe ends quiet sessions) reopens at once without the "can't hear you" line; only a
+  session that couldn't open shows trouble and backs off. The AudioContext is resumed in case a
+  mic opened without a click starts suspended.
+- **Barge-in in Always listening needs "Fitts".** Any sound in the room used to cut Fitts off
+  mid-sentence. Now a partial has to start with "Fitts" (or follow "Fitts" on its own). The mic
+  button still cuts Fitts off on any speech. "Fittz", "Fit's", "Phitts" and "hey, Fitts" were
+  added as spellings.
+- **The mirror takes the keyboard.** Measured in an offscreen window: an unfocused page never
+  moves focus on Tab, shows no focus rings, closes focus-driven menus, and never paints a native
+  `<select>` list. After `webContents.focus()` all four work, and the hidden window stays hidden
+  (Windows; macOS also focuses the owning window, so `focus()` hides it again if it showed, which
+  is unverified on a Mac). The site page gets focus when the mirror does, on a click in it, and
+  before Fitts's own clicks, typing and Tab sweeps.
+- **Keys go through the DevTools protocol** (`Input.dispatchKeyEvent`) with the browser's own
+  `key`, `code` and `keyCode`. `sendInputEvent` lost `code`, which many sites' shortcuts read.
+  Once the mirror has focus every key goes to the site, Tab and Esc included, except Fitts's own
+  ⌘/Ctrl shortcuts (`,` `P` `.` `L`). F6 or ⌘L leaves for the message box, and a hint on the site
+  says so while it has the keys, so Tab isn't a keyboard trap. On macOS, ⌘A/C/X/V/Z are sent as
+  editing commands, as Chromium needs there.
+- **The mirror fits what's drawn.** The canvas was scaled to the device's nominal size, but main's
+  window can be a different size ("Your screen" as main measures it), so a site could be cut off
+  at the right and bottom. It now fits the frames' real size.
+- **What Fitts types.** "fitts-test" stays on anything a site might save (§15), but a search,
+  filter or lookup field gets a real query, since a marked query finds nothing (seen on
+  openteamsheets.com). Lookups are `type=search`, the searchbox and combobox roles, or a name with
+  search, find, filter or look up. The model also says what each field is for (`purpose:
+  search | save`). Text areas, email and passwords are always marked. The explorer's fallback query
+  is the first meaningful word on the page (headings, then links).

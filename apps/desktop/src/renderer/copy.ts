@@ -581,6 +581,8 @@ export const copy = {
   },
   site: {
     region: 'Your site',
+    liveLabel: 'Your site (live)',
+    keysHint: 'Keys go to your site, Tab included · F6 or {leave} to leave',
     nav: 'Site navigation',
     back: 'Back',
     forward: 'Forward',

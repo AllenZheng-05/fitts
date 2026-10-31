@@ -8,7 +8,7 @@ import { PcmPlayer } from './player';
 export const voiceBridge = (): VoiceBridge | undefined =>
   (globalThis as { fitts?: { voice?: VoiceBridge } }).fitts?.voice;
 
-/** Every voice event goes through here: barge-in stops Fitts as soon as the user talks. */
+/** Every voice event goes through here. */
 const listeners = new Set<(e: VoiceEvent) => void>();
 let wired = false;
 function onVoice(fn: (e: VoiceEvent) => void): () => void {
@@ -16,8 +16,7 @@ function onVoice(fn: (e: VoiceEvent) => void): () => void {
   if (bridge && !wired) {
     wired = true;
     bridge.onEvent((e) => {
-      if (e.kind === 'speech') bargeIn?.();
-      for (const l of listeners) l(e);
+      for (const l of [...listeners]) l(e);
     });
     bridge.onAudio((id, pcm) => {
       if (id === playingId) player.push(pcm);
@@ -31,6 +30,11 @@ let bargeIn: (() => void) | undefined;
 /** Set by speech.ts: what to do when the user starts talking over Fitts. */
 export function onBargeIn(fn: () => void): void {
   bargeIn = fn;
+}
+
+/** Cuts Fitts off because the user is talking to it ("Fitts, …" while always listening). */
+export function bargeInNow(): void {
+  bargeIn?.();
 }
 
 export interface Listening {
@@ -49,6 +53,11 @@ export async function listen(
     ended?: () => void;
     /** Why there's no session ("no key", "offline", no mic). */
     failed?: (reason: string) => void;
+    /**
+     * Whether any speech cuts Fitts off (the mic button). "Always listening" hears everything
+     * in the room, so it cuts Fitts off itself, only when it hears "Fitts".
+     */
+    bargeIn?: boolean;
   },
 ): Promise<Listening | null> {
   const bridge = voiceBridge();
@@ -56,40 +65,58 @@ export async function listen(
   let last = '';
   let finalText: string | null = null;
   let waiting: ((text: string) => void) | undefined;
+  // This session's id, once main has opened it: events from any other session are ignored.
+  let id = -1;
+  let mic: MicCapture | undefined;
+  let over = false;
   const off = onVoice((e) => {
-    if (e.kind === 'partial') {
+    if (!('session' in e) || e.session !== id) return;
+    if (e.kind === 'speech') {
+      if (on.bargeIn !== false) bargeIn?.();
+    } else if (e.kind === 'partial') {
       last = e.text;
       on.partial?.(e.text);
     } else if (e.kind === 'final') {
       finalText = e.text;
       on.final?.(e.text);
       waiting?.(e.text);
-    } else if (e.kind === 'closed' || e.kind === 'error') {
+    } else if (e.kind === 'closed' || (e.kind === 'error' && !waiting)) {
+      // The session is over (the server closed it, or it dropped): stop the mic and listening.
+      over = true;
+      off();
+      mic?.stop();
       waiting?.(finalText ?? last);
       on.ended?.();
     }
   });
-  const started: { ok: boolean; reason?: string } = await bridge
+  const started: { ok: boolean; reason?: string; session?: number } = await bridge
     .start(mode, projectId)
     .catch((e: unknown) => ({ ok: false, reason: e instanceof Error ? e.message : '' }));
-  if (!started.ok) {
+  if (!started.ok || started.session === undefined) {
     off();
     on.failed?.(started.reason ?? '');
     return null;
   }
-  let mic: MicCapture;
+  const session = started.session;
+  id = session;
   try {
-    mic = await startMic((pcm) => bridge.audio(pcm));
+    mic = await startMic((pcm) => bridge.audio(session, pcm));
   } catch {
-    bridge.cancel();
+    bridge.cancel(session);
     off();
     on.failed?.('mic');
     return null;
   }
+  if (over) {
+    // It closed while the mic was starting.
+    on.failed?.('closed');
+    return null;
+  }
+  const capture = mic;
   return {
     finish: () =>
       new Promise<string>((resolve) => {
-        mic.stop();
+        capture.stop();
         const done = (text: string) => {
           clearTimeout(timer);
           waiting = undefined;
@@ -98,15 +125,15 @@ export async function listen(
         };
         waiting = done;
         const timer = setTimeout(() => {
-          bridge.cancel();
+          bridge.cancel(session);
           done(finalText ?? last);
         }, 8000);
-        bridge.end();
+        bridge.end(session);
       }),
     cancel: () => {
-      mic.stop();
-      bridge.cancel();
       off();
+      capture.stop();
+      bridge.cancel(session);
     },
   };
 }

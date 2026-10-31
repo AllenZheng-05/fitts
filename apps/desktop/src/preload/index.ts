@@ -123,10 +123,11 @@ const bridge: FittsBridge = {
       ipcRenderer.invoke(IPC.voiceStart, mode, projectId) as Promise<{
         ok: boolean;
         reason?: string;
+        session?: number;
       }>,
-    audio: (pcm) => ipcRenderer.send(IPC.voiceAudioIn, pcm),
-    end: () => ipcRenderer.send(IPC.voiceEnd),
-    cancel: () => ipcRenderer.send(IPC.voiceCancel),
+    audio: (session, pcm) => ipcRenderer.send(IPC.voiceAudioIn, session, pcm),
+    end: (session) => ipcRenderer.send(IPC.voiceEnd, session),
+    cancel: (session) => ipcRenderer.send(IPC.voiceCancel, session),
     speak: (text, voiceId, projectId) =>
       ipcRenderer.invoke(IPC.voiceSpeak, text, voiceId, projectId) as Promise<{
         ok: boolean;

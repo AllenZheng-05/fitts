@@ -5,7 +5,8 @@
 // "Fritz" even with the keyword bias (V5), so those count too.
 export type VoiceCommand = { kind: 'stop' } | { kind: 'say'; text: string } | { kind: 'wake' };
 
-const WAKE = /^\s*(?:hey\s+|ok(?:ay)?\s+)?(fitts|fitz|fits|fritz)\b[\s,.!?:;-]*(.*)$/i;
+const WAKE =
+  /^\s*(?:hey,?\s+|ok(?:ay)?,?\s+)?(fitts|fittz|fitz|fits|fit's|fritz|phitts)(?![a-z])[\s,.!?:;'-]*(.*)$/i;
 const STOP = /^(stop|stop it|stop that|hold on|pause)[.!]?$/i;
 
 /**

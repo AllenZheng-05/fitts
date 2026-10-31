@@ -34,4 +34,14 @@ describe('spoken commands (“Fitts” first)', () => {
     expect(parseVoiceCommand('stop', { armed: true })).toEqual({ kind: 'stop' });
     expect(parseVoiceCommand('check the search page')).toBeNull();
   });
+
+  it('hears the usual mishearings of “Fitts”, and “hey, Fitts”', () => {
+    expect(parseVoiceCommand("Fit's, stop")).toEqual({ kind: 'stop' });
+    expect(parseVoiceCommand('Fittz.')).toEqual({ kind: 'wake' });
+    expect(parseVoiceCommand('Hey, Fitts, open the menu')).toEqual({
+      kind: 'say',
+      text: 'Open the menu',
+    });
+    expect(parseVoiceCommand('Fitness is great')).toBeNull();
+  });
 });

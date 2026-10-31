@@ -14,7 +14,9 @@ const BYTES_PER_SECOND = 24_000 * 2;
 
 export class VoiceHost {
   private session:
-    { stt: TranscribeSession; wc: WebContents; bytes: number; projectId: string } | undefined;
+    | { id: number; stt: TranscribeSession; wc: WebContents; bytes: number; projectId: string }
+    | undefined;
+  private sessionId = 0;
   private speech: SpeechStream | undefined;
   private speechId = 0;
 
@@ -36,45 +38,56 @@ export class VoiceHost {
     wc: WebContents,
     mode: TalkSessionMode,
     projectId: string,
-  ): Promise<{ ok: boolean; reason?: string }> {
-    this.cancel();
+  ): Promise<{ ok: boolean; reason?: string; session?: number }> {
+    if (this.session) this.cancel(this.session.id);
     const key = this.key('meta');
     if (this.offline || !key) return { ok: false, reason: this.offline ? 'offline' : 'no key' };
-    const entry = { stt: undefined as unknown as TranscribeSession, wc, bytes: 0, projectId };
+    const id = ++this.sessionId;
+    const entry = { id, stt: undefined as unknown as TranscribeSession, wc, bytes: 0, projectId };
     entry.stt = new TranscribeSession(key, mode, {
-      partial: (text) => this.send(wc, { kind: 'partial', text }),
-      final: (text) => this.send(wc, { kind: 'final', text }),
-      speech: () => this.send(wc, { kind: 'speech' }),
-      error: (text) => this.send(wc, { kind: 'error', text }),
+      partial: (text) => this.send(wc, { kind: 'partial', session: id, text }),
+      final: (text) => this.send(wc, { kind: 'final', session: id, text }),
+      speech: () => this.send(wc, { kind: 'speech', session: id }),
+      error: (text) => this.send(wc, { kind: 'error', session: id, text }),
       closed: () => {
         if (this.session === entry) this.session = undefined;
         if (entry.bytes > 0)
           this.usage(projectId, { task: 'stt', seconds: entry.bytes / BYTES_PER_SECOND });
-        this.send(wc, { kind: 'closed' });
+        this.send(wc, { kind: 'closed', session: id });
       },
     });
     this.session = entry;
     try {
       await entry.stt.open();
-      return { ok: true };
+      // Replaced while it was connecting (the mic button pressed during "Always listening").
+      if (this.session !== entry) return { ok: false, reason: 'replaced' };
+      return { ok: true, session: id };
     } catch (e) {
-      this.session = undefined;
+      if (this.session === entry) this.session = undefined;
       return { ok: false, reason: (e as Error).message };
     }
   }
 
-  audio(pcm: ArrayBuffer): void {
-    if (!this.session) return;
-    this.session.bytes += pcm.byteLength;
-    this.session.stt.push(pcm);
+  /** The current session, if `id` names it: calls for a replaced session do nothing. */
+  private current(id: number) {
+    return this.session?.id === id ? this.session : undefined;
   }
 
-  end(): void {
-    this.session?.stt.end();
+  audio(id: number, pcm: ArrayBuffer): void {
+    const s = this.current(id);
+    if (!s) return;
+    s.bytes += pcm.byteLength;
+    s.stt.push(pcm);
   }
 
-  cancel(): void {
-    this.session?.stt.close();
+  end(id: number): void {
+    this.current(id)?.stt.end();
+  }
+
+  cancel(id: number): void {
+    const s = this.current(id);
+    if (!s) return;
+    s.stt.close();
     this.session = undefined;
   }
 
@@ -120,15 +133,17 @@ export class VoiceHost {
         typeof projectId === 'string' ? projectId : '',
       ),
     );
-    ipcMain.on(IPC.voiceAudioIn, (_e, pcm: unknown) => {
-      if (pcm instanceof ArrayBuffer) this.audio(pcm);
+    const idOf = (v: unknown) => (typeof v === 'number' ? v : -1);
+    ipcMain.on(IPC.voiceAudioIn, (_e, session: unknown, pcm: unknown) => {
+      if (pcm instanceof ArrayBuffer) this.audio(idOf(session), pcm);
       else if (ArrayBuffer.isView(pcm))
         this.audio(
+          idOf(session),
           pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer,
         );
     });
-    ipcMain.on(IPC.voiceEnd, () => this.end());
-    ipcMain.on(IPC.voiceCancel, () => this.cancel());
+    ipcMain.on(IPC.voiceEnd, (_e, session: unknown) => this.end(idOf(session)));
+    ipcMain.on(IPC.voiceCancel, (_e, session: unknown) => this.cancel(idOf(session)));
     ipcMain.handle(IPC.voiceSpeak, (e, text: unknown, voiceId: unknown, projectId: unknown) =>
       this.speak(
         e.sender,

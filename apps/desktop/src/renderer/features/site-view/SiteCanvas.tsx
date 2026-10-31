@@ -10,18 +10,22 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from 'react';
+import { copy } from '../../copy';
 import { bridge } from '../../lib/bridge';
 import { cx } from '../../lib/cx';
+import { format } from '../../lib/format';
+import { isMac } from '../../lib/platform';
+import { MESSAGE_BOX_ID } from './SiteView';
+
+const KEYS_HINT_ID = 'site-keys-hint';
 import { useDevice, useProjectDevice } from '../../state/device';
 
-/** Electron's sendInputEvent key names for keys whose DOM names differ. */
-const KEY_NAMES: Record<string, string> = {
-  ArrowUp: 'Up',
-  ArrowDown: 'Down',
-  ArrowLeft: 'Left',
-  ArrowRight: 'Right',
-  ' ': 'Space',
-};
+/** Fitts's own shortcuts (⌘, ⌘P ⌘⇧P ⌘. ⌘L): never sent to the site. */
+function appShortcut(e: KeyboardEvent<HTMLDivElement>): boolean {
+  if (!e.metaKey && !e.ctrlKey) return false;
+  const k = e.key.toLowerCase();
+  return k === ',' || k === 'p' || k === '.' || k === 'l';
+}
 
 const CURSORS: Record<string, string> = { hand: 'pointer', ibeam: 'text', iBeam: 'text' };
 
@@ -59,6 +63,9 @@ export function SiteCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  // The size frames actually arrive at: main's window can differ from the device's nominal size
+  // ("Your screen" as main measures it), and the fit must use what's drawn.
+  const [frame, setFrame] = useState<{ width: number; height: number } | null>(null);
 
   // Frames: decode off the main thread, draw the newest.
   useEffect(() => {
@@ -74,6 +81,7 @@ export function SiteCanvas({
           if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;
+            setFrame({ width, height });
           }
           canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
           bitmap.close();
@@ -93,17 +101,18 @@ export function SiteCanvas({
     const box = boxRef.current;
     const site = bridge().site;
     if (!box || !site) return;
+    const drawn = frame ?? device;
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
       const { width, height } = entry.contentRect;
-      const scale = Math.min(width / device.width, height / device.height, 1);
+      const scale = Math.min(width / drawn.width, height / drawn.height, 1);
       useDevice
         .getState()
-        .setView(projectId, { scale, x: Math.max(0, (width - device.width * scale) / 2), y: 0 });
+        .setView(projectId, { scale, x: Math.max(0, (width - drawn.width * scale) / 2), y: 0 });
     });
     observer.observe(box);
     return () => observer.disconnect();
-  }, [projectId, device]);
+  }, [projectId, device, frame]);
   /** Panel px to site px. */
   const toSite = (x: number, y: number) => ({
     x: (x - view.x) / view.scale,
@@ -154,32 +163,56 @@ export function SiteCanvas({
       send({ kind: 'mouse', type, x: at.x, y: at.y, button, clickCount: 1 });
     };
   const key = (type: 'keyDown' | 'keyUp') => (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Tab') return;
-    if (!interactive) {
-      if (type === 'keyDown' && onNeedsWheel && e.key.length === 1) onNeedsWheel(() => undefined);
+    // F6 leaves the site for the message box (as browsers move between panes); Fitts's own
+    // shortcuts (⌘L, ⌘., ⌘P…) stay Fitts's.
+    if (e.key === 'F6') {
+      if (type === 'keyDown') {
+        e.preventDefault();
+        document.getElementById(MESSAGE_BOX_ID)?.focus();
+      }
       return;
     }
-    e.preventDefault();
-    const name = KEY_NAMES[e.key] ?? e.key;
-    send({ kind: 'key', type, keyCode: name, modifiers: modifiers(e) });
-    // Printable characters also need a char event to type into fields.
-    if (type === 'keyDown' && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-      send({ kind: 'key', type: 'char', keyCode: e.key, modifiers: modifiers(e) });
+    if (appShortcut(e)) return;
+    if (!interactive) {
+      // Without the wheel, Tab moves on through Fitts; typing meant for the site asks first.
+      if (type === 'keyDown' && onNeedsWheel && (e.key.length === 1 || e.key === 'Enter'))
+        onNeedsWheel(() => undefined);
+      return;
     }
+    // Every other key is the site's while it has focus, Tab and Esc included.
+    e.preventDefault();
+    send({
+      kind: 'key',
+      type,
+      key: e.key,
+      code: e.code,
+      keyCode: e.keyCode,
+      modifiers: modifiers(e),
+      ...(e.repeat ? { repeat: true } : {}),
+      ...(e.location ? { location: e.location } : {}),
+    });
   };
+  const [focused, setFocused] = useState(false);
 
   return (
     <div ref={boxRef} className="absolute inset-0 overflow-hidden bg-card" data-site-canvas>
-      {/* The site is mouse-driven here; keyboard users drive it from the chat (Phase 1 §7.3).
-          It's an embedded app surface that forwards raw input, which jsx-a11y can't model. */}
+      {/* An embedded app surface that forwards raw input, which jsx-a11y can't model. Once it
+          has focus (a click, or Tab into it), every key goes to the site, Tab included; F6 or
+          ⌘L leaves for the message box. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div
         role="application"
-        aria-label="Your site (live)"
+        aria-label={copy.site.liveLabel}
+        aria-describedby={interactive && focused ? KEYS_HINT_ID : undefined}
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
         tabIndex={interactive || onNeedsWheel ? 0 : -1}
         className="h-full w-full outline-none"
         style={{ cursor: cursor ? (CURSORS[cursor] ?? cursor) : undefined }}
+        onFocus={() => {
+          setFocused(true);
+          if (interactive) enqueue(() => bridge().site?.input(projectId, { kind: 'focus' }));
+        }}
+        onBlur={() => setFocused(false)}
         onPointerDown={mouse('mouseDown')}
         onPointerUp={mouse('mouseUp')}
         onPointerMove={mouse('mouseMove')}
@@ -205,6 +238,14 @@ export function SiteCanvas({
           style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
         />
       </div>
+      {interactive && focused && (
+        <p
+          id={KEYS_HINT_ID}
+          className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-pill bg-ink px-3 py-1 text-[12px] text-card"
+        >
+          {format(copy.site.keysHint, { leave: isMac() ? '⌘L' : 'Ctrl+L' })}
+        </p>
+      )}
     </div>
   );
 }

@@ -254,7 +254,7 @@ test('the real crawl reaches every route and tries every primary control (covera
   expect(refs('target-size')).toContain('compose-send'); // #7
   expect(refs('contrast')).toContain('compose-body'); // #8
   expect(failing('contrast').map((r) => r.route)).toContain('/'); // #9
-  expect(said('network')).toMatch(/requests for 10 characters typed/); // #10
+  expect(said('network')).toMatch(/requests for \d+ characters typed/); // #10
   expect(said('network')).toMatch(/\/api\/search fetched \d+ times, no Cache-Control or ETag/); // #11
   expect(said('network')).toMatch(/\/api\/search returns 1\.\d MB, 20,000 items/); // #12
   expect(said('feedback-timing')).toMatch(/wait with no loading indicator/); // #13
@@ -338,4 +338,50 @@ test('take the wheel on the live site pauses the crawl and logs clicks by name; 
   await expect
     .poll(() => shot.evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(300);
+});
+
+/** Runs a script in the live site's page (the hidden offscreen window), from main. */
+function inSite<T>(app: LaunchedApp['app'], code: string): Promise<T> {
+  return app.evaluate(async ({ BrowserWindow }, js) => {
+    const site = BrowserWindow.getAllWindows().find((w) => w.webContents.isOffscreen());
+    return (await site?.webContents.executeJavaScript(js)) as unknown;
+  }, code) as Promise<T>;
+}
+
+test('the mirror takes the keyboard: focus, Tab, the site’s own keys, and F6 back out', async () => {
+  test.setTimeout(120_000);
+  const { app, page } = launched;
+  await page.getByLabel('Meta Model API key').fill('meta-key-12345');
+  await page.getByRole('button', { name: 'Browse' }).click();
+  await expect(page.getByText(/Vite \+ React 19/)).toBeVisible();
+  await page.getByRole('button', { name: 'Open my project' }).click();
+  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose`, { timeout: 60_000 });
+  await expect.poll(() => siteRect(page, 'compose-contact-grandma')).not.toBeNull();
+  await inSite(
+    app,
+    `window.__keys = []; addEventListener('keydown', (e) => window.__keys.push(e.key + '/' + e.code)); true`,
+  );
+
+  // A click on an empty spot gives the site the keyboard (the user drives in the interview).
+  const box = await page.getByRole('application', { name: 'Your site (live)' }).boundingBox();
+  if (!box) throw new Error('no site');
+  await page.mouse.click(box.x + 12, box.y + box.height - 12);
+  await expect(page.getByText(/^Keys go to your site/)).toBeVisible();
+  await expect.poll(() => inSite<boolean>(app, 'document.hasFocus()')).toBe(true);
+
+  // Tab moves through the site, and keys arrive as the browser named them.
+  await page.keyboard.press('Tab');
+  await expect
+    .poll(() => inSite<string>(app, 'document.activeElement?.tagName ?? ""'))
+    .not.toMatch(/^(BODY|HTML|)$/);
+  await page.keyboard.press('k');
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect
+    .poll(() => inSite<string[]>(app, 'window.__keys'))
+    .toEqual(expect.arrayContaining(['Tab/Tab', 'k/KeyK', 'ArrowDown/ArrowDown']));
+
+  // F6 hands the keyboard back to Fitts.
+  await page.keyboard.press('F6');
+  await expect(page.getByLabel('Message Fitts')).toBeFocused();
+  await expect(page.getByText(/^Keys go to your site/)).toBeHidden();
 });

@@ -20,6 +20,8 @@ export async function startMic(onFrame: (pcm: ArrayBuffer) => void): Promise<Mic
     void ctx.close();
     throw e;
   }
+  // "Always listening" opens the mic without a click; make sure the context isn't suspended.
+  if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
   const source = ctx.createMediaStreamSource(stream);
   const node = new AudioWorkletNode(ctx, 'fitts-pcm-capture');
   node.port.onmessage = (e: MessageEvent<ArrayBuffer>) => onFrame(e.data);

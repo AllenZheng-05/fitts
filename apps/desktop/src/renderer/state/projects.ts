@@ -29,6 +29,18 @@ function projectStorage(): StateStorage {
   };
 }
 
+/**
+ * The demo projects that dev builds before the test-build split saved into userData, by id and
+ * their fixed creation time (so a real project that happens to be called "portfolio" stays).
+ * Outside test builds they're dropped on load, and the app opens on Welcome again.
+ */
+const STALE_DEMOS: Record<string, string> = {
+  'demo-chat': '2026-10-20T09:00:00.000Z',
+  'hartwell-site': '2026-10-22T14:30:00.000Z',
+  portfolio: '2026-10-27T18:00:00.000Z',
+};
+export const isStaleDemo = (p: Project) => STALE_DEMOS[p.id] === p.createdAt;
+
 interface ProjectsState {
   projects: Project[];
   /** The project whose workspace opens on launch (SPEC §4). */
@@ -80,7 +92,19 @@ export const useProjects = create<ProjectsState>()(
         })),
       clear: () => set({ projects: [], lastOpenId: null }),
     }),
-    { name: 'fitts.projects', storage: createJSONStorage(projectStorage) },
+    {
+      name: 'fitts.projects',
+      storage: createJSONStorage(projectStorage),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<ProjectsState>;
+        if (TEST_BUILD) return { ...current, ...saved };
+        const projects = (saved.projects ?? []).filter((p) => !isStaleDemo(p));
+        const lastOpenId = projects.some((p) => p.id === saved.lastOpenId)
+          ? (saved.lastOpenId ?? null)
+          : null;
+        return { ...current, ...saved, projects, lastOpenId };
+      },
+    },
   ),
 );
 

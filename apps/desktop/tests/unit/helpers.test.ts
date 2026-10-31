@@ -1,8 +1,10 @@
+import type { Project } from '@fitts/schema';
 import { afterEach, describe, expect, it } from 'vitest';
 import { onRoute } from '../../src/renderer/features/audit/routes';
 import { isSeeThrough } from '../../src/renderer/features/background/seeThrough';
 import { format, formatUsd } from '../../src/renderer/lib/format';
 import { shortcutLabel } from '../../src/renderer/lib/platform';
+import { isStaleDemo } from '../../src/renderer/state/projects';
 import { severityLabel, severityTone } from '../../src/renderer/lib/severity';
 
 describe('severity helpers (SPEC §5.1)', () => {
@@ -89,5 +91,15 @@ describe('onRoute (site map rows narrow the findings tray)', () => {
     expect(onRoute('/search', '/compose')).toBe(false);
     expect(onRoute('/', '/')).toBe(true);
     expect(onRoute('/compose', '/')).toBe(false);
+  });
+});
+
+describe('demo projects saved by older dev builds', () => {
+  it('match by id and their fixed creation time, so a real “portfolio” stays', () => {
+    const demo = { id: 'portfolio', createdAt: '2026-10-27T18:00:00.000Z' };
+    const real = { id: 'portfolio', createdAt: '2026-10-30T09:12:00.000Z' };
+    expect(isStaleDemo(demo as Project)).toBe(true);
+    expect(isStaleDemo(real as Project)).toBe(false);
+    expect(isStaleDemo({ ...demo, id: 'openteamsheets' } as Project)).toBe(false);
   });
 });
