@@ -44,8 +44,10 @@ export const directionInstruction = (d: {
   swatches: string[];
   typeface: string;
   notes: string;
+  /** The design in words: shapes, layout, decoration and the direction's own changes. */
+  detail?: string;
 }) =>
-  `Restyle this web page screenshot in the "${d.name}" direction: colors ${d.swatches.join(', ')}, typeface ${d.typeface}. ${d.notes} Remove decorative elements that don't fit. Keep the same content and layout. Photorealistic UI, no annotations.`;
+  `Restyle this web page screenshot in the "${d.name}" direction: colors ${d.swatches.join(', ')}, typeface ${d.typeface}. ${d.notes}${d.detail ? ` ${d.detail}` : ''} Remove decorative elements that don't fit. Keep the same content. Photorealistic UI, no annotations.`;
 
 export class Media {
   private readonly client: OpenAI;

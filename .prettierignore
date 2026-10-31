@@ -10,3 +10,5 @@ docs
 /*.md
 .fitts-dev/
 .fitts-worktrees/
+# Vendored third-party builds.
+apps/desktop/resources/vendor/

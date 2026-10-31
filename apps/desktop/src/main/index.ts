@@ -1,4 +1,5 @@
 import { app, BrowserWindow, session } from 'electron';
+import { join } from 'node:path';
 import { handleAssets, registerAssetScheme } from './asset-protocol';
 import { registerBridge } from './bridge';
 import { registerKeys } from './keys-ipc';
@@ -6,6 +7,7 @@ import { buildAppMenu } from './menu';
 import { RunHost } from './run-host';
 import { Secrets } from './secrets';
 import { FixHost } from './fix/fix-host';
+import { FontStore } from './fonts/fonts';
 import { VoiceHost } from './voice';
 import { registerReplay } from './replay';
 import { registerTools } from './tools';
@@ -44,7 +46,12 @@ void app.whenReady().then(() => {
   const projects = new ProjectStore(userData);
   const sites = new SiteManager(userData, (id) => projects.get(id));
   host.onStep = (projectId, runId, step) => void sites.shot(projectId, runId, step);
-  const fixes = new FixHost((id) => projects.get(id));
+  const fixes = new FixHost((id) => projects.get(id), undefined, {
+    fonts: new FontStore(join(userData, 'fonts')),
+    vendorDir: app.isPackaged
+      ? join(process.resourcesPath, 'vendor')
+      : join(__dirname, '../../resources/vendor'),
+  });
   host.siteOps = async (projectId, op) =>
     op.op === 'fix'
       ? { op: 'fix', value: await fixes.call(projectId, op.call) }

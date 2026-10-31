@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ BrowserWindow: class {}, session: {} }));
 vi.mock('@fitts/probes/page.js?raw', () => ({ default: '' }));
 
-const { FixHost, verifyCommand } = await import('../../src/main/fix/fix-host');
+const { FixHost, staticDir, verifyCommand } = await import('../../src/main/fix/fix-host');
 const { DryRunPrs, dryRunRegistry } = await import('../../src/main/fix/pr');
 
 const git = (cwd: string, ...args: string[]) =>
@@ -293,5 +293,71 @@ describe('FixHost', () => {
     expect(verifyCommand(root, 5181)).toBe(
       'npx vite --configLoader runner --port 5181 --strictPort',
     );
+  });
+});
+
+describe('a redesign’s assets', () => {
+  it('copies fonts and three.js into the static folder, with a fonts.css and licenses', async () => {
+    const cache = join(tmp, 'font-cache');
+    mkdirSync(cache, { recursive: true });
+    writeFileSync(join(cache, 'archivo-800.woff2'), 'woff2');
+    const vendor = join(tmp, 'vendor');
+    mkdirSync(join(vendor, 'three'), { recursive: true });
+    writeFileSync(join(vendor, 'three', 'three.module.min.js'), 'export const REVISION = "186";');
+    writeFileSync(join(vendor, 'three', 'LICENSE'), 'MIT');
+    const fonts = {
+      files: (ask: { family: string }) =>
+        Promise.resolve(
+          ask.family === 'Archivo'
+            ? {
+                family: 'Archivo',
+                id: 'archivo',
+                license: 'OFL-1.1',
+                files: [{ weight: 800, path: join(cache, 'archivo-800.woff2') }],
+              }
+            : null,
+        ),
+    };
+    const withAssets = new FixHost(
+      () => ({ id: 'app', kind: 'local', folder: root }) as never,
+      () => new DryRunPrs(),
+      { fonts: fonts as never, vendorDir: vendor },
+    );
+    const { job: id } = (await withAssets.call('app', {
+      fn: 'prepare',
+      runId: 'run-3',
+      findingId: 'redesign',
+      branch: 'fitts/redesign-assets',
+    })) as { job: string };
+    const res = (await withAssets.call('app', {
+      fn: 'assets',
+      job: id,
+      fonts: [
+        { family: 'Archivo', id: 'archivo', weights: [800] },
+        { family: 'Nope Sans', weights: [400] },
+      ],
+      three: true,
+    })) as { fontsCss?: string; three?: string; missing: string[] };
+    expect(res).toMatchObject({
+      fontsCss: '/fitts/fonts.css',
+      three: '/fitts/three/three.module.min.js',
+      missing: ['Nope Sans'],
+    });
+    // A Vite project without public/ gets one; files land under public/fitts/.
+    const dir = join(root, '.fitts-worktrees', 'run-3', 'redesign', 'public', 'fitts');
+    expect(readFileSync(join(dir, 'fonts', 'archivo-800.woff2'), 'utf8')).toBe('woff2');
+    const css = readFileSync(join(dir, 'fonts.css'), 'utf8');
+    expect(css).toContain('Archivo (OFL-1.1)');
+    expect(css).toContain('url("/fitts/fonts/archivo-800.woff2")');
+    expect(existsSync(join(dir, 'three', 'three.module.min.js'))).toBe(true);
+    await withAssets.call('app', { fn: 'discard', job: id });
+  });
+
+  it('serves from the root for a plain static site', () => {
+    const plain = join(tmp, 'plain');
+    mkdirSync(plain, { recursive: true });
+    writeFileSync(join(plain, 'index.html'), '<h1>Hi</h1>');
+    expect(staticDir(plain)).toBe(plain);
+    expect(staticDir(root)).toBe(join(root, 'public'));
   });
 });

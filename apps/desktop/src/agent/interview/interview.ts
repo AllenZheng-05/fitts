@@ -5,10 +5,24 @@ import type { Brief, RunState } from '@fitts/schema';
 import prompt from '../../../../../docs/prompts/interview.md?raw';
 import type { CallContext, LlmCaller } from '../llm/call';
 
-export const MAX_QUESTIONS = 6;
+export const MAX_QUESTIONS = 7;
 
 const field = { type: ['string', 'null'] };
-const FIELDS = ['for', 'who', 'pain', 'feel', 'look', 'flows', 'outOfScope'] as const;
+const FIELDS = [
+  'for',
+  'who',
+  'pain',
+  'feel',
+  'look',
+  'keep',
+  'avoid',
+  'inspiration',
+  'boldness',
+  'flows',
+  'outOfScope',
+] as const;
+/** Web addresses run longer than a summary. */
+const LONG = new Set<string>(['inspiration']);
 
 export const INTERVIEW_FORMAT = {
   type: 'json_schema',
@@ -61,7 +75,7 @@ export function parseTurn(text: string): InterviewTurn {
   const fields: Partial<Brief> = {};
   for (const f of FIELDS) {
     const v = raw.fields?.[f];
-    if (typeof v === 'string' && v.trim()) fields[f] = v.trim().slice(0, 120);
+    if (typeof v === 'string' && v.trim()) fields[f] = v.trim().slice(0, LONG.has(f) ? 300 : 120);
   }
   const quickReplies = Array.isArray(raw.quickReplies)
     ? raw.quickReplies
@@ -70,6 +84,9 @@ export function parseTurn(text: string): InterviewTurn {
     : [];
   return { say: say.slice(0, 400), fields, quickReplies, ready: raw.ready === true };
 }
+
+/** The owner asked for a new look: a vision, or sites to take after. */
+export const wantsRedesign = (brief: Brief) => Boolean(brief.look || brief.inspiration);
 
 /** The conversation so far as Responses input, then this turn's context and screen. */
 export function interviewInput({ state, shot, page, path }: InterviewInput): unknown[] {

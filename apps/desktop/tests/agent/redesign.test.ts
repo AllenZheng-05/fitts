@@ -13,21 +13,17 @@ import { FixPipeline, type Fixer, type Redesigner } from '../../src/agent/fix/pi
 import {
   fixedByRedesign,
   judgeRedesign,
+  judgeStyle,
   redesignPrBody,
   redesignTask,
 } from '../../src/agent/fix/redesign';
 import type { FixCall, TestRun, VerifyPagesResult } from '../../src/agent/protocol';
 import type { Check } from '../../src/agent/review/aggregate';
 import type { Direction } from '../../src/agent/review/themefit';
+import { testDirection } from './design';
 import type { Site } from '../../src/agent/site-client';
 
-const direction: Direction = {
-  id: 'a',
-  name: 'Quiet stone',
-  swatches: ['#f4f1ec', '#2f3a3a'],
-  typeface: 'Source Serif 4',
-  notes: 'Quiet and warm.',
-};
+const direction: Direction = testDirection('a', 'Quiet stone');
 
 const finding = (id: string, route: string, over: Partial<Finding> = {}): Finding => ({
   id,
@@ -75,6 +71,41 @@ const check = (route: string): Check => ({
   title: 'Tap target is too small',
   routes: [route],
   hrefs: [],
+});
+
+describe('the style check', () => {
+  const inv = (route: string, summary: string) => ({
+    ...result(route, 'font-inventory', []),
+    summary,
+  });
+  const spec = direction.spec;
+  const p = spec.palette;
+  const styled = `2 font families (shippori mincho, zen kaku gothic new), 5 sizes; colors ${p.bg} ${p.text}`;
+
+  it('passes when the direction’s fonts and colors show on most pages', () => {
+    const after = {
+      ok: true,
+      pages: [page('/', [inv('/', styled)]), page('/a', [inv('/a', styled)])],
+    };
+    expect(judgeStyle(after, spec)).toBeNull();
+  });
+
+  it('fails when the old fonts or colors are still showing', () => {
+    const old = '2 font families (comic sans ms, arial), 9 sizes; colors #ff00ff #00ff00';
+    const after = { ok: true, pages: [page('/', [inv('/', old)]), page('/a', [inv('/a', old)])] };
+    expect(judgeStyle(after, spec)).toMatch(/fonts .* aren’t showing/);
+    const fontsOnly =
+      '2 font families (shippori mincho, zen kaku gothic new), 5 sizes; colors #ff00ff';
+    expect(judgeStyle({ ok: true, pages: [page('/', [inv('/', fontsOnly)])] }, spec)).toMatch(
+      /colors aren’t showing/,
+    );
+  });
+
+  it('doesn’t hold a font it couldn’t download against the redesign', () => {
+    const half = `1 font families (zen kaku gothic new), 5 sizes; colors ${p.bg}`;
+    const after = { ok: true, pages: [page('/', [inv('/', half)])] };
+    expect(judgeStyle(after, spec, { fonts: [], missing: ['Shippori Mincho'] })).toBeNull();
+  });
 });
 
 describe('redesign checks (§8.3)', () => {
@@ -141,7 +172,8 @@ describe('redesign checks (§8.3)', () => {
       adjust: 'Bigger headings',
     });
     expect(t).toContain('Quiet stone');
-    expect(t).toContain('#f4f1ec, #2f3a3a');
+    expect(t).toContain(`--bg: ${direction.spec.palette.bg};`);
+    expect(t).toContain('### shape: Organic blobs');
     expect(t).toContain('Pages (every one must still work): /, /about');
     expect(t).toContain('The user asked for an adjustment: "Bigger headings"');
     const body = redesignPrBody({
@@ -153,6 +185,9 @@ describe('redesign checks (§8.3)', () => {
       fixed: [finding('f1', '/')],
     });
     expect(body).toContain('redesign: Quiet stone');
+    expect(body).toContain(
+      "Built from Fitts's design library: Oat, clay and charcoal, Mincho and gothic",
+    );
     expect(body).toContain('"Party packages" → "Service options"');
     expect(body).toContain('Tap target is too small (/)');
     expect(body).not.toMatch(/generated|co-authored|claude|anthropic/i);
@@ -184,6 +219,8 @@ function harness(passes: VerifyPagesResult[], testRuns: TestRun[] = []) {
           return Promise.resolve(passes.shift() ?? stillOnAbout());
         case 'tests':
           return Promise.resolve(testRuns.shift() ?? { ran: false, ok: true, summary: '' });
+        case 'assets':
+          return Promise.resolve({ fontsCss: '/fitts/fonts.css', fonts: [], missing: [] });
         case 'verify':
           return Promise.resolve({ ok: true, results: [], focus: [], viewport: [], links: {} });
         case 'patch':
@@ -298,6 +335,17 @@ describe('the redesign job (§8.3, §9.2)', () => {
     );
     expect(h.calls.find((c) => c.fn === 'commit')).toMatchObject({
       message: 'Redesign: Quiet stone (Fitts: look and feel)',
+    });
+    // The direction's fonts go into the worktree before the redesigner starts.
+    const fns = h.calls.map((c) => c.fn);
+    expect(fns.indexOf('assets')).toBeGreaterThan(fns.indexOf('prepare'));
+    expect(fns.indexOf('assets')).toBeLessThan(fns.indexOf('verifyPages'));
+    expect(h.calls.find((c) => c.fn === 'assets')).toMatchObject({
+      fonts: [
+        { family: 'Shippori Mincho', id: 'shippori-mincho' },
+        { family: 'Zen Kaku Gothic New', id: 'zen-kaku-gothic-new' },
+      ],
+      three: false,
     });
   });
 

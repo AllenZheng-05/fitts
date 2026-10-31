@@ -3,9 +3,9 @@ import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// @fitts/schema and @fitts/probes ship TypeScript source (and the probes' built IIFE, imported
-// with ?raw), so they are bundled rather than externalized.
-const externalizeDeps = { exclude: ['@fitts/schema', '@fitts/probes'] };
+// @fitts/schema, @fitts/styles and @fitts/probes ship TypeScript source (and the probes' built
+// IIFE, imported with ?raw), so they are bundled rather than externalized.
+const externalizeDeps = { exclude: ['@fitts/schema', '@fitts/styles', '@fitts/probes'] };
 
 export default defineConfig(({ command }) => {
   // Dev tools (gallery, Scenario panel) ship in `pnpm dev` and in e2e builds

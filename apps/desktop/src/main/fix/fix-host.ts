@@ -6,6 +6,7 @@ import type { Project } from '@fitts/schema';
 import { PAGE_PROBES } from '@fitts/probes';
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -16,7 +17,15 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import type { FixCall, TestRun, VerifyPagesResult, VerifyResult } from '../../agent/protocol';
+import type {
+  AssetsResult,
+  FixCall,
+  FontAsk,
+  TestRun,
+  VerifyPagesResult,
+  VerifyResult,
+} from '../../agent/protocol';
+import { fontFaceCss, type FontFiles, type FontStore } from '../fonts/fonts';
 import { devCommandOnPort } from '../projects/detect';
 import { DevServer, responds } from '../site/dev-server';
 import { SiteWindow } from '../site/site-window';
@@ -49,6 +58,8 @@ export class FixHost {
   constructor(
     private readonly projectFor: (id: string) => Project | undefined,
     private readonly prs: () => PrBackend = prBackend,
+    /** Fonts and the vendored three.js for redesigns (without them, `assets` copies nothing). */
+    private readonly assetSources: { fonts?: FontStore; vendorDir?: string } = {},
   ) {}
 
   async call(projectId: string, call: FixCall): Promise<unknown> {
@@ -79,6 +90,8 @@ export class FixHost {
         this.verifying = next.catch(() => undefined);
         return next;
       }
+      case 'assets':
+        return this.assets(call.job, call.fonts, call.three);
       case 'commit':
         return this.commit(call.job, call.message);
       case 'tests':
@@ -441,6 +454,49 @@ export class FixHost {
   }
 
   /** `git add -A && git commit` (no AI co-author or session trailers, §9.2). */
+  /**
+   * A redesign's fonts and three.js, copied into the project so the site serves them itself:
+   * `<static>/fitts/fonts/*.woff2` with a fonts.css, and `<static>/fitts/three/`. The static
+   * folder is `public/` for bundler projects (made if missing) and the root for plain sites.
+   */
+  async assets(id: string, fonts: FontAsk[], three: boolean): Promise<AssetsResult> {
+    const job = this.job(id);
+    const out = join(staticDir(job.dir), 'fitts');
+    const got: FontFiles[] = [];
+    const missing: string[] = [];
+    for (const ask of fonts.slice(0, 4)) {
+      const files = await this.assetSources.fonts?.files(ask).catch(() => null);
+      if (!files) {
+        missing.push(ask.family);
+        continue;
+      }
+      mkdirSync(join(out, 'fonts'), { recursive: true });
+      for (const f of files.files)
+        copyFileSync(f.path, join(out, 'fonts', `${files.id}-${f.weight}.woff2`));
+      got.push(files);
+    }
+    const result: AssetsResult = {
+      fonts: got.map((f) => ({ family: f.family, weights: f.files.map((x) => x.weight) })),
+      missing,
+    };
+    if (got.length) {
+      const licenses = got.map((f) => `${f.family} (${f.license})`).join(', ');
+      writeFileSync(
+        join(out, 'fonts.css'),
+        `/* Fonts for this site's design, served from the site itself. Licenses: ${licenses}. */\n\n${fontFaceCss(got, '/fitts/fonts')}\n`,
+      );
+      result.fontsCss = '/fitts/fonts.css';
+    }
+    const vendor = this.assetSources.vendorDir;
+    if (three && vendor && existsSync(join(vendor, 'three', 'three.module.min.js'))) {
+      mkdirSync(join(out, 'three'), { recursive: true });
+      for (const f of ['three.module.min.js', 'LICENSE'])
+        copyFileSync(join(vendor, 'three', f), join(out, 'three', f));
+      result.three = '/fitts/three/three.module.min.js';
+    }
+    return result;
+  }
+
   async commit(
     id: string,
     message: string,
@@ -516,4 +572,28 @@ export class FixHost {
 /** The worktree's dev command on its own port (see devCommandOnPort). */
 export function verifyCommand(dir: string, port: number): string {
   return devCommandOnPort(dir, port);
+}
+
+const BUNDLERS = ['vite', 'next', 'astro', 'nuxt', 'react-scripts', '@sveltejs/kit'];
+
+/** Where a project serves static files from: public/ for bundler projects, else the root. */
+export function staticDir(dir: string): string {
+  if (existsSync(join(dir, 'public'))) return join(dir, 'public');
+  const pkg = join(dir, 'package.json');
+  if (!existsSync(pkg)) return dir;
+  try {
+    const json = JSON.parse(readFileSync(pkg, 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+    const deps = { ...json.dependencies, ...json.devDependencies };
+    const scripts = Object.values(json.scripts ?? {});
+    const bundled = BUNDLERS.some(
+      (b) => b in deps || scripts.some((s) => s.split(/\s+/).includes(b)),
+    );
+    return bundled ? join(dir, 'public') : dir;
+  } catch {
+    return dir;
+  }
 }

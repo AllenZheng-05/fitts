@@ -12,7 +12,7 @@
     "typecheck": "pnpm -r typecheck && tsc --noEmit -p scripts",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "test": "pnpm --filter @fitts/desktop test && pnpm --filter @fitts/vite-plugin test && pnpm --filter @fitts/probes test",
+    "test": "pnpm --filter @fitts/desktop test && pnpm --filter @fitts/vite-plugin test && pnpm --filter @fitts/probes test && pnpm --filter @fitts/styles test",
     "test:e2e": "pnpm --filter @fitts/desktop test:e2e",
     "bench:chat": "pnpm --filter @fitts/desktop bench:chat",
     "verify:keys": "tsx scripts/verify/keys.ts",

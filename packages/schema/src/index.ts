@@ -337,6 +337,14 @@ export interface Brief {
    * film poster"). Fitts restyles the site toward it even when the current look fits.
    */
   look?: string;
+  /** What a redesign must keep: brand colors, the logo, fonts ("Keep the teal and the logo"). */
+  keep?: string;
+  /** What the owner doesn't want in a new look ("No dark mode, nothing cutesy"). */
+  avoid?: string;
+  /** Sites they admire, as design inspiration: web addresses, space-separated. */
+  inspiration?: string;
+  /** How far a redesign may go: "close" to the current look, a "refresh", or "new". */
+  boldness?: string;
 }
 
 export interface Finding {

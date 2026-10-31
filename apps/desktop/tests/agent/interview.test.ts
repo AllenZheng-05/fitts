@@ -1,5 +1,5 @@
 // @vitest-environment node
-import type { RunState } from '@fitts/schema';
+import type { Brief, RunState } from '@fitts/schema';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -12,7 +12,13 @@ import {
   MAX_QUESTIONS,
   parseTurn,
 } from '../../src/agent/interview/interview';
-import { parseThemeFit, themeFit } from '../../src/agent/review/themefit';
+import {
+  describeDirection,
+  parseDirections,
+  parseThemeFit,
+  themeFit,
+} from '../../src/agent/review/themefit';
+import { testDirection } from './design';
 import { redesignTask } from '../../src/agent/fix/redesign';
 
 const state = (over: Partial<RunState> = {}): RunState =>
@@ -122,90 +128,168 @@ describe('interview turns', () => {
   });
 });
 
-describe('a requested redesign (brief.look)', () => {
-  const caller = (verdict: object) =>
-    new LlmCaller(
-      () =>
-        new FakeLlmClient([
-          {
-            name: 'theme-fit',
-            model: 'm',
-            recordedAt: '2026-10-30',
-            response: {
-              outputText: JSON.stringify(verdict),
-              output: [],
-              usage: { input: 1, cached: 0, output: 1, reasoning: 0 },
-              model: 'm',
-            },
-          },
-        ]),
-      new CostLedger(),
-    );
-  const ctx = { runId: 'run-1', projectId: 'p', contributor: true, allowed: () => true };
-  const input = (look?: string) => ({
-    brief: { for: 'A portfolio', ...(look ? { look } : {}) },
-    shots: [],
-    inventory: [],
-  });
-
-  it('always gets directions: a "fits" verdict is unusable when the user asked for a new look', async () => {
-    const fits = { fits: true, why: 'Clean and modern.', directions: [] };
-    await expect(themeFit(caller(fits), ctx, 'm', input('2007 web'))).rejects.toThrow(
-      /needs directions/,
-    );
-    expect((await themeFit(caller(fits), ctx, 'm', input())).fits).toBe(true);
-  });
-
-  it('tells the redesigner the owner’s vision', () => {
-    const task = redesignTask({
-      brief: { for: 'A portfolio', look: 'Dark and bold, like a film poster' },
-      why: 'You asked for a new look.',
-      direction: {
-        id: 'a',
-        name: 'Poster',
-        swatches: ['#111111', '#f5f0e8'],
-        typeface: 'Inter',
-        notes: 'Bold.',
-      },
-      routes: ['/'],
-    });
-    expect(task).toContain('their vision: "Dark and bold, like a film poster"');
-  });
+const fixture = (name: string, body: object): Fixture => ({
+  name,
+  model: 'm',
+  recordedAt: '2026-10-30',
+  response: {
+    outputText: JSON.stringify(body),
+    output: [],
+    usage: { input: 1, cached: 0, output: 1, reasoning: 0 },
+    model: 'm',
+  },
 });
 
-describe('theme-fit verdicts', () => {
-  const direction = (name: string) => ({
-    id: 'x',
-    name,
-    swatches: ['#f4f1ec', '#2f3a3a', '#8a9a8f', 'pink'],
-    typeface: 'Source Serif 4',
-    notes: 'Quiet and warm.',
-  });
+const composed = (over: Record<string, unknown>[] = []) => ({
+  directions: [
+    {
+      kind: 'closest',
+      name: 'Ink and Signal',
+      notes: 'Crisp and confident.',
+      color: 'stark-mono',
+      type: 'grotesk-swiss',
+      shape: 'hairline',
+      layout: 'swiss-grid',
+      decor: [],
+      motion: 'snappy',
+      density: 'regular',
+      hue: -1,
+      brand: '#0f766e',
+      headingFont: '',
+      bodyFont: '',
+      changes: ['Keeps the teal #0f766e as the accent, as asked.'],
+    },
+    {
+      kind: 'further',
+      name: 'Night Poster',
+      notes: 'Loud and cinematic.',
+      color: 'neon-dusk',
+      type: 'poster',
+      shape: 'hairline',
+      layout: 'poster-stack',
+      decor: ['three-field', 'not-a-part'],
+      motion: 'cinematic',
+      density: 'compact',
+      hue: 180,
+      brand: 'teal',
+      headingFont: 'Rubik Mono One',
+      bodyFont: '',
+      changes: [],
+    },
+    {
+      kind: 'unexpected',
+      name: 'Garden Press',
+      notes: 'Warm and literary.',
+      color: 'garden',
+      type: 'bookish',
+      shape: 'ornate',
+      layout: 'reading-column',
+      decor: ['botanical'],
+      motion: 'still',
+      density: 'airy',
+      hue: -1,
+      brand: '',
+      headingFont: '',
+      bodyFont: '',
+      changes: [],
+    },
+  ].map((d, i) => ({ ...d, ...(over[i] ?? {}) })),
+});
 
-  it('a mismatch comes with 3 directions (ids a, b, c; hex swatches only)', () => {
-    const v = parseThemeFit(
-      JSON.stringify({
-        fits: false,
-        why: 'Hot pink and confetti read as celebratory.',
-        directions: [direction('Quiet stone'), direction('Soft linen'), direction('Evening')],
-      }),
+describe('directions from the design library', () => {
+  const ctx = { runId: 'run-1', projectId: 'p', contributor: true, allowed: () => true };
+  const caller = (...fixtures: Fixture[]) => {
+    const fake = new FakeLlmClient(fixtures);
+    return { fake, caller: new LlmCaller(() => fake, new CostLedger()) };
+  };
+  const input = (brief: Brief = { for: 'A portfolio' }) => ({ brief, shots: [], inventory: [] });
+
+  it('a mismatch composes 3 directions from library parts, with the owner’s brand and fonts', async () => {
+    const { fake, caller: c } = caller(
+      fixture('theme-fit', { fits: false, why: 'Too loud for recruiters.' }),
+      fixture('directions', composed()),
     );
+    const v = await themeFit(c, ctx, 'm', input());
     expect(v.fits).toBe(false);
-    expect(v.directions.map((d) => d.id)).toEqual(['a', 'b', 'c']);
-    expect(v.directions[0]?.swatches).toEqual(['#f4f1ec', '#2f3a3a', '#8a9a8f']);
+    expect(v.directions.map((d) => [d.id, d.kind])).toEqual([
+      ['a', 'closest'],
+      ['b', 'further'],
+      ['c', 'unexpected'],
+    ]);
+    const [a, b] = v.directions;
+    expect(a?.spec.palette.accent).toBe('#0f766e');
+    expect(a?.swatches).toHaveLength(4);
+    expect(a?.spec.changes).toEqual(['Keeps the teal #0f766e as the accent, as asked.']);
+    // Unknown decor dropped, a bad hex ignored, the named font kept, 3D noticed.
+    expect(b?.spec.parts.decor).toEqual(['three-field']);
+    expect(b?.spec.brand).toBeUndefined();
+    expect(b?.typeface).toBe('Rubik Mono One');
+    expect(b?.spec.three).toBe(true);
+    const sent = JSON.stringify(fake.requests[1]?.input);
+    expect(sent).toContain('- grotesk-swiss:');
+    expect(sent).toContain('Best-ranked parts for this brief');
   });
 
-  it('a fit has no directions; a mismatch without 3 usable directions is rejected', () => {
-    expect(
-      parseThemeFit(
-        JSON.stringify({ fits: true, why: 'Calm and clear.', directions: [direction('x')] }),
-      ).directions,
-    ).toEqual([]);
-    expect(() =>
-      parseThemeFit(
-        JSON.stringify({ fits: false, why: 'Too loud.', directions: [direction('Only one')] }),
-      ),
-    ).toThrow();
+  it('a fit composes nothing, unless the owner asked for a new look', async () => {
+    const fits = fixture('theme-fit', { fits: true, why: 'Clean and modern.' });
+    expect((await themeFit(caller(fits).caller, ctx, 'm', input())).directions).toEqual([]);
+    const asked = await themeFit(
+      caller(fits, fixture('directions', composed())).caller,
+      ctx,
+      'm',
+      input({ for: 'A portfolio', look: '2007 web, but readable' }),
+    );
+    expect(asked.fits).toBe(false);
+    expect(asked.directions).toHaveLength(3);
+    const inspired = await themeFit(
+      caller(fits, fixture('directions', composed())).caller,
+      ctx,
+      'm',
+      input({ for: 'A portfolio', inspiration: 'a24films.com' }),
+    );
+    expect(inspired.directions).toHaveLength(3);
+  });
+
+  it('directions too alike, or unusable, fall back to three built from the library', async () => {
+    const same = composed([
+      {},
+      { color: 'stark-mono', type: 'grotesk-swiss', shape: 'hairline', layout: 'swiss-grid' },
+    ]);
+    expect(() => parseDirections(JSON.stringify(same))).toThrow(/too alike/);
+    const v = await themeFit(
+      caller(fixture('theme-fit', { fits: false, why: 'Too loud.' }), fixture('directions', same))
+        .caller,
+      ctx,
+      'm',
+      input({ for: 'Online banking', feel: 'Trustworthy' }),
+    );
+    expect(v.directions).toHaveLength(3);
+    expect(v.directions[0]?.spec.parts.color).toBe('trust-blue');
+  });
+
+  it('describes a direction for its mockup', () => {
+    const [d] = parseDirections(JSON.stringify(composed()));
+    expect(describeDirection(d!)).toContain('Shapes: hairline and sharp. Layout: asymmetric grid.');
+  });
+
+  it('tells the redesigner the owner’s wishes and the full spec', () => {
+    const task = redesignTask({
+      brief: {
+        for: 'A portfolio',
+        look: 'Dark and bold, like a film poster',
+        keep: 'The teal',
+        inspiration: 'a24films.com',
+      },
+      why: 'You asked for a new look.',
+      direction: testDirection('a', 'Poster'),
+      routes: ['/'],
+      assets: { fontsCss: '/fitts/fonts.css', fonts: [], missing: ['Shippori Mincho'] },
+    });
+    expect(task).toContain('Their vision: "Dark and bold, like a film poster".');
+    expect(task).toContain('Keep: "The teal".');
+    expect(task).toContain('Sites they admire: a24films.com');
+    expect(task).toContain('/fitts/fonts.css');
+    expect(task).toContain('use the fallback stack for them: Shippori Mincho');
   });
 });
 
@@ -223,9 +307,9 @@ describe('recorded P7 fixtures (real responses, replayed offline)', () => {
     expect(turn.fields.who).toBeTruthy();
   });
 
-  it('hartwell doesn’t fit, with 3 directions', () => {
+  it('hartwell doesn’t fit', () => {
     const v = parseThemeFit(load('theme-fit'));
     expect(v.fits).toBe(false);
-    expect(v.directions).toHaveLength(3);
+    expect(v.why).toBeTruthy();
   });
 });

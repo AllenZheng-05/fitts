@@ -61,6 +61,8 @@ export type SiteOp =
   | { op: 'rects'; refs: string[] }
   | { op: 'png'; jpegBase64: string }
   | { op: 'saveAsset'; runId: string; name: string; base64: string }
+  /** A site the owner admires, screenshotted as design inspiration (never clicked). */
+  | { op: 'reference'; url: string }
   /** The fix pipeline's privileged half, in main (§9). */
   | { op: 'fix'; call: FixCall };
 
@@ -83,6 +85,8 @@ export type FixCall =
       routes: string[];
       size?: { width: number; height: number };
     }
+  /** A redesign's fonts and three.js, copied into the job's static folder (AssetsResult). */
+  | { fn: 'assets'; job: string; fonts: FontAsk[]; three: boolean }
   | { fn: 'commit'; job: string; message: string }
   /** Drops a job's uncommitted edits, back to its last commit (a failed adjustment). */
   | { fn: 'reset'; job: string }
@@ -97,6 +101,21 @@ export type FixCall =
   | { fn: 'prMerged'; pr: number }
   | { fn: 'revert'; runId: string; pr: number; branch: string; title: string; body: string }
   | { fn: 'preview'; runId: string; branches: string[] };
+
+/** A font a redesign needs, by family (and its Fontsource id when the library knows it). */
+export interface FontAsk {
+  family: string;
+  id?: string;
+  weights: number[];
+}
+
+/** What `assets` put in the project: the stylesheet and three.js URLs, and fonts it couldn't get. */
+export interface AssetsResult {
+  fontsCss?: string;
+  three?: string;
+  fonts: { family: string; weights: number[] }[];
+  missing: string[];
+}
 
 /** The page probes on a fix's worktree server (§9.2 verification). */
 export interface VerifyResult {
@@ -156,6 +175,7 @@ export type SiteOpResult =
   | { op: 'rects'; rects: Record<string, SiteRect> }
   | { op: 'png'; pngBase64: string }
   | { op: 'saved'; url: string }
+  | { op: 'reference'; ok: boolean; url: string; shots: string[]; style: string; error?: string }
   | { op: 'fix'; value: unknown };
 
 /** A request paused at `Fetch.requestPaused`, waiting for the gate. */

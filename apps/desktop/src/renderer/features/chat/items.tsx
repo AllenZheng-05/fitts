@@ -338,14 +338,16 @@ function BriefSummary({ brief }: { brief: Brief }) {
       <span className="font-display text-[15px] font-bold">{copy.brief.cardTitle}</span>
       <dl className="grid grid-cols-[70px_1fr] gap-x-2.5 gap-y-1 text-[14px]">
         {/* The look shows once the user has asked for one: most runs keep theirs. */}
-        {[...BRIEF_ROWS, ...(brief.look ? (['look'] as const) : [])].map((key) => (
-          <div key={key} className="contents">
-            <dt className="text-muted">{copy.brief.labels[key]}</dt>
-            <dd className={brief[key] ? undefined : 'text-muted'}>
-              {brief[key] ?? copy.brief.waiting}
-            </dd>
-          </div>
-        ))}
+        {[...BRIEF_ROWS, ...(['look', 'keep', 'inspiration'] as const).filter((k) => brief[k])].map(
+          (key) => (
+            <div key={key} className="contents">
+              <dt className="text-muted">{copy.brief.labels[key]}</dt>
+              <dd className={brief[key] ? undefined : 'text-muted'}>
+                {brief[key] ?? copy.brief.waiting}
+              </dd>
+            </div>
+          ),
+        )}
       </dl>
     </div>
   );

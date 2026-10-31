@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { replay, type CostEvent, type RunEvent, type RunState } from '@fitts/schema';
+import { testDirection } from './design';
 import { describe, expect, it } from 'vitest';
 import { ExplorerBrain, type Brain } from '../../src/agent/crawler/brain';
 import { BudgetGuard } from '../../src/agent/ledger/budget';
@@ -351,13 +352,9 @@ describe('theme-fit (§8.3)', () => {
   const verdict = {
     fits: false,
     why: 'Hot pink and confetti read as celebratory.',
-    directions: ['Quiet stone', 'Soft linen', 'Evening'].map((name, i) => ({
-      id: ['a', 'b', 'c'][i] ?? 'a',
-      name,
-      swatches: ['#f4f1ec', '#2f3a3a'],
-      typeface: 'Source Serif 4',
-      notes: 'Quiet and warm.',
-    })),
+    directions: ['Quiet stone', 'Soft linen', 'Evening'].map((name, i) =>
+      testDirection(['a', 'b', 'c'][i] ?? 'a', name),
+    ),
   };
 
   it('asks once after 3 routes, then posts the lookfeel card and 3 directions; picking one acknowledges it', async () => {

@@ -139,7 +139,16 @@ test('bench:audit', async () => {
       '',
       `${basename(FOLDER)}: ${findings.filter((f) => f.lane !== 'suggestion').length} shown findings, ${findings.filter((f) => f.lane === 'suggestion').length} suggestions, ${state?.routes.length ?? 0} pages`,
       ...lines,
+      `Brief: ${JSON.stringify(state?.brief ?? {})}`,
       `Theme-fit: ${lookfeel?.type === 'lookfeel' ? `doesn't fit: ${lookfeel.text}` : 'fits (no directions)'}`,
+      ...(state?.chat ?? []).flatMap((c) =>
+        c.type === 'directions'
+          ? c.options.map(
+              (o) =>
+                `  direction ${o.id}${c.selectedId === o.id ? ' (picked)' : ''}: ${o.name} ${o.swatches.join(' ')}`,
+            )
+          : [],
+      ),
       ...(state?.changes ?? []).map(
         (c) =>
           `  change ${c.kind} ${c.status}${c.prNumber ? ` PR #${c.prNumber}` : ''} · ${c.title}${c.reason ? ` (${c.reason})` : ''}`,

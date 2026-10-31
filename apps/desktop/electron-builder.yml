@@ -17,6 +17,9 @@ extraResources:
   # The judges' recorded run (§12.3).
   - from: resources/replays
     to: replays
+  # three.js, copied into a project when a redesign uses a 3D part.
+  - from: resources/vendor
+    to: vendor
 win:
   target:
     - target: nsis

@@ -144,3 +144,7 @@ wired.
 - **Temp folders:** delete the leftover benchmark folders (`fitts-p9-*`, `fitts-fix-*`) in
   `%TEMP%`. The session's permission rules blocked a wildcard delete there; the benches now
   clean up after themselves.
+- **CLAUDE.md network line:** the design library downloads redesign fonts from Fontsource in
+  `apps/desktop/src/main/fonts/`. Claude Code wasn't allowed to edit CLAUDE.md itself, so add
+  that folder to the "Real network calls are allowed only in …" list:
+  `apps/desktop/src/main/fonts/ (Fontsource, for redesign fonts)`.

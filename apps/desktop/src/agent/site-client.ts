@@ -39,6 +39,8 @@ export interface Site {
   saveAsset(runId: string, name: string, base64: string): Promise<string>;
   /** The fix pipeline's privileged half in main (§9). */
   fix(call: FixCall): Promise<unknown>;
+  /** A site the owner admires: two screenshots and a style line (design inspiration). */
+  reference?(url: string): Promise<{ ok: boolean; shots: string[]; style: string }>;
 }
 
 export class SiteRpc {
@@ -105,6 +107,10 @@ export class SiteRpc {
         await expect({ op: 'release', id, allow }, 'released');
       },
       fix: async (call) => (await expect({ op: 'fix', call }, 'fix')).value,
+      reference: async (url) => {
+        const r = await expect({ op: 'reference', url }, 'reference');
+        return { ok: r.ok, shots: r.shots, style: r.style };
+      },
       rects: async (refs) => (await expect({ op: 'rects', refs }, 'rects')).rects,
       png: async (jpegBase64) => (await expect({ op: 'png', jpegBase64 }, 'png')).pngBase64,
       saveAsset: async (runId, name, base64) =>

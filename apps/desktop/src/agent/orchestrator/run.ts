@@ -24,7 +24,12 @@ import { ProbeRunner } from '../crawler/probes';
 import { aggregateWithChecks, type Check } from '../review/aggregate';
 import { FixPipeline, type Fixer, type Redesigner } from '../fix/pipeline';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
-import type { Direction, ThemeFit } from '../review/themefit';
+import {
+  describeDirection,
+  type Direction,
+  type Inspiration,
+  type ThemeFit,
+} from '../review/themefit';
 import { directionInstruction, findingInstruction, outlineSvg, type Media } from '../llm/media';
 
 /** api-trouble retries on its own after this long (§6.3). */
@@ -54,7 +59,12 @@ export interface RunDeps {
   redesigner?: Redesigner;
   /** Theme-fit (§8.3), asked once after the first 3 routes. */
   themeFit?: (
-    input: { brief: RunState['brief']; shots: string[]; inventory: string[] },
+    input: {
+      brief: RunState['brief'];
+      shots: string[];
+      inventory: string[];
+      inspiration?: Inspiration[];
+    },
     signal?: AbortSignal,
   ) => Promise<ThemeFit>;
 }
@@ -117,6 +127,8 @@ export class RealRun {
   private picked: Direction | undefined;
   private redesignStarted = false;
   private readonly mockupPngs = new Map<string, string>();
+  /** The first screenshot of each site the owner admires, for the redesigner. */
+  private inspirationShots: string[] = [];
   /** The review waits here for a pick in the Ask modes ("Keep my look" resolves it empty). */
   private pickWaiter: ((d: Direction | undefined) => void) | undefined;
   private pickQuestionId: string | undefined;
@@ -602,9 +614,19 @@ export class RealRun {
       .filter((r) => r.probe === 'font-inventory' && r.summary)
       .slice(0, THEME_ROUTES)
       .map((r) => `${r.route}: ${r.summary ?? ''}`);
+    const inspiration = await this.inspiration();
+    this.inspirationShots = inspiration.flatMap((r) => r.shots.slice(0, 1));
     let verdict: ThemeFit;
     try {
-      verdict = await ask({ brief: this.state.brief, shots, inventory }, this.abort.signal);
+      verdict = await ask(
+        {
+          brief: this.state.brief,
+          shots,
+          inventory,
+          ...(inspiration.length ? { inspiration } : {}),
+        },
+        this.abort.signal,
+      );
     } catch {
       return; // No verdict (aborted, or an unusable answer): the audit goes on without one.
     }
@@ -627,6 +649,20 @@ export class RealRun {
     void this.directionMockups(verdict.directions);
   }
 
+  /** The sites the owner admires (the brief's inspiration), screenshotted in main: at most 2. */
+  private async inspiration(): Promise<Inspiration[]> {
+    const urls = (this.state.brief.inspiration ?? '')
+      .split(/[\s,]+/)
+      .filter((u) => /\.[a-z]{2,}/i.test(u))
+      .slice(0, 2);
+    const reference = this.deps.site.reference?.bind(this.deps.site);
+    if (!reference || urls.length === 0) return [];
+    const got = await Promise.all(urls.map((u) => reference(u).catch(() => null)));
+    return got.flatMap((r, i) =>
+      r?.ok ? [{ url: urls[i] ?? '', shots: r.shots, style: r.style }] : [],
+    );
+  }
+
   /** A Muse Image mockup per direction, on the first route's shot (§10). */
   private async directionMockups(directions: Direction[]): Promise<void> {
     const media = this.deps.media;
@@ -645,7 +681,7 @@ export class RealRun {
             allowed: () => this.allowed(),
           },
           png,
-          directionInstruction(d),
+          directionInstruction({ ...d, detail: describeDirection(d) }),
         );
         if (!out) return;
         this.mockupPngs.set(d.id, out);
@@ -790,7 +826,11 @@ export class RealRun {
       direction,
       routes,
       ...(size ? { size } : {}),
-      images: [...(mockup ? [`data:image/png;base64,${mockup}`] : []), ...shots],
+      images: [
+        ...(mockup ? [`data:image/png;base64,${mockup}`] : []),
+        ...shots,
+        ...this.inspirationShots.map((b64) => `data:image/jpeg;base64,${b64}`),
+      ],
       before,
       saveShot: (route, jpeg) =>
         this.deps.site.saveAsset(

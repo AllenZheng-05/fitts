@@ -15,7 +15,8 @@ import type {
   RunState,
 } from '@fitts/schema';
 import { PAGE_PROBES } from '@fitts/probes';
-import type { TestRun, VerifyPagesResult, VerifyResult } from '../protocol';
+import { specFonts } from '@fitts/styles';
+import type { AssetsResult, TestRun, VerifyPagesResult, VerifyResult } from '../protocol';
 import { problems, type Check } from '../review/aggregate';
 import type { Direction } from '../review/themefit';
 import type { Site } from '../site-client';
@@ -23,6 +24,7 @@ import { taskFile, type FixTools } from './fixer';
 import {
   fixedByRedesign,
   judgeRedesign,
+  judgeStyle,
   redesignPrBody,
   redesignTask,
   type RedesignTools,
@@ -82,6 +84,8 @@ export interface RedesignRequest {
   before: Record<string, string>;
   /** Saves a route's after shot and returns its asset URL. */
   saveShot(route: string, jpegBase64: string): Promise<string>;
+  /** The direction's fonts and three.js once they're in the worktree (set by the job). */
+  assets?: AssetsResult;
 }
 
 interface Pending {
@@ -524,6 +528,17 @@ export class FixPipeline {
       })) as { job: string; branch: string };
       job = prepared.job;
       const baseline = await this.baselineTests(prepared.job);
+      // The direction's fonts and three.js go in first, so the redesigner can use them.
+      const spec = r.direction.spec;
+      r = {
+        ...r,
+        assets: (await this.site.fix({
+          fn: 'assets',
+          job: prepared.job,
+          fonts: specFonts(spec).map(({ family, id, weights }) => ({ family, id, weights })),
+          three: spec.three,
+        })) as AssetsResult,
+      };
       const tools = this.redesignTools(prepared.job);
       let summary = '';
       const wording: WordingChange[] = [];
@@ -553,7 +568,9 @@ export class FixPipeline {
           routes: r.routes,
           ...(r.size ? { size: r.size } : {}),
         })) as VerifyPagesResult;
-        reason = judgeRedesign(after, (route) => this.host.baseline(route));
+        reason =
+          judgeRedesign(after, (route) => this.host.baseline(route)) ??
+          judgeStyle(after, spec, r.assets);
         // The second pass hears about failing tests too, with what failed.
         if (reason === null) reason = await this.testsAfter(prepared.job, baseline);
         if (reason === null) break;

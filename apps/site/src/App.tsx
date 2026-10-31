@@ -1,3 +1,4 @@
+import { palette, partsOf, PART_KINDS } from '@fitts/styles';
 import {
   Download,
   Hand,
@@ -310,7 +311,39 @@ function Science() {
           <p className="mt-2 leading-relaxed text-ink-2">{science.redesign}</p>
         </div>
       </div>
+      <Library />
     </Section>
+  );
+}
+
+/** The design library in numbers, and every color scheme as a strip of its own swatches. */
+function Library() {
+  const schemes = partsOf('color').map((c) => ({ id: c.id, name: c.name, p: palette(c) }));
+  return (
+    <div className="mt-16">
+      <h3 className="font-display text-2xl font-bold">{science.libraryTitle}</h3>
+      <p className="mt-3 max-w-3xl leading-relaxed text-ink-2">{science.library}</p>
+      <ul className="mt-6 flex flex-wrap gap-2">
+        {PART_KINDS.map((k) => (
+          <li key={k} className="rounded-full border-[1.5px] border-ink px-3 py-1 text-sm">
+            <b>{partsOf(k).length}</b> {science.libraryKinds[k]}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-6 text-ink-2">{science.librarySwatches}</p>
+      <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {schemes.map(({ id, name, p }) => (
+          <li key={id} className="overflow-hidden rounded-xl border-[1.5px] border-ink">
+            <div className="flex h-12" aria-hidden="true">
+              {[p.bg, p.surface, p.text, p.accent, p.accent2].map((c, i) => (
+                <span key={i} className="flex-1" style={{ background: c }} />
+              ))}
+            </div>
+            <div className="px-3 py-2 text-sm font-medium">{name}</div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -97,7 +97,7 @@ export const steps = {
     {
       n: '05',
       title: 'It can redesign it',
-      body: 'When the look doesn’t suit the people it’s for, or you ask for a new one, Fitts offers three directions, restyles every page in the one you pick and verifies them all.',
+      body: 'Tell it your vision, what to keep and sites you admire. Fitts builds three directions from its design library around them, restyles every page in the one you pick, and verifies them all.',
     },
   ],
 };
@@ -193,6 +193,19 @@ export const science = {
   redesignTitle: 'When does a site need a redesign?',
   redesign:
     'When the look works against the people it’s for: a funeral home in party colors, a bank that looks like a toy, a portfolio a recruiter can’t read. Or simply when you ask for one in the interview. Either way you pick from three directions, and the redesign has to pass the same checks as every fix.',
+  libraryTitle: 'A design library, not a template',
+  library:
+    'Directions aren’t made up on the spot, and they aren’t templates. Fitts composes each one from a library of design parts, then bends it to what you asked for: your colors and fonts, the sites you admire, the things you don’t want. Every palette is contrast-checked, fonts are downloaded and served by your own site, and 3D scenes come with a still fallback.',
+  libraryKinds: {
+    color: 'color schemes',
+    type: 'font pairings',
+    shape: 'shape languages',
+    layout: 'layouts',
+    decor: 'decorations, 3D included',
+    motion: 'motion styles',
+    density: 'densities',
+  },
+  librarySwatches: 'Every color scheme in the library, in its own hues:',
 };
 
 export const control = {
@@ -275,7 +288,7 @@ export const faq = {
     },
     {
       q: 'Can it change my site’s whole look?',
-      a: 'Yes, if the look doesn’t fit or you ask for a new one. It shows three directions with mockups, applies the one you pick to every page, and checks them all.',
+      a: 'Yes, if the look doesn’t fit or you ask for a new one. Your ideas come first: it builds three directions around them from its design library, shows each with a mockup, applies the one you pick to every page, and checks them all.',
     },
   ],
 };

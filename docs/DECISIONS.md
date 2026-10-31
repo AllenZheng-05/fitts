@@ -1877,3 +1877,57 @@ Two real autonomous runs on a copy of Allen's 2007 portfolio (dry-run PRs to a l
 - Long paths: a clone deep in a temp folder put vitest's files past Windows' 260-character
   limit inside worktrees; the real run uses a short path (`.fitts-dev/p`). A real project in a
   normal folder doesn't hit this.
+## Phase 2 — after P12: the design library (redesign directions from parts)
+
+Allen found the free-form directions looked generically AI-generated, and asked for a library
+that helps Fitts make better design choices without limiting what it can make.
+
+- **Parts, not presets.** `packages/styles` holds parts by kind: 22 color schemes, 31 type
+  pairings, 14 shape languages, 14 layouts, 16 decorations (two of them three.js), 6 motion
+  styles and 3 densities. A direction is one part per kind (0–2 decorations), so thousands of
+  coherent combinations exist before hue. A first draft had 30 presets with worked HTML
+  examples; Allen asked to drop them, so the redesigner gets each part's rules, component
+  treatments and reference CSS instead. Vocabulary drawn from 21st.dev-style galleries and
+  "50 Design Styles" (UX Planet); every description and rule is original, named for genres,
+  never brands.
+- **Coherence is advice, not a rule.** Each part has energy (1–5), formality (1–5) and eras;
+  `fits` says two parts sit well together (within 2 on both axes, eras within two steps,
+  "timeless" goes with anything, density is neutral). The model is told the axes; the code
+  only uses them to rank and to build the fallback. The owner's wishes can override them.
+- **Color is a recipe.** Each scheme is OKLCH tones relative to a seed hue, so a scheme can be
+  re-hued to a brand color while keeping its lightness structure. `palette()` then pushes every
+  text pair to its WCAG ratio (text 7:1 on the background, 4.5:1 elsewhere, accent 3:1). A
+  brand color the owner keeps becomes the accent exactly when it passes, adjusted when not.
+  Tests check every scheme at 7 hues.
+- **The owner's ideas come first.** The interview gained `keep`, `avoid`, `inspiration` (web
+  addresses) and `boldness` beside `look`, asked before Fitts suggests anything (7 questions
+  now, was 6). `look` or `inspiration` counts as a redesign request.
+- **Two calls.** Theme-fit is now a verdict only (fits, why). A second call composes three
+  directions (closest, further, unexpected) from the catalog with the brief, both sites' shots
+  and the ranked parts; each carries `changes`, the places it departs from the library (the
+  owner's wishes first), which the redesigner treats as winning. Unknown part ids fall back to
+  the brief's best part of that kind; directions that differ in fewer than two of color, type,
+  shape and layout are rejected, and then code builds three from the ranked parts
+  (`autoDesigns`), so a request never ends without directions.
+- **Inspiration sites** open once in a hidden, sandboxed window with a throwaway session (no
+  permissions, downloads or pop-ups), two screenshots and a style line, at most two sites. It's
+  browsing like the site window, so it lives in main/site.
+- **Fonts are downloaded, then served by the site.** `main/fonts/` fetches woff2 files from
+  Fontsource (its API and jsDelivr CDN; Google Fonts and other open-licensed families),
+  nearest weight, Latin subset, cached in userData. A font the owner names is found by id or
+  family. The fix host copies them into the project's static folder (`public/` for bundler
+  projects, made if missing; the root for plain sites) as `/fitts/fonts/*.woff2` with a
+  `fonts.css` that lists each license, so the deployed site never calls a font CDN. Fonts that
+  can't be found fall back to the pairing's stack and the redesigner is told. This adds
+  `apps/desktop/src/main/fonts/` to the places allowed to make network calls; CLAUDE.md needs
+  that line (see NEEDS-ALLEN).
+- **three.js is vendored.** A single minified ESM build of the app's own three (r186, 742 kB,
+  with its MIT license) ships in `resources/vendor/three/` and is copied to
+  `/fitts/three/` only when a direction uses a 3D part. The redesigner imports it dynamically
+  inside a try, in one module, into one aria-hidden canvas that pauses off screen, draws one
+  still frame under reduced motion and removes itself without WebGL. 3D parts rank low for
+  calm briefs and never appear in the fallback for them.
+- **A style check.** After a redesign passes the page probes, `judgeStyle` reads each page's
+  font inventory: the direction's heading or body font must be in use, and one of its
+  background, text or accent colors present, on at least half the pages; otherwise the second
+  pass hears why. A font that couldn't be downloaded isn't held against it.

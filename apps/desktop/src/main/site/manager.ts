@@ -15,6 +15,7 @@ import { detectProject, devCommandOnPort } from '../projects/detect';
 import { runDir, SAFE_ID } from '../store/run-log';
 import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
+import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
 
 interface Live {
@@ -141,6 +142,8 @@ export class SiteManager {
       return { op: 'health', up, log: live?.server.log ?? [] };
     }
     if (request.op === 'png' || request.op === 'saveAsset') return this.media(projectId, request);
+    if (request.op === 'reference')
+      return { op: 'reference', ...(await captureReference(request.url)) };
     const win = live?.window;
     if (!win) throw new Error('The site is not running');
     switch (request.op) {

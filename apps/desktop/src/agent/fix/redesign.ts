@@ -4,9 +4,10 @@
 // Verification loads every crawled page on the worktree's server: each must render, and no new
 // problem at severity 2 or higher may appear anywhere.
 import type { Brief, Finding, ProbeResult } from '@fitts/schema';
+import { distance, part, specMarkdown, type DesignSpec } from '@fitts/styles';
 import prompt from '../../../../../docs/prompts/redesign.md?raw';
 import type { CallContext, LlmCaller } from '../llm/call';
-import type { VerifyPagesResult } from '../protocol';
+import type { AssetsResult, VerifyPagesResult } from '../protocol';
 import { problems, type Check } from '../review/aggregate';
 import type { Direction } from '../review/themefit';
 import { fileHandlers, runToolLoop, TOOLS, type FixTools } from './fixer';
@@ -58,32 +59,52 @@ const REDESIGN_TOOLS = [
   }),
 ];
 
-/** The task (§8.3): the brief, why the look doesn't fit, the direction and the pages. */
+/** The task (§8.3): the brief and the owner's wishes, why, the direction's spec and the pages. */
 export function redesignTask(input: {
   brief: Brief;
   why: string;
   direction: Direction;
   routes: string[];
+  assets?: AssetsResult;
   retryReason?: string;
   adjust?: string;
 }): string {
   const d = input.direction;
+  const b = input.brief;
+  const wishes = [
+    b.look && `Their vision: "${b.look}".`,
+    b.keep && `Keep: "${b.keep}".`,
+    b.avoid && `Avoid: "${b.avoid}".`,
+    b.inspiration &&
+      `Sites they admire: ${b.inspiration} (screenshots attached after the site's own).`,
+    b.boldness && `How far to go: ${b.boldness}.`,
+  ].filter(Boolean);
+  const missing = input.assets?.missing ?? [];
   return [
     `# Redesign: ${d.name}`,
     '',
-    `Brief: ${JSON.stringify(input.brief)}`,
-    ...(input.brief.look
-      ? [`The owner asked for this redesign; their vision: "${input.brief.look}". Honor it.`]
+    `Brief: ${JSON.stringify(b)}`,
+    ...(wishes.length
+      ? [
+          'The owner’s design wishes (they come first; honor every one):',
+          ...wishes.map((w) => `- ${w}`),
+        ]
       : []),
-    `Why the current look doesn't fit: ${input.why}`,
+    `Why the look changes: ${input.why}`,
     '',
-    `Direction "${d.name}"`,
-    `- Swatches: ${d.swatches.join(', ')}`,
-    `- Typeface: ${d.typeface || 'your choice, to suit the notes'}`,
-    `- Notes: ${d.notes}`,
+    specMarkdown(d.spec, {
+      ...(input.assets?.fontsCss ? { fontsCss: input.assets.fontsCss } : {}),
+      ...(input.assets?.three ? { three: input.assets.three } : {}),
+    }),
+    ...(missing.length
+      ? [
+          '',
+          `These fonts couldn't be downloaded, so use the fallback stack for them: ${missing.join(', ')}.`,
+        ]
+      : []),
     '',
     `Pages (every one must still work): ${input.routes.join(', ')}`,
-    'Verification it must pass: every page renders on the dev server, and no new problems at severity 2 or higher (contrast, tap targets, labels, focus, sideways scrolling at 360/768/1280px).',
+    'Verification it must pass: every page renders on the dev server, the direction’s fonts and colors show on the pages, and no new problems at severity 2 or higher (contrast, tap targets, labels, focus, sideways scrolling at 360/768/1280px).',
     ...(input.retryReason
       ? [
           '',
@@ -135,7 +156,7 @@ export async function runRedesigner(
         role: 'user',
         content: [
           { type: 'input_text', text: task },
-          ...opts.images.slice(0, 4).map((url) => ({ type: 'input_image', image_url: url })),
+          ...opts.images.slice(0, 5).map((url) => ({ type: 'input_image', image_url: url })),
         ],
       },
     ],
@@ -180,6 +201,42 @@ export function judgeRedesign(
   return fresh.length ? `it caused new problems: ${fresh.slice(0, 4).join('; ')}` : null;
 }
 
+const SUMMARY_FAMILIES = /font families \(([^)]*)\)/;
+const SUMMARY_COLORS = /colors ((?:#[0-9a-f]{6}\s?)+)/i;
+
+/**
+ * The look really changed to the direction: its fonts render and its colors are on the pages.
+ * Reads each page's font inventory; a page without one doesn't count either way.
+ */
+export function judgeStyle(
+  after: VerifyPagesResult,
+  spec: DesignSpec,
+  assets?: AssetsResult,
+): string | null {
+  const missing = new Set((assets?.missing ?? []).map((f) => f.toLowerCase()));
+  const wanted = [spec.type.heading.family, spec.type.body.family]
+    .map((f) => f.toLowerCase())
+    .filter((f) => !missing.has(f));
+  const palette = [spec.palette.bg, spec.palette.text, spec.palette.accent];
+  let pages = 0;
+  let fonts = 0;
+  let colors = 0;
+  for (const page of after.pages) {
+    const inv = page.results.find((r) => r.probe === 'font-inventory')?.summary;
+    if (!inv) continue;
+    pages += 1;
+    const families = (SUMMARY_FAMILIES.exec(inv)?.[1] ?? '').split(',').map((f) => f.trim());
+    if (wanted.length === 0 || wanted.some((w) => families.includes(w))) fonts += 1;
+    const seen = (SUMMARY_COLORS.exec(inv)?.[1] ?? '').trim().split(/\s+/).filter(Boolean);
+    if (palette.some((c) => seen.some((s) => distance(c, s) < 0.06))) colors += 1;
+  }
+  if (pages === 0) return null;
+  if (fonts * 2 < pages)
+    return `the new fonts (${[spec.type.heading.family, spec.type.body.family].join(', ')}) aren’t showing on most pages`;
+  if (colors * 2 < pages) return 'the new colors aren’t showing on most pages';
+  return null;
+}
+
 /** Open findings whose check no longer reports its problem on the redesigned page. */
 export function fixedByRedesign(
   after: VerifyPagesResult,
@@ -218,6 +275,16 @@ export function redesignPrBody(input: {
     '',
     '## Direction',
     `${d.notes} Swatches ${d.swatches.join(', ')}; typeface ${d.typeface || 'system'}.`,
+    `Built from Fitts's design library: ${[
+      d.spec.parts.color,
+      d.spec.parts.type,
+      d.spec.parts.shape,
+      d.spec.parts.layout,
+      ...d.spec.parts.decor,
+    ]
+      .map((id) => part(id)?.name ?? id)
+      .join(', ')}.`,
+    ...(d.spec.changes?.length ? d.spec.changes.map((c) => `- ${c}`) : []),
     '',
     '## What changed',
     input.summary || 'Restyled every page to the direction.',
