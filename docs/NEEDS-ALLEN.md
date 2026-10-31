@@ -112,6 +112,18 @@ it isn't set up, and Fitts falls back to `gh` as before.
 7. In Fitts: Settings › Keys › GitHub › **Sign in with GitHub**, enter the code on GitHub,
    then **Choose which repositories Fitts may use** and pick AllenZheng (and fitts if you like).
 
+## 4c. Try the live-site checks for real (10 min, optional)
+
+Each is a real check you can only do on a domain you own. In Fitts: Add a project › Live site,
+type `allenzheng.com`, then:
+
+- **DNS:** pick DNS, add the TXT record it shows (name `_fitts-verify`, the value it gives you)
+  at your DNS provider, wait a few minutes, press Check now.
+- **File:** pick File, put the token in your portfolio at `public/.well-known/fitts-verify.txt`,
+  deploy, press Check now.
+- **A host:** if the portfolio is on Vercel, Netlify or Cloudflare, Connect it with a token (the
+  dialog says where to make one); for GitHub Pages, sign in with GitHub first (4b).
+
 ## 5. Publish the beta release and install it fresh on Windows (20 min, after 1)
 
 **Why:** it publishes a release and installs software. The unpacked build already works

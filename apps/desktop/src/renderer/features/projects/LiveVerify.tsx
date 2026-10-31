@@ -11,11 +11,13 @@ import { TEST_BUILD } from '../../dev';
 import { VERIFY_MS, VERIFY_TOKEN } from '../../lib/new-project';
 import type { SiteVerification } from '@fitts/schema';
 import { bridge } from '../../lib/bridge';
-import { CONNECT_MS, DNS_RECORD_NAME, HOSTS, hostOf, type Host } from '../../mock/hosting';
+import { CONNECT_MS, MOCK_HOSTS } from '../../mock/hosting';
+import { DNS_RECORD_NAME, HOSTS, hostOf, type Host } from '../../lib/hosts';
 import { useToasts } from '../../state/toasts';
 
 type Method = 'host' | 'dns' | 'file';
-type Connection = { host: Host; status: 'connecting' | 'connected' } | null;
+type Connection = { host: Host; status: 'connecting' | 'token' | 'connected' } | null;
+type TokenHost = Exclude<Host['id'], 'github-pages'>;
 
 const PANEL = 'flex flex-col gap-2.5 rounded-card border border-ink bg-surface-2 px-3.5 py-3';
 
@@ -71,10 +73,28 @@ export function LiveVerify({
     const done = (host: Host) => {
       if (!cancelled) setConnection({ host, status: 'connected' });
     };
-    // GitHub Pages is real when the GitHub CLI is there (§4.2); the other hosts are mocked.
-    if (connection.host.id === 'github-pages' && verifier) {
+    // Vercel, Netlify, Cloudflare: the saved token's sites, or ask for a token (§4.2). The test
+    // harness (offline) keeps Phase 1's fixed accounts.
+    const hostId = connection.host.id;
+    if (hostId !== 'github-pages' && verifier && !TEST_BUILD) {
+      void verifier.hostSites(hostId).then((res) => {
+        if (cancelled) return;
+        if (res === null) setConnection({ host: connection.host, status: 'token' });
+        else if ('error' in res) {
+          setProblem(res.error);
+          setConnection({ host: connection.host, status: 'token' });
+        } else done({ ...connection.host, sites: res.sites });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    // GitHub Pages: through Sign in with GitHub, or the GitHub CLI (§4.2).
+    if (hostId === 'github-pages' && verifier) {
       void verifier.githubPages().then((res) => {
-        if (res === null) return done(connection.host);
+        // Offline (the test harness): Phase 1's fixed account.
+        if (res === null)
+          return done(MOCK_HOSTS.find((h) => h.id === 'github-pages') ?? connection.host);
         if ('error' in res) {
           if (!cancelled) {
             setProblem(res.error);
@@ -88,7 +108,9 @@ export function LiveVerify({
         cancelled = true;
       };
     }
-    const timer = setTimeout(() => done(connection.host), CONNECT_MS);
+    // The test harness: Phase 1's fixed accounts, after a moment.
+    const mock = MOCK_HOSTS.find((h) => h.id === connection.host.id) ?? connection.host;
+    const timer = setTimeout(() => done(mock), CONNECT_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -186,8 +208,7 @@ export function LiveVerify({
                 {copy.addProject.hostIntro}
               </p>
               <div className="grid grid-cols-2 gap-2">
-                {/* Vercel, Netlify and Cloudflare are still mock connections: dev builds only. */}
-                {HOSTS.filter((h) => TEST_BUILD || h.id === 'github-pages').map((host) => (
+                {HOSTS.map((host) => (
                   <Button
                     key={host.id}
                     size="md"
@@ -202,6 +223,21 @@ export function LiveVerify({
             <p role="status" className="text-[14px] leading-normal text-cobalt-deep">
               {format(copy.addProject.connecting, { host: connection.host.name })}
             </p>
+          ) : connection.status === 'token' && connection.host.id !== 'github-pages' ? (
+            <HostToken
+              host={connection.host}
+              id={connection.host.id}
+              problem={problem}
+              onConnected={(sites) => {
+                setProblem(null);
+                setConnection({ host: { ...connection.host, sites }, status: 'connected' });
+              }}
+              onProblem={setProblem}
+              onCancel={() => {
+                setProblem(null);
+                setConnection(null);
+              }}
+            />
           ) : (
             <ConnectedHost
               host={connection.host}
@@ -242,6 +278,77 @@ export function LiveVerify({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Connecting Vercel, Netlify or Cloudflare: a token the user makes on the host (read access is
+ * enough), checked by listing their sites and only then saved, encrypted, in Fitts.
+ */
+function HostToken({
+  host,
+  id,
+  problem,
+  onConnected,
+  onProblem,
+  onCancel,
+}: {
+  host: Host;
+  id: TokenHost;
+  problem: string | null;
+  onConnected: (sites: Host['sites']) => void;
+  onProblem: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const inputId = useId();
+  const help = copy.addProject.hostTokens[id];
+  return (
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const verify = bridge().verify;
+        if (!verify || !token.trim()) return;
+        setBusy(true);
+        void verify.hostConnect(id, token).then((res) => {
+          setBusy(false);
+          if (res && 'sites' in res) onConnected(res.sites);
+          else onProblem(res?.error ?? copy.addProject.hostOffline);
+        });
+      }}
+    >
+      <p className="text-[14px] leading-normal">{help.steps}</p>
+      <Button size="sm" className="self-start" onClick={() => bridge().openLink?.(help.url)}>
+        {format(copy.addProject.hostOpenTokens, { host: host.name })}
+      </Button>
+      <label htmlFor={inputId} className="text-[13px] font-semibold">
+        {format(copy.addProject.hostTokenLabel, { host: host.name })}
+      </label>
+      <div className="flex gap-2">
+        <input
+          id={inputId}
+          type="password"
+          autoComplete="off"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          className="min-h-10 min-w-0 flex-1 rounded-control border border-ink bg-card px-3 font-mono text-[13px]"
+        />
+        <Button type="submit" size="sm" variant="primary" disabled={busy || !token.trim()}>
+          {busy ? copy.addProject.checking : copy.addProject.hostConnectToken}
+        </Button>
+        <Button size="sm" onClick={onCancel}>
+          {copy.overlay.cancel}
+        </Button>
+      </div>
+      {problem && (
+        <span role="status" className="text-[13px] text-sun-ink">
+          {problem}
+        </span>
+      )}
+      <span className="text-[12px] text-muted">{copy.addProject.hostTokenNote}</span>
+    </form>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   type EngineEvents,
   type FittsBridge,
   type GitHubStatus,
+  type HostSites,
   type KeyInfo,
   type KeyName,
   type Platform,
@@ -93,6 +94,10 @@ const bridge: FittsBridge = {
       ipcRenderer.invoke(IPC.verifyPages) as ReturnType<
         NonNullable<FittsBridge['verify']>['githubPages']
       >,
+    hostConnect: (host, token) =>
+      ipcRenderer.invoke(IPC.hostConnect, host, token) as Promise<HostSites>,
+    hostSites: (host) => ipcRenderer.invoke(IPC.hostSites, host) as Promise<HostSites>,
+    hostForget: (host) => ipcRenderer.send(IPC.hostForget, host),
   },
   openLink: (url) => ipcRenderer.send(IPC.openLink, url),
   github: {

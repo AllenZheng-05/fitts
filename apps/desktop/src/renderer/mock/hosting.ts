@@ -1,22 +1,10 @@
 // Mock hosting connections for live-site verification (see docs/DECISIONS.md). Phase 1
 // never talks to a host: "connecting" waits CONNECT_MS and returns these fixed accounts.
 
-export type HostId = 'vercel' | 'netlify' | 'cloudflare' | 'github-pages';
+import type { Host } from '../lib/hosts';
 
-export interface HostedSite {
-  /** The project's name on the host. */
-  name: string;
-  /** A domain served by that project; owning it on the account is the proof. */
-  domain: string;
-}
-
-export interface Host {
-  id: HostId;
-  name: string;
-  sites: HostedSite[];
-}
-
-export const HOSTS: Host[] = [
+/** Phase 1's fixed accounts, for the test harness (offline e2e). */
+export const MOCK_HOSTS: Host[] = [
   {
     id: 'vercel',
     name: 'Vercel',
@@ -48,14 +36,3 @@ export const HOSTS: Host[] = [
 
 /** How long the mock "approve Fitts on your host" step takes. */
 export const CONNECT_MS = 1200;
-
-/** The TXT record a domain adds to prove ownership by DNS. */
-export const DNS_RECORD_NAME = '_fitts-verify';
-
-/** "https://Example.com/path" → "example.com". */
-export const hostOf = (url: string) =>
-  url
-    .trim()
-    .replace(/^https?:\/\//i, '')
-    .replace(/[/?#].*$/, '')
-    .toLowerCase();

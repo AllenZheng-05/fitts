@@ -5,7 +5,12 @@ import { CostLedger } from '../../src/agent/ledger/ledger';
 import { LlmCaller } from '../../src/agent/llm/call';
 import { FakeLlmClient, type Fixture } from '../../src/agent/llm/fake';
 import type { AxSnapshot } from '../../src/agent/protocol';
-import { aggregate, aggregateWithChecks, severityOf } from '../../src/agent/review/aggregate';
+import {
+  aggregate,
+  aggregateWithChecks,
+  quoted,
+  severityOf,
+} from '../../src/agent/review/aggregate';
 import {
   cleanDrafts,
   ReviewerPanel,
@@ -312,5 +317,15 @@ describe('the phone pass (device sizes)', () => {
     expect(
       checks.get(findings.find((f) => f.title.startsWith('Text'))?.id ?? ''),
     ).not.toHaveProperty('device');
+  });
+});
+
+describe('titles', () => {
+  it('a control named by its whole text is shortened to its first words', () => {
+    expect(quoted('Quiet Confidence A clean, confident portfolio for recruiters.')).toBe(
+      '“Quiet Confidence A clean,…”',
+    );
+    expect(quoted('Send')).toBe('“Send”');
+    expect(quoted('  ')).toBe('');
   });
 });

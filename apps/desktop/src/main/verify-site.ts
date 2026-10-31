@@ -4,6 +4,21 @@
 import { IPC, type SiteVerification } from '@fitts/schema';
 import { ipcMain } from 'electron';
 import { run } from './spawn';
+import { hostedSites, owns, TOKEN_HOSTS, type TokenHost } from './hosts';
+import type { TokenName } from './secrets';
+
+/** Saved host tokens (Secrets). */
+export interface HostTokens {
+  token(name: TokenName): string | undefined;
+  setToken(name: TokenName, value: string | null): void;
+}
+
+const isTokenHost = (h: unknown): h is TokenHost => TOKEN_HOSTS.includes(h as TokenHost);
+const hostName: Record<TokenHost, string> = {
+  vercel: 'Vercel',
+  netlify: 'Netlify',
+  cloudflare: 'Cloudflare',
+};
 
 type Check = (
   method: 'dns' | 'file',
@@ -46,14 +61,15 @@ export async function githubPages(
 
 /**
  * Before a run on a live site (§4.2: never run on an unverified site). DNS and file are
- * re-checked; GitHub Pages is re-listed. Mocked hosts (Vercel, Netlify, Cloudflare, on the cut
- * list) can't be re-checked and keep their recorded verification.
+ * re-checked; GitHub Pages and Vercel, Netlify or Cloudflare are listed again (with the saved
+ * token), and the domain has to still be there.
  */
 export async function recheck(
   domain: string,
   v: SiteVerification | undefined,
   check: Check,
   pages: typeof githubPages = githubPages,
+  tokens?: HostTokens,
 ): Promise<{ ok: boolean; message: string }> {
   if (offline()) return { ok: true, message: 'offline' };
   if (!v) return { ok: false, message: `${domain} hasn’t been verified.` };
@@ -66,10 +82,50 @@ export async function recheck(
       ? { ok: true, message: 'Still on your GitHub Pages.' }
       : { ok: false, message: `${domain} isn’t one of your GitHub Pages sites anymore.` };
   }
-  return { ok: true, message: 'Verified through your host.' };
+  if (v.method === 'host' && isTokenHost(v.host)) {
+    const token = tokens?.token(`host:${v.host}`);
+    if (!token)
+      return {
+        ok: false,
+        message: `Fitts isn’t connected to ${hostName[v.host]} anymore. Connect it again in Add a project.`,
+      };
+    const sites = await hostedSites(v.host, token).catch((e: unknown) => e as Error);
+    if (sites instanceof Error) return { ok: false, message: sites.message };
+    return owns(v.host, sites, domain)
+      ? { ok: true, message: `Still on your ${hostName[v.host]} account.` }
+      : { ok: false, message: `${domain} isn’t on your ${hostName[v.host]} account anymore.` };
+  }
+  return { ok: false, message: `${domain} hasn’t been verified.` };
 }
 
-export function registerVerify(check: Check, pages: typeof githubPages = githubPages): void {
+export function registerVerify(
+  check: Check,
+  pages: typeof githubPages = githubPages,
+  tokens?: HostTokens,
+): void {
+  // Vercel, Netlify, Cloudflare: a token the user made, saved only once it lists their sites.
+  ipcMain.handle(IPC.hostConnect, async (_e, host: unknown, token: unknown) => {
+    if (offline() || !tokens || !isTokenHost(host)) return null;
+    if (typeof token !== 'string' || !token.trim()) return { error: 'Paste a token first.' };
+    try {
+      const sites = await hostedSites(host, token.trim());
+      tokens.setToken(`host:${host}`, token.trim());
+      return { sites };
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+  });
+  ipcMain.handle(IPC.hostSites, async (_e, host: unknown) => {
+    if (offline() || !tokens || !isTokenHost(host)) return null;
+    const token = tokens.token(`host:${host}`);
+    if (!token) return null;
+    return hostedSites(host, token)
+      .then((sites) => ({ sites }))
+      .catch((e: unknown) => ({ error: (e as Error).message }));
+  });
+  ipcMain.on(IPC.hostForget, (_e, host: unknown) => {
+    if (tokens && isTokenHost(host)) tokens.setToken(`host:${host}`, null);
+  });
   ipcMain.handle(IPC.verifyCheck, (_e, method: unknown, domain: unknown, token: unknown) => {
     if (offline()) return { ok: true, message: '', offline: true };
     if (

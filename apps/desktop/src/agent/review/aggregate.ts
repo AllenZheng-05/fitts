@@ -153,7 +153,7 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
           severity: 3,
         };
       return {
-        title: `${m.split('"')[1] || 'A control'} does nothing visible`,
+        title: `${quoted(m.split('"')[1]) || 'A control'} does nothing visible`,
         finding: 'Pressing it changes nothing on screen.',
         fix: 'Give visible feedback, or remove the control.',
         heuristic: 'H1',
@@ -426,6 +426,18 @@ function median(values: number[]): number {
  * step when it shows up on 3+ screens (frequency) or 3+ reviewers agree it matters
  * (persistence). One step at most: a minor problem everywhere is major, not catastrophic.
  */
+/**
+ * A control's name in a title, short: "Quiet Confidence A clean, confident portfolio…" (a card's
+ * whole text, from its accessible name) becomes its first few words, in quotes.
+ */
+export function quoted(name: string | undefined): string {
+  const n = (name ?? '').replace(/\s+/g, ' ').trim();
+  if (!n) return '';
+  const words = n.split(' ');
+  const short = n.length > 32 ? `${words.slice(0, 4).join(' ').slice(0, 32)}…` : n;
+  return `“${short}”`;
+}
+
 export function severityOf(impact: number, routes: number, agreeing: number): Severity {
   let s = Math.round(impact);
   if ((routes >= 3 || agreeing >= 3) && s >= 2 && s < 4) s += 1;

@@ -2093,3 +2093,16 @@ changes it led to, and the judgment calls in them:
 - **`pnpm -s typecheck` hid errors.** The silent flag swallowed tsc's output (and the build
   doesn't typecheck), so round 1 went in with a few type errors. Fixed; checks now run
   without `-s`.
+- **Vercel, Netlify and Cloudflare are real connections**, through a token the user makes on the
+  host (no app registration needed): Fitts lists the account's sites and the domains each
+  serves (Vercel: each project's verified domains; Netlify: custom domain, aliases and the
+  netlify.app address; Cloudflare: each Pages project's domains, plus active zones), and a site
+  counts as yours when its domain is on the list. A Cloudflare zone also covers its subdomains,
+  since the account controls its DNS. The token is saved (safeStorage, main only) only after it
+  lists sites, and every run re-lists them and checks the domain is still there. The dialog
+  says where to make each token and what access it needs (read is enough; Netlify can't limit
+  its tokens, which it says). "Sign in with Vercel/Netlify" can come later; it needs each host's
+  app registered.
+- **File and meta-tag verification got stricter.** The meta tag counts only inside the page's
+  `<head>` (a tag in the body could be a visitor's post), and a check that was redirected must
+  end on the same site (the domain, with or without www.).

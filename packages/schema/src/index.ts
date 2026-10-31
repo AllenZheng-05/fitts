@@ -373,6 +373,9 @@ export const IPC = {
   githubSignOut: 'fitts:github-sign-out',
   githubEvent: 'fitts:github-event',
   verifyCheck: 'fitts:verify-check',
+  hostConnect: 'fitts:host-connect',
+  hostSites: 'fitts:host-sites',
+  hostForget: 'fitts:host-forget',
   verifyPages: 'fitts:verify-pages',
 } as const;
 
@@ -766,7 +769,19 @@ export interface SiteVerification {
   verifiedAt: string;
 }
 
+/** Where a live site is hosted, for proving it's the user's (§4.2). */
+export type HostId = 'vercel' | 'netlify' | 'cloudflare' | 'github-pages';
+
+/** A host's sites, or why there are none; null when there's no saved token (or offline). */
+export type HostSites = { sites: { name: string; domain: string }[] } | { error: string } | null;
+
 export interface VerifyBridge {
+  /** Saves a token for Vercel, Netlify or Cloudflare if it works, and lists the account's sites. */
+  hostConnect(host: Exclude<HostId, 'github-pages'>, token: string): Promise<HostSites>;
+  /** The account's sites with the saved token. */
+  hostSites(host: Exclude<HostId, 'github-pages'>): Promise<HostSites>;
+  /** Forgets the saved token. */
+  hostForget(host: Exclude<HostId, 'github-pages'>): void;
   /** Checks the DNS TXT record or the file/meta tag. `offline` (e2e) means "not checked". */
   check(
     method: 'dns' | 'file',

@@ -12,7 +12,7 @@ const sentNotifications: { id: string; title: string; body: string }[] = [];
   sentNotifications;
 
 /** Sites Fitts opens in the user's browser: pull requests and the hosts it works with. */
-const LINK_HOSTS = ['github.com'];
+const LINK_HOSTS = ['github.com', 'vercel.com', 'app.netlify.com', 'dash.cloudflare.com'];
 
 /** A link the renderer may open: https, on a host Fitts works with. */
 export function openableLink(url: unknown): url is string {

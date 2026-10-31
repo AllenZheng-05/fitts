@@ -75,10 +75,14 @@ export function buildReport(project: Project | undefined, run: RunState, now = n
     '',
     `## ${r.findings}`,
     '',
-    ...run.findings.map(
-      (f) =>
-        `- [${severityLabel(f.severity, 'short')}] ${f.title} · ${f.heuristic ?? copy.audit.lens[f.lens]} · ${f.route} · ${f.status}`,
-    ),
+    ...run.findings.map((f) => {
+      // Where it stands, in words, with the PR that fixed it (the redesign's, if it did).
+      const change = run.changes.find((c) => c.findingIds.includes(f.id));
+      const status = r.findingStatus[f.status];
+      const pr = f.prNumber ? ` · PR #${f.prNumber}` : '';
+      const by = change?.kind === 'redesign' ? ` ${r.byRedesign}` : '';
+      return `- [${severityLabel(f.severity, 'short')}] ${f.title} · ${f.heuristic ?? copy.audit.lens[f.lens]} · ${f.route} · ${status}${by}${pr}`;
+    }),
     '',
     `## ${r.cost}`,
     '',

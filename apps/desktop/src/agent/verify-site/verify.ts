@@ -24,6 +24,21 @@ export function domainOf(input: string): string {
   return /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(host) ? host : '';
 }
 
+/**
+ * A check that was redirected must still end on the same site (the domain, or it with or
+ * without www.): a redirect elsewhere could serve someone else's token.
+ */
+export function sameSite(finalUrl: string | undefined, domain: string): boolean {
+  if (!finalUrl) return true;
+  try {
+    const host = new URL(finalUrl).hostname.toLowerCase();
+    const bare = (h: string) => h.replace(/^www\./, '');
+    return bare(host) === bare(domain.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 /** The token as published may be bare or `fitts-verify=<token>`; both count. */
 const matches = (value: string, token: string) => {
   const v = value.trim().replace(/^"|"$/g, '');
@@ -54,24 +69,31 @@ export async function verifyDns(
 export async function verifyFile(
   domain: string,
   token: string,
-  get: (url: string) => Promise<{ status: number; text: string }> = async (url) => {
+  get: (url: string) => Promise<{ status: number; text: string; url?: string }> = async (url) => {
     const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10_000) });
-    return { status: res.status, text: (await res.text()).slice(0, 200_000) };
+    return { status: res.status, text: (await res.text()).slice(0, 200_000), url: res.url };
   },
   base = `https://${domain}`,
 ): Promise<VerifyOutcome> {
   try {
     const file = await get(`${base}${FILE_PATH}`);
-    if (file.status === 200 && matches(file.text, token))
+    if (file.status === 200 && sameSite(file.url, domain) && matches(file.text, token))
       return { ok: true, message: `Found the token at ${FILE_PATH}.` };
   } catch {
     // Try the meta tag.
   }
   try {
     const home = await get(`${base}/`);
-    const meta = /<meta\s+[^>]*name=["']fitts-verify["'][^>]*>/i.exec(home.text)?.[0] ?? '';
+    // Only the page's own <head> counts: a tag in the body could come from a visitor's post.
+    const head = /<head[\s>][\s\S]*?<\/head>/i.exec(home.text)?.[0] ?? '';
+    const meta = /<meta\s+[^>]*name=["']fitts-verify["'][^>]*>/i.exec(head)?.[0] ?? '';
     const content = /content=["']([^"']*)["']/i.exec(meta)?.[1];
-    if (home.status === 200 && content !== undefined && matches(content, token))
+    if (
+      home.status === 200 &&
+      sameSite(home.url, domain) &&
+      content !== undefined &&
+      matches(content, token)
+    )
       return { ok: true, message: 'Found the fitts-verify meta tag on your home page.' };
   } catch {
     return { ok: false, message: `I couldn’t reach ${domain}.` };

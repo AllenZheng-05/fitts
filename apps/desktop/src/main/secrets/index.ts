@@ -20,6 +20,9 @@ const ENV_NAMES: Record<KeyName, string> = {
   baseten: 'BASETEN_API_KEY',
 };
 
+/** Sign-ins and host tokens kept beside the API keys: GitHub, and each host Fitts reads. */
+export type TokenName = 'github' | 'host:vercel' | 'host:netlify' | 'host:cloudflare';
+
 export class Secrets {
   private readonly file: string;
   private devFallback: Partial<Record<KeyName, string>> | undefined;
@@ -75,7 +78,7 @@ export class Secrets {
   }
 
   /** A sign-in's tokens (GitHub), kept encrypted beside the keys. Main only. */
-  token(name: 'github'): string | undefined {
+  token(name: TokenName): string | undefined {
     const stored = this.read()[`token:${name}`];
     if (!stored) return undefined;
     try {
@@ -85,7 +88,7 @@ export class Secrets {
     }
   }
 
-  setToken(name: 'github', value: string | null): void {
+  setToken(name: TokenName, value: string | null): void {
     const all = this.read();
     if (value === null) delete all[`token:${name}`];
     else {

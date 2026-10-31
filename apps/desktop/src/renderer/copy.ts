@@ -511,6 +511,16 @@ export const copy = {
     pastRun: 'This is an earlier run. Its changes live in their pull requests.',
     nothingChanged: 'Nothing changed in this run.',
     report: {
+      findingStatus: {
+        open: 'open',
+        dismissed: 'not a problem',
+        fixing: 'being fixed',
+        verified: 'fixed',
+        'pr-opened': 'fixed, PR open',
+        'rolled-back': 'rolled back',
+        undone: 'undone',
+      },
+      byRedesign: 'by the redesign',
       title: 'Fitts report · {project} · Run #{run}',
       generated: 'Generated {date}',
       summary: 'Summary',
@@ -657,7 +667,30 @@ export const copy = {
     hostIntro:
       "Connect the service that hosts your site. Fitts only reads which domains are on your account. It can't deploy or change anything.",
     connect: 'Connect {host}',
-    connecting: 'Connecting to {host}… approve Fitts in the window your host opens.',
+    hostTokens: {
+      vercel: {
+        url: 'https://vercel.com/account/settings/tokens',
+        steps:
+          'On Vercel, open Account settings › Tokens and create a token for your account. Fitts only reads your projects and their domains.',
+      },
+      netlify: {
+        url: 'https://app.netlify.com/user/applications#personal-access-tokens',
+        steps:
+          'On Netlify, open User settings › Applications › Personal access tokens and make a new one. Netlify tokens can’t be limited, so Fitts uses it only to list your sites and their domains.',
+      },
+      cloudflare: {
+        url: 'https://dash.cloudflare.com/profile/api-tokens',
+        steps:
+          'On Cloudflare, open My Profile › API Tokens › Create Token › Custom token, and give it read access: Account › Cloudflare Pages › Read and Zone › Zone › Read.',
+      },
+    },
+    hostOpenTokens: 'Open {host} tokens',
+    hostTokenLabel: 'Your {host} token',
+    hostConnectToken: 'Connect',
+    hostTokenNote:
+      'The token is encrypted on this computer and only sent to that host. Fitts checks your site is still there before each run.',
+    hostOffline: 'I can’t reach the host right now.',
+    connecting: 'Connecting to {host}…',
     connected: 'Connected to {host}',
     switchHost: 'Use a different host',
     pickSite: 'Your sites on {host}',

@@ -75,4 +75,22 @@ describe('file or meta tag', () => {
     pages.set('/', '<html></html>');
     expect((await verifyFile('example.com', TOKEN, get, base)).ok).toBe(false);
   });
+
+  it('a meta tag in the body doesn’t count (a visitor could have posted it)', async () => {
+    pages.clear();
+    pages.set(
+      '/',
+      `<html><head></head><body><p>Comment: <meta name="fitts-verify" content="AB12CD34EF"></p></body></html>`,
+    );
+    expect((await verifyFile('example.com', TOKEN, get, base)).ok).toBe(false);
+  });
+
+  it('a check redirected to another site doesn’t count; www. is the same site', async () => {
+    const redirected = (to: string) => () =>
+      Promise.resolve({ status: 200, text: `${TOKEN}\n`, url: to });
+    const elsewhere = redirected('https://attacker.example/.well-known/fitts-verify.txt');
+    expect((await verifyFile('example.com', TOKEN, elsewhere)).ok).toBe(false);
+    const www = redirected('https://www.example.com/.well-known/fitts-verify.txt');
+    expect((await verifyFile('example.com', TOKEN, www)).ok).toBe(true);
+  });
 });

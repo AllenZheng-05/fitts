@@ -96,8 +96,8 @@ void app.whenReady().then(() => {
           .then((sites) => ({ sites }))
           .catch((e: unknown) => ({ error: (e as Error).message }))
       : githubPages();
-  registerVerify(check, pages);
-  sites.recheck = (domain, verification) => recheck(domain, verification, check, pages);
+  registerVerify(check, pages, secrets);
+  sites.recheck = (domain, verification) => recheck(domain, verification, check, pages, secrets);
   new VoiceHost(
     (name) => secrets.get(name),
     (projectId, usage) => host.voiceUsage(projectId, usage),
