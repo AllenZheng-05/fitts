@@ -28,6 +28,8 @@ interface Route {
   refs: Map<string, string>;
   seen: boolean;
   issues: number;
+  /** The owner skipped it: controls found there later are skipped too, and it stays done. */
+  skipped?: string;
 }
 
 /** "/compose/recipient?x=1" → "/compose/recipient". Query strings don't make new routes. */
@@ -121,7 +123,11 @@ export class Coverage {
         role: n.role,
         ...(n.type ? { type: n.type } : {}),
         tried: false,
-        ...(elsewhere ? { skipped: `same as on ${elsewhere}` } : {}),
+        ...(route.skipped
+          ? { skipped: route.skipped }
+          : elsewhere
+            ? { skipped: `same as on ${elsewhere}` }
+            : {}),
       });
     }
   }
@@ -134,7 +140,7 @@ export class Coverage {
 
   setStatus(path: string, status: Route['status'], label?: string): void {
     const route = this.routes.get(routeOf(path));
-    if (!route) return;
+    if (!route || route.skipped) return;
     route.status = status;
     if (label === undefined) delete route.label;
     else route.label = label;
@@ -164,6 +170,18 @@ export class Coverage {
   skip(path: string, ref: string, reason: string): void {
     const c = this.control(path, ref);
     if (c) c.skipped = reason;
+  }
+
+  /** The owner skipped a page (SPEC-phase3 §1.4): what's left there is skipped, and it's done. */
+  skipRoute(path: string, reason: string): void {
+    this.discover(path);
+    const route = this.routes.get(routeOf(path));
+    if (!route) return;
+    for (const c of route.controls.values()) if (!c.tried) c.skipped ??= reason;
+    route.skipped = reason;
+    route.seen = true;
+    route.status = 'done';
+    route.label = 'skipped';
   }
 
   /** Every control on the route is tried or skipped (or the route was never reachable). */

@@ -9,6 +9,7 @@ import { RunHost } from './run-host';
 import { Secrets } from './secrets';
 import { FixHost } from './fix/fix-host';
 import { FontStore } from './fonts/fonts';
+import { saveBoard } from './site/board';
 import { VoiceHost } from './voice';
 import { registerTools } from './tools';
 import { githubPages, recheck, registerVerify } from './verify-site';
@@ -50,11 +51,12 @@ void app.whenReady().then(() => {
   host.onStep = (projectId, runId, step) => void sites.shot(projectId, runId, step);
   const github = createGitHub(secrets);
   registerGitHub(github);
+  const fonts = new FontStore(join(userData, 'fonts'));
   const fixes = new FixHost(
     (id) => projects.get(id),
     () => github.prs(),
     {
-      fonts: new FontStore(join(userData, 'fonts')),
+      fonts,
       vendorDir: app.isPackaged
         ? join(process.resourcesPath, 'vendor')
         : join(__dirname, '../../resources/vendor'),
@@ -66,7 +68,9 @@ void app.whenReady().then(() => {
   host.siteOps = async (projectId, op) =>
     op.op === 'fix'
       ? { op: 'fix', value: await fixes.call(projectId, op.call) }
-      : sites.run(projectId, op);
+      : op.op === 'board'
+        ? { op: 'saved', url: await saveBoard(sites, fonts, projectId, op) }
+        : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.versions = fixes;
   // "Add the Fitts plugin" (Add project): its own small PR. Offline (e2e), nothing happens.

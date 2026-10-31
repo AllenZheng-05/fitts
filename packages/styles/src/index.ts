@@ -231,3 +231,5 @@ export function specMarkdown(
     ...sections,
   ].join('\n');
 }
+
+export { buildBoard, FONT_SLOT, type BoardArt, type BoardWords } from './board';

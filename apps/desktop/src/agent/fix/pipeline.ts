@@ -63,6 +63,11 @@ export interface PipelineHost {
   idle(): void;
   /** What the run is doing once a redesign adjustment ends (acting, or idle when it's done). */
   restingActivity(): RunState['activity'];
+  /**
+   * The redesign's final review (SPEC-phase3 §2.4), before its PR opens. `adjust` changes the
+   * branch from the owner's words while the review is open. Without it, the PR just opens.
+   */
+  review?(changeId: string, adjust: (text: string) => Promise<void>): Promise<'ok' | 'restart'>;
 }
 
 export type Fixer = (
@@ -805,6 +810,18 @@ export class FixPipeline {
     });
     if (events.length) this.host.emit(events);
     onCommitted();
+    // The owner reviews it before the PR opens (§2.4); "Start over" rolls it back.
+    const verdict = (await this.host.review?.(changeId, (text) => this.adjust(text, true))) ?? 'ok';
+    if (verdict === 'restart') {
+      for (const id of fixedIds) this.update(id, { status: 'open' });
+      for (const w of this.wording.values()) {
+        const c = this.host.state().changes.find((x) => x.id === w.changeId);
+        if (c) this.change({ ...c, status: 'undone' });
+      }
+      this.wording.clear();
+      this.redesignJob = undefined;
+      throw new Error('you asked to start over');
+    }
     const fixed = s.findings.filter((f) => fixedIds.includes(f.id));
     let prNote = '';
     try {
@@ -868,11 +885,14 @@ export class FixPipeline {
     return Boolean(c && c.status === 'verified' && !this.redesigning);
   }
 
-  /** "Adjust it": the redesigner changes what the user asked, verified like the first pass. */
-  async adjust(text: string): Promise<void> {
+  /**
+   * "Adjust it": the redesigner changes what the user asked, verified like the first pass.
+   * `inReview`: during the final review (§2.4), while the redesign itself is still running.
+   */
+  async adjust(text: string, inReview = false): Promise<void> {
     const rj = this.redesignJob;
     const redesigner = this.redesigner;
-    if (!rj || !redesigner || !this.canAdjust) return;
+    if (!rj || !redesigner || (!inReview && !this.canAdjust)) return;
     this.redesigning = true;
     this.emitCount();
     this.host.emit([
@@ -925,11 +945,14 @@ export class FixPipeline {
       await this.site.fix({ fn: 'reset', job: rj.job }).catch(() => undefined);
       this.host.say(`I couldn’t adjust it: ${(e as Error).message}`);
     } finally {
-      this.redesigning = false;
-      this.emitCount();
-      this.pump();
-      this.host.emit([{ type: 'activity.changed', activity: this.host.restingActivity() }]);
-      if (!this.busy) this.host.idle();
+      // In review the redesign is still running; it ends (and resets these) when it's done.
+      if (!inReview) {
+        this.redesigning = false;
+        this.emitCount();
+        this.pump();
+        this.host.emit([{ type: 'activity.changed', activity: this.host.restingActivity() }]);
+        if (!this.busy) this.host.idle();
+      }
     }
   }
 

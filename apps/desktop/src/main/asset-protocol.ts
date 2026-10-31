@@ -27,16 +27,25 @@ export function assetPath(root: string, url: string): string | null {
   const [runId, kind, ...rest] = decodeURIComponent(u.pathname).split('/').filter(Boolean);
   if (!SAFE_ID.test(projectId) || !runId || !SAFE_ID.test(runId)) return null;
   if (kind !== 'shots' && kind !== 'assets') return null;
-  if (rest.length !== 1 || !/^[\w.-]+\.(jpg|png|webp|svg)$/.test(rest[0] ?? '')) return null;
+  // A style board is an .html asset (SPEC-phase3 §2), shown in a sandboxed iframe.
+  if (rest.length !== 1 || !/^[\w.-]+\.(jpg|png|webp|svg|html)$/.test(rest[0] ?? '')) return null;
   const base = join(runDir(root, projectId, runId), kind);
   const file = normalize(join(base, rest[0] ?? ''));
   return file.startsWith(base + sep) ? file : null;
 }
 
+/** A style board may draw only with what it carries: no scripts, nothing from the network. */
+export const BOARD_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'";
+
 export function handleAssets(root: string): void {
-  protocol.handle(ASSET_SCHEME, (req) => {
+  protocol.handle(ASSET_SCHEME, async (req) => {
     const file = assetPath(root, req.url);
     if (!file || !existsSync(file)) return new Response('Not found', { status: 404 });
-    return net.fetch(pathToFileURL(file).toString());
+    const res = await net.fetch(pathToFileURL(file).toString());
+    if (!file.endsWith('.html')) return res;
+    return new Response(res.body, {
+      headers: { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': BOARD_CSP },
+    });
   });
 }

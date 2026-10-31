@@ -81,6 +81,9 @@ export function ChatItemView({ item, run }: { item: ChatItem; run: RunState }) {
     case 'directions':
       body = <Directions item={item} run={run} />;
       break;
+    case 'review':
+      body = <Review item={item} run={run} />;
+      break;
     case 'progress':
       body = <Progress item={item} run={run} />;
       break;
@@ -428,9 +431,114 @@ function QuickReplies({ item, run }: { item: Item<'quick-replies'>; run: RunStat
   );
 }
 
+/**
+ * The redesign's final review (SPEC-phase3 §2.4): every page before and after, then the
+ * owner's call. In the Ask modes the PR waits for it; in Autonomous it's open, and can be sent
+ * back.
+ */
+function Review({ item, run }: { item: Item<'review'>; run: RunState }) {
+  const r = copy.items.review;
+  const change = run.changes.find((c) => c.id === item.changeId);
+  const answer = (a: string) => getEngine().answerQuestion(run.projectId, item.id, a);
+  const answered =
+    item.answer === 'ok' || item.answer === 'restart' || item.answer === 'back'
+      ? r.answered[item.answer]
+      : undefined;
+  return (
+    <div className={cx(CARD, 'gap-2.5')}>
+      <span className="text-[14px] font-bold">{r.title}</span>
+      {change?.pages && change.pages.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {change.pages.slice(0, 4).map((p) => (
+            <li key={p.route} className="flex flex-col gap-1">
+              <span className="font-mono text-[12px] text-muted">{p.route}</span>
+              <span className="grid grid-cols-2 gap-1.5">
+                {p.before ? (
+                  <img
+                    src={p.before}
+                    alt={format(r.pageAlt, { route: p.route, when: r.before })}
+                    className="aspect-[8/5] w-full rounded-tag border border-ink object-cover object-top"
+                  />
+                ) : (
+                  <span />
+                )}
+                <img
+                  src={p.after}
+                  alt={format(r.pageAlt, { route: p.route, when: r.after })}
+                  className="aspect-[8/5] w-full rounded-tag border border-ink object-cover object-top"
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {answered ? (
+        <Chip className="self-start">{answered}</Chip>
+      ) : item.autonomous ? (
+        <>
+          <p className="text-[13px] text-ink-2">{r.autonomousHint}</p>
+          <Button size="md" className="self-start" onClick={() => answer('back')}>
+            {r.back}
+          </Button>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" size="md" onClick={() => answer('ok')}>
+              {r.ok}
+            </Button>
+            <Button size="md" onClick={() => answer('restart')}>
+              {r.restart}
+            </Button>
+          </div>
+          <p className="text-[13px] text-ink-2">{r.hint}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Directions({ item, run }: { item: Item<'directions'>; run: RunState }) {
   // A click opens the direction large; you choose it from there.
   const [viewing, setViewing] = useState<number | null>(null);
+  const latest = [...run.chat].reverse().find((c) => c.type === 'directions')?.id === item.id;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {(item.round ?? 1) > 1 && (
+        <p className="text-[13px] text-ink-2">
+          <strong>{format(copy.directions.round, { n: item.round ?? 1 })}</strong>
+          {item.changed ? ` · ${item.changed}` : ''}
+        </p>
+      )}
+      <DirectionOptions item={item} run={run} viewing={viewing} setViewing={setViewing} />
+      {/* Not one of them: say what's off, and Fitts makes a new round (§2.3). */}
+      {latest && !item.selectedId && run.phase !== 'done' && (
+        <button
+          type="button"
+          onClick={() => {
+            useUi.getState().set({ draft: copy.directions.noneOfTheseDraft });
+            document.getElementById(MESSAGE_BOX_ID)?.focus();
+          }}
+          className="self-start text-[13px] font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
+        >
+          {copy.directions.noneOfThese}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DirectionOptions({
+  item,
+  run,
+  viewing,
+  setViewing,
+}: {
+  item: Item<'directions'>;
+  run: RunState;
+  viewing: number | null;
+  setViewing: (i: number | null) => void;
+}) {
   return (
     <div role="group" aria-label={copy.items.directionsLabel} className="flex gap-2">
       <DirectionViewer
@@ -454,6 +562,11 @@ function Directions({ item, run }: { item: Item<'directions'>; run: RunState }) 
               selected ? 'border-2 border-cobalt p-2' : 'border border-ink',
             )}
           >
+            {option.board && !option.mockup && (
+              <span className="self-start rounded-tag border border-ink bg-paper px-1.5 py-0.5 text-[11px] font-bold">
+                {copy.directions.boardChip}
+              </span>
+            )}
             {option.mockup && (
               <span className="relative">
                 <img

@@ -24,13 +24,19 @@ import { ProbeRunner } from '../crawler/probes';
 import { aggregateWithChecks, type Check } from '../review/aggregate';
 import { FixPipeline, type Fixer, type Redesigner } from '../fix/pipeline';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
+import { type Direction, type Inspiration, type ThemeFit } from '../review/themefit';
+import { outlineSvg, type Media } from '../llm/media';
+import { buildBoard, specFonts } from '@fitts/styles';
+import { boardWords, solidPng } from './board-art';
+import type { Converse } from './decider';
 import {
-  describeDirection,
-  type Direction,
-  type Inspiration,
-  type ThemeFit,
-} from '../review/themefit';
-import { directionInstruction, outlineSvg, type Media } from '../llm/media';
+  ScriptedDecider,
+  type AbilityName,
+  type Decider,
+  type Decision,
+  type Outcome,
+  type Situation,
+} from './abilities';
 
 /** api-trouble retries on its own after this long (§6.3). */
 export const API_RETRY_MS = 12_000;
@@ -45,6 +51,10 @@ export const STALL_PAGE = 8;
 export const STALL_RUN = 24;
 /** A finding's replay shows at most this many steps. */
 const REPLAY_STEPS = 8;
+/** Explore runs at most this many steps before the decider gets a say (§1.2). */
+export const EXPLORE_STEPS = 12;
+/** The decider sees this many recent outcomes. */
+const RECENT = 8;
 
 export interface RunDeps {
   site: Site;
@@ -60,6 +70,10 @@ export interface RunDeps {
   actionDelayMs?: number;
   /** Tests: a lower ceiling than MAX_STEPS. */
   maxSteps?: number;
+  /** Picks the next ability (SPEC-phase3 §1.2). Without one, Phase 2's order. */
+  decider?: Decider;
+  /** Answers the owner while the work goes on (§1.3). Without one, a short acknowledgement. */
+  converse?: Converse;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
   /** SAM outlines and Muse Image mockups (§10). Without it, the UI keeps DOM boxes. */
@@ -68,6 +82,17 @@ export interface RunDeps {
   fixer?: Fixer;
   /** The redesigner (§8.3): applies a picked direction. Without one, directions are advice. */
   redesigner?: Redesigner;
+  /** A new round of directions from the owner's feedback (SPEC-phase3 §2.3). */
+  reviseLooks?: (
+    input: {
+      brief: RunState['brief'];
+      why: string;
+      shots: string[];
+      inventory: string[];
+      round: { n: number; previous: Direction[]; feedback: string };
+    },
+    signal?: AbortSignal,
+  ) => Promise<Direction[]>;
   /** Theme-fit (§8.3), asked once after the first 3 routes. */
   themeFit?: (
     input: {
@@ -121,6 +146,28 @@ export class RealRun {
   /** Steps in a row that moved nothing (no new control tried, route seen, or route done). */
   private stalled = 0;
   private progressKey = '';
+  /** The crawl can't usefully go on: covered, going in circles, or at the ceiling. */
+  private crawlEnded = false;
+  /** Abilities that have run to the end, and what the last few did (for the decider). */
+  private readonly ran: Partial<Record<AbilityName, boolean>> = {};
+  private readonly recent: Outcome[] = [];
+  /** The owner's messages for the next decision, and the ones it already saw (§1.4). */
+  private inbox: string[] = [];
+  private readonly heard: string[] = [];
+  /** Which round of directions is showing (§2.3). */
+  private round = 1;
+  /** The redesign's final review is open (§2.4): its item, its answer, its adjust. */
+  private reviewing:
+    | {
+        id: string;
+        resolve: (v: 'ok' | 'restart') => void;
+        adjust: (text: string) => Promise<void>;
+      }
+    | undefined;
+  /** "Send it back" was pressed: the owner's next message changes the redesign. */
+  private sendingBack = false;
+  /** The owner spoke while Fitts waited for a pick: that's for the decider, not a pick. */
+  private pickInterrupted = false;
   private lastRoutes = '';
   /** Controls that showed an error, tried again once the crawl next arrives on their route. */
   private readonly retryOn = new Map<string, Set<string>>();
@@ -150,7 +197,8 @@ export class RealRun {
   private lookWhy = '';
   private picked: Direction | undefined;
   private redesignStarted = false;
-  private readonly mockupPngs = new Map<string, string>();
+  /** Each direction's hero illustration as PNG (§2.2), for its board and the redesigner. */
+  private readonly heroPngs = new Map<string, string>();
   /** The first screenshot of each site the owner admires, for the redesigner. */
   private inspirationShots: string[] = [];
   /** The review waits here for a pick in the Ask modes ("Keep my look" resolves it empty). */
@@ -316,7 +364,212 @@ export class RealRun {
     });
   }
 
+  /**
+   * The run (SPEC-phase3 §1): ask the decider what to do next, do it, and ask again, until an
+   * ability ends the run (finish, or fixes that finish it when they settle). A decider that
+   * fails falls back to Phase 2's order, so the run never stalls on it; so does the decision
+   * after one a guarantee refused, so a decider can't spin on a refusal.
+   */
   private async loop(): Promise<void> {
+    const decider = this.deps.decider ?? new ScriptedDecider();
+    const fallback = new ScriptedDecider();
+    let refused = false;
+    while (!this.finished) {
+      if (this.blocked()) {
+        await this.sleepUntilKicked();
+        continue;
+      }
+      const situation = this.situation();
+      this.heard.push(...this.inbox);
+      this.inbox = [];
+      // A real decision takes a moment: the Now line says what Fitts is doing meanwhile.
+      if (this.deps.decider && !refused)
+        this.emit([{ type: 'now.changed', nowText: 'Thinking about what’s next' }]);
+      let decision: Decision;
+      try {
+        decision = await (refused ? fallback : decider).next(situation, this.abort.signal);
+      } catch (e) {
+        if (this.finished) return;
+        if ((e as { name?: string }).name === 'AbortError') continue;
+        decision = await fallback.next(situation);
+      }
+      if (this.finished) return;
+      if (this.blocked()) continue;
+      if (decision.say) this.say(decision.say);
+      this.emit([
+        {
+          type: 'ability.changed',
+          ability: { name: decision.ability, since: this.state.elapsedMs },
+        },
+      ]);
+      const outcome = await this.use(decision);
+      if (!this.finished) this.emit([{ type: 'ability.changed' }]);
+      refused = outcome.result === 'refused';
+      this.recent.push(outcome);
+      if (this.recent.length > RECENT) this.recent.shift();
+      if (outcome.result === 'done' && (outcome.ability === 'finish' || this.fixPhase)) return;
+    }
+  }
+
+  /** Runs one ability. The guarantees (§1.6) are checked here, not by the decider. */
+  private async use(d: Decision): Promise<Outcome> {
+    const live = isLiveOrigin(this.deps.origin);
+    const outcome = (result: Outcome['result'], note?: string): Outcome => ({
+      ability: d.ability,
+      result,
+      ...(note ? { note } : {}),
+    });
+    switch (d.ability) {
+      case 'explore':
+        return this.explore(d.route);
+      case 'phone_pass':
+        await this.phonePass();
+        this.ran.phone_pass = true;
+        return outcome('done');
+      case 'check_links':
+        this.emit([{ type: 'now.changed', nowText: 'Checking links and network' }]);
+        await this.probes.finish();
+        this.ran.check_links = true;
+        return outcome('done');
+      case 'review':
+        if (this.ran.review) return outcome('refused', 'already reviewed');
+        await this.review();
+        this.ran.review = true;
+        return outcome('done');
+      case 'check_theme':
+        // A site with fewer than 3 pages still gets theme-fit, on what there is (§8.3).
+        if (!this.themeAsked && this.deps.themeFit && this.pages.size > 0) {
+          this.themeAsked = true;
+          this.themeCheck = this.checkTheme();
+        }
+        await this.themeCheck;
+        this.ran.check_theme = true;
+        return outcome('done');
+      case 'looks':
+        if (live) return outcome('refused', 'a live site can’t be changed');
+        this.pickInterrupted = false;
+        await this.redesignStep();
+        // The owner said something instead of picking: the decider hears it, then asks again.
+        if (this.pickInterrupted) return outcome('progress', 'the owner spoke instead of picking');
+        this.ran.looks = true;
+        return outcome('done');
+      case 'fix': {
+        if (live) return outcome('refused', 'a live site can’t be changed');
+        this.ran.fix = true;
+        return (await this.offerFixes()) ? outcome('done', 'fixing') : outcome('nothing');
+      }
+      case 'skip_pages': {
+        const paths = (d.paths ?? []).map(routeOf);
+        if (paths.length === 0) return outcome('nothing');
+        for (const path of paths) this.coverage.skipRoute(path, 'you skipped it');
+        this.syncCoverage();
+        return outcome('done', paths.join(' '));
+      }
+      case 'stop_exploring':
+        this.crawlEnded = true;
+        return outcome('done');
+      case 'new_look':
+        if (live) return outcome('refused', 'a live site can’t be changed');
+        if (this.redesignStarted) return outcome('refused', 'a look is already applied');
+        // The wish becomes the brief's look, and the theme is judged again with it (§1.4).
+        this.emit([
+          {
+            type: 'brief.updated',
+            brief: { ...this.state.brief, look: d.wish ?? this.state.brief.look ?? 'a new look' },
+          },
+        ]);
+        this.themeAsked = false;
+        this.themeCheck = undefined;
+        this.directions = [];
+        this.picked = undefined;
+        delete this.ran.check_theme;
+        delete this.ran.looks;
+        return outcome('done');
+      case 'revise_looks': {
+        if (live) return outcome('refused', 'a live site can’t be changed');
+        if (this.redesignStarted) return outcome('refused', 'a look is already applied');
+        if (this.directions.length === 0 || !this.deps.reviseLooks)
+          return outcome('refused', 'no directions to revise yet');
+        return this.reviseLooks(d.wish ?? this.heard.slice(-3).join(' '));
+      }
+      case 'dismiss': {
+        const f = this.state.findings.find(
+          (x) => x.status === 'open' && d.ref !== undefined && x.elementRef === d.ref,
+        );
+        if (!f) return outcome('refused', 'no finding on that element');
+        this.dismissFinding(f.id);
+        return outcome('done', f.title);
+      }
+      case 'finish':
+        // Every page and control is tried or skipped first, unless the crawl can't go on.
+        if (!this.coverage.complete() && !this.crawlEnded)
+          return outcome('refused', 'pages and controls are left to try');
+        // And the audit's own checks have run: a run never ends unreviewed.
+        for (const owed of ['phone_pass', 'check_links', 'review'] as const)
+          if (!this.ran[owed]) return outcome('refused', `${owed} hasn’t run yet`);
+        this.crawlComplete();
+        return outcome('done');
+    }
+  }
+
+  /** What the decider sees (§1.2). */
+  private situation(): Situation {
+    const routes = this.coverage.stateRoutes();
+    const shown = this.state.findings.filter((f) => f.lane !== 'suggestion');
+    const bySeverity: Record<number, number> = {};
+    for (const f of shown) bySeverity[f.severity] = (bySeverity[f.severity] ?? 0) + 1;
+    const next = this.coverage.nextRoute();
+    return {
+      brief: { ...this.state.brief },
+      mode: this.state.mode,
+      live: isLiveOrigin(this.deps.origin),
+      coverage: {
+        complete: this.coverage.complete(),
+        ended: this.crawlEnded,
+        controls: this.coverage.controlsTried(),
+        routes: routes.map((r) => ({
+          path: r.path,
+          status: r.status,
+          ...(r.label ? { label: r.label } : {}),
+        })),
+        ...(next ? { nextRoute: next } : {}),
+      },
+      stalled: this.stalled,
+      findings: {
+        total: shown.length,
+        bySeverity,
+        worst: [...shown]
+          .sort((a, b) => b.severity - a.severity)
+          .slice(0, 5)
+          .map((f) => f.title),
+      },
+      ran: { ...this.ran },
+      recent: [...this.recent],
+      messages: [...this.inbox],
+      earlier: this.heard.slice(-10),
+      budget: { spentUsd: this.state.cost.spentUsd, capUsd: this.state.cost.capUsd },
+    };
+  }
+
+  /**
+   * Explore (§1.1): the crawl, a stretch at a time. It goes until the page it started on is
+   * done or EXPLORE_STEPS pass, then the decider gets a say; the crawl ends (and says so) on
+   * coverage, on going in circles, or at the ceiling. Re-entering it is seamless: each step
+   * starts from a fresh snapshot.
+   */
+  private async explore(route?: string): Promise<Outcome> {
+    const outcome = (result: Outcome['result'], note?: string): Outcome => ({
+      ability: 'explore',
+      result,
+      ...(note ? { note } : {}),
+    });
+    if (route) {
+      const snap = await this.deps.site.snapshot().catch(() => undefined);
+      if (snap && routeOf(snap.path) !== routeOf(route))
+        await this.perform({ kind: 'navigate', path: route, why: `Opening ${route}` }, snap.path);
+    }
+    let steps = 0;
+    let startedOn: string | undefined;
     while (!this.finished) {
       if (this.blocked()) {
         await this.sleepUntilKicked();
@@ -326,7 +579,8 @@ export class RealRun {
       if (this.state.step >= max) {
         // The ceiling, not the end of the site: say so, with what's left.
         this.say(format(copy.fitts.stepCap, { max, ...this.leftWords() }));
-        break;
+        this.crawlEnded = true;
+        return outcome('done', 'ceiling');
       }
       let snap: AxSnapshot;
       try {
@@ -348,6 +602,7 @@ export class RealRun {
       if (this.blocked() || this.finished) continue;
 
       const here = routeOf(snap.path);
+      startedOn ??= here;
       const empty = this.probes.emptySubmit(snap, this.coverage.untried(here));
       let action: Action;
       try {
@@ -365,28 +620,22 @@ export class RealRun {
         throw e;
       }
       if (this.blocked()) continue;
-      if (action.kind === 'done') break;
+      if (action.kind === 'done') {
+        this.crawlEnded = true;
+        return outcome('done', 'covered');
+      }
       await this.perform(action, snap.path);
       this.deliverQueued();
-      if (this.circling(snap.path)) break;
+      if (this.circling(snap.path)) {
+        this.crawlEnded = true;
+        return outcome('done', 'going in circles');
+      }
+      steps += 1;
+      // The owner said something: the next decision hears it now, not in 12 steps.
+      if (this.inbox.length > 0) return outcome('progress', 'the owner spoke');
+      if (steps >= EXPLORE_STEPS || this.coverage.routeDone(startedOn)) return outcome('progress');
     }
-    if (this.finished) return;
-    await this.phonePass();
-    if (this.finished) return;
-    // A site with fewer than 3 pages still gets theme-fit, on what there is (§8.3).
-    if (!this.themeAsked && this.deps.themeFit && this.pages.size > 0) {
-      this.themeAsked = true;
-      this.themeCheck = this.checkTheme();
-    }
-    this.emit([{ type: 'now.changed', nowText: 'Checking links and network' }]);
-    await this.probes.finish();
-    if (this.finished) return;
-    await this.review();
-    if (this.finished) return;
-    await this.themeCheck;
-    await this.redesignStep();
-    if (this.finished) return;
-    if (!(await this.offerFixes())) this.crawlComplete();
+    return outcome('nothing');
   }
 
   // ── Fixes (§9) ────────────────────────────────────────────────────────────
@@ -791,7 +1040,7 @@ export class RealRun {
     ]);
     const first = verdict.directions[0];
     if (this.state.mode === 'autonomous' && first) this.pickDirection(first.id);
-    void this.directionMockups(verdict.directions);
+    void this.directionBoards(verdict.directions);
   }
 
   /** The sites the owner admires (the brief's inspiration), screenshotted in main: at most 2. */
@@ -809,32 +1058,39 @@ export class RealRun {
   }
 
   /** A Muse Image mockup per direction, on the first route's shot (§10). */
-  private async directionMockups(directions: Direction[]): Promise<void> {
-    const media = this.deps.media;
-    const route = [...this.pages.keys()][0];
-    if (!media || !route) return;
-    const shot = await this.routeShot(route);
-    if (!shot) return;
-    const png = await shot.png().catch(() => null);
-    if (!png) return;
-    const size = this.pages.get(route)?.size;
-    const aspect = size && size.height > 0 ? size.width / size.height : undefined;
+  /**
+   * A style board per direction (SPEC-phase3 §2): the parts as components in the site's own
+   * words, built by code, with a hero illustration from the image model when it gives one. Each
+   * board is posted on its direction as it's ready; one without a picture still posts.
+   */
+  private async directionBoards(directions: Direction[]): Promise<void> {
+    const site = this.deps.site;
+    if (!site.board) return;
+    const snaps = [...this.pages.values()].map((p) => p.evidence.snapshot);
+    const host = (() => {
+      try {
+        return new URL(this.deps.origin).hostname;
+      } catch {
+        return 'Your site';
+      }
+    })();
+    const words = boardWords(snaps, host);
     await Promise.all(
       directions.map(async (d) => {
-        const out = await media.edit(
-          {
-            runId: this.state.runId,
-            projectId: this.state.projectId,
-            allowed: () => this.allowed(),
-          },
-          png,
-          directionInstruction({ ...d, detail: describeDirection(d) }),
-          aspect,
+        const art = await this.heroArt(d, words.site);
+        if (art) this.heroPngs.set(d.id, art);
+        const html = buildBoard(
+          d.spec,
+          { ...words, line: d.notes },
+          art ? { hero: `data:image/png;base64,${art}` } : {},
         );
-        if (!out) return;
-        this.mockupPngs.set(d.id, out);
-        const url = await this.deps.site
-          .saveAsset(this.state.runId, `direction-${d.id}.png`, out)
+        const url = await site
+          .board?.(
+            this.state.runId,
+            `board-${d.id.replace(/[^\w-]+/g, '_')}.html`,
+            html,
+            specFonts(d.spec).map(({ family, id, weights }) => ({ family, id, weights })),
+          )
           .catch(() => null);
         const item = [...this.state.chat].reverse().find((c) => c.type === 'directions');
         if (!url || item?.type !== 'directions') return;
@@ -843,12 +1099,32 @@ export class RealRun {
             type: 'chat.item.updated',
             item: {
               ...item,
-              options: item.options.map((o) => (o.id === d.id ? { ...o, mockup: url } : o)),
+              options: item.options.map((o) => (o.id === d.id ? { ...o, board: url } : o)),
             },
           },
         ]);
       }),
     );
+  }
+
+  /** One hero illustration in the direction's colors (§2.2), painted on a blank canvas. */
+  private async heroArt(d: Direction, siteName: string): Promise<string | null> {
+    const media = this.deps.media;
+    if (!media) return null;
+    const p = d.spec.palette;
+    const prompt =
+      `Replace this blank canvas with one flat illustration for the hero of ${siteName}` +
+      `${this.state.brief.for ? ` (${this.state.brief.for})` : ''}, in the style "${d.name}": ${d.notes} ` +
+      `Use only these colors: ${[p.bg, p.surface, p.accent, p.accent2, p.text].join(', ')}. ` +
+      'No text, letters, numbers, logos, UI or people’s faces. Simple shapes, generous empty space.';
+    return media
+      .edit(
+        { runId: this.state.runId, projectId: this.state.projectId, allowed: () => this.allowed() },
+        solidPng(1024, 768, p.bg),
+        prompt,
+        4 / 3,
+      )
+      .catch(() => null);
   }
 
   /**
@@ -962,7 +1238,7 @@ export class RealRun {
       const shot = await this.routeShot(route);
       if (shot) before[route] = shot.url;
     }
-    const mockup = this.mockupPngs.get(direction.id);
+    const mockup = this.heroPngs.get(direction.id);
     const shots = routes.slice(0, 2).flatMap((r) => {
       const s = this.pages.get(r)?.evidence.shot;
       return s ? [`data:image/jpeg;base64,${s.jpegBase64}`] : [];
@@ -988,6 +1264,119 @@ export class RealRun {
         ),
     });
     if (!this.finished && this.state.activity === 'redesigning') this.setActivity('acting');
+    // "Start over" (§2.4): the redesign was rolled back; the boards are open again.
+    if (this.inbox.some((m) => m.startsWith('Start over on the look'))) {
+      this.redesignStarted = false;
+      this.picked = undefined;
+      delete this.ran.looks;
+      this.pickInterrupted = true;
+    }
+  }
+
+  /**
+   * A new round of directions from the owner's feedback (SPEC-phase3 §2.3): the three they saw
+   * and what they said go to the compose call; the new ones get their own boards and replace
+   * the old ones for picking.
+   */
+  private async reviseLooks(feedback: string): Promise<Outcome> {
+    const revise = this.deps.reviseLooks;
+    const outcome = (result: Outcome['result'], note?: string): Outcome => ({
+      ability: 'revise_looks',
+      result,
+      ...(note ? { note } : {}),
+    });
+    if (!revise) return outcome('refused', 'no directions to revise yet');
+    const n = this.round + 1;
+    this.emit([{ type: 'now.changed', nowText: `Making round ${n} of the looks` }]);
+    const pages = [...this.pages.values()].slice(0, THEME_ROUTES);
+    let next: Direction[];
+    try {
+      next = await revise(
+        {
+          brief: this.state.brief,
+          why: this.lookWhy,
+          shots: pages.flatMap((p) => (p.evidence.shot ? [p.evidence.shot.jpegBase64] : [])),
+          inventory: this.probes.results
+            .filter((r) => r.probe === 'font-inventory' && r.summary)
+            .slice(0, THEME_ROUTES)
+            .map((r) => `${r.route}: ${r.summary ?? ''}`),
+          round: { n, previous: this.directions, feedback },
+        },
+        this.abort.signal,
+      );
+    } catch {
+      this.say('I couldn’t make a new round of looks just now. You can still pick one of these.');
+      return outcome('nothing');
+    }
+    if (this.finished || next.length === 0) return outcome('nothing');
+    this.round = n;
+    // Ids carry the round, so a pick on an older board can't land on a newer one.
+    this.directions = next.map((d) => ({ ...d, id: `r${n}-${d.id}` }));
+    this.picked = undefined;
+    delete this.ran.looks;
+    const changed = next[0]?.spec.changes?.[0];
+    this.emit([
+      {
+        type: 'chat.item',
+        item: {
+          id: this.id(),
+          type: 'directions',
+          round: n,
+          ...(changed ? { changed } : {}),
+          options: this.directions.map(({ id, name, swatches }) => ({ id, name, swatches })),
+        },
+      },
+    ]);
+    void this.directionBoards(this.directions);
+    return outcome('done', `round ${n}`);
+  }
+
+  /**
+   * The redesign's final review (SPEC-phase3 §2.4). In the Ask modes the PR waits for "It's
+   * good"; anything the owner says meanwhile changes the branch first. In Autonomous the PR
+   * opens and the review stays, with "Send it back".
+   */
+  private reviewRedesign(
+    changeId: string,
+    adjust: (text: string) => Promise<void>,
+  ): Promise<'ok' | 'restart'> {
+    const id = this.id();
+    const autonomous = this.state.mode === 'autonomous' || this.state.mode === 'dangerous';
+    this.emit([
+      {
+        type: 'chat.item',
+        item: { id, type: 'review', changeId, ...(autonomous ? { autonomous: true } : {}) },
+      },
+    ]);
+    if (autonomous || this.finished) return Promise.resolve('ok');
+    this.say(copy.fitts.reviewAsk);
+    this.emit([
+      { type: 'waiting.changed', waitingFor: `question:${id}` },
+      { type: 'now.changed', nowText: 'Waiting for your review of the new look' },
+    ]);
+    this.setActivity('waiting-on-user');
+    return new Promise((resolve) => {
+      this.reviewing = { id, resolve, adjust };
+    });
+  }
+
+  private answerReview(item: Extract<ChatItem, { type: 'review' }>, answer: string): void {
+    // Autonomous: the PR is open; "Send it back" asks what to change.
+    if (item.autonomous) {
+      if (answer !== 'back') return;
+      this.emit([{ type: 'chat.item.updated', item: { ...item, answer } }]);
+      this.sendingBack = true;
+      this.say('What should I change? Tell me and I’ll update the pull request.');
+      return;
+    }
+    const review = this.reviewing;
+    if (!review || review.id !== item.id || (answer !== 'ok' && answer !== 'restart')) return;
+    this.reviewing = undefined;
+    this.emit([{ type: 'chat.item.updated', item: { ...item, answer } }]);
+    if (this.state.waitingFor === `question:${item.id}`) this.emit([{ type: 'waiting.changed' }]);
+    if (!this.finished) this.setActivity('redesigning');
+    if (answer === 'restart') this.inbox.push('Start over on the look: none of it works.');
+    review.resolve(answer);
   }
 
   /** "Keep" or "Undo this" on a wording card: undo reverts only that line (§8.3). */
@@ -1061,6 +1450,7 @@ export class RealRun {
         costOf: (id) => this.deps.ledger.findingCost(id),
         idle: () => this.fixesSettled(),
         restingActivity: () => (this.finished ? 'idle' : 'acting'),
+        review: (changeId, adjust) => this.reviewRedesign(changeId, adjust),
       },
       this.deps.site,
       this.deps.fixer,
@@ -1605,14 +1995,86 @@ export class RealRun {
         },
       },
     ]);
+    // In the final review (§2.4), or after "Send it back", what they say changes the redesign.
+    const review = this.reviewing;
+    if (review) {
+      this.say('On it. I’ll change that and check every page again, then ask you again.');
+      void review.adjust(text).then(() => {
+        if (this.reviewing === review) this.say(copy.fitts.reviewAgain);
+      });
+      return;
+    }
+    if (this.sendingBack && this.pipeline?.canAdjust) {
+      this.sendingBack = false;
+      this.say('On it. I’ll change that, check every page again and update the pull request.');
+      void this.pipeline.adjust(text);
+      return;
+    }
     // "Adjust it" (§8.3): a note about the redesign changes it, verified like the first pass.
     if (this.pipeline?.canAdjust && ADJUST.test(text)) {
       this.say('On it. I’ll adjust the redesign and check every page again.');
       void this.pipeline.adjust(text);
       return;
     }
+    // The next decision hears it (§1.4); while Fitts acts, it shows as queued until then.
+    const pointing = opts?.pointingAt
+      ? ` [pointing at ref ${opts.pointingAt}${opts.pointingLabel ? `: ${opts.pointingLabel}` : ''}]`
+      : '';
     if (this.state.activity === 'acting') this.emit([{ type: 'queued.added', text }]);
-    else this.say('Got it. I’ll keep that in mind.');
+    this.inbox.push(`${text}${pointing}`);
+    // Waiting for a pick, they said something instead: feedback for a new round, maybe.
+    if (this.pickWaiter) {
+      this.pickInterrupted = true;
+      this.closePickQuestion(text.slice(0, 80));
+    }
+    this.kick();
+    // And a reply right away, while the work goes on (§1.3).
+    if (this.deps.converse) void this.reply(text, opts?.pointingLabel ?? opts?.pointingAt);
+    else if (this.state.activity !== 'acting') this.say('Got it. I’ll keep that in mind.');
+  }
+
+  /** Fitts answers the owner (§1.3), from what it's doing and has seen. */
+  private async reply(message: string, pointingAt?: string): Promise<void> {
+    const converse = this.deps.converse;
+    if (!converse) return;
+    const recent = this.state.chat
+      .flatMap((c) =>
+        c.type === 'fitts.message'
+          ? [`Fitts: ${c.text}`]
+          : c.type === 'user.message'
+            ? [`Owner: ${c.text}`]
+            : [],
+      )
+      .slice(-9, -1);
+    const shown = this.state.findings.filter((f) => f.lane !== 'suggestion');
+    this.emit([{ type: 'typing.changed', typing: true }]);
+    try {
+      const text = await converse(
+        {
+          brief: { ...this.state.brief },
+          live: isLiveOrigin(this.deps.origin),
+          now: this.state.nowText ?? 'between steps',
+          covered: {
+            pages: this.coverage.stateRoutes().length,
+            controls: this.coverage.controlsTried(),
+          },
+          findings: [...shown]
+            .sort((a, b) => b.severity - a.severity)
+            .slice(0, 8)
+            .map((f) => `${f.title} (${f.route})`),
+          recent,
+          message,
+          ...(pointingAt ? { pointingAt } : {}),
+        },
+        this.finished ? undefined : this.abort.signal,
+      );
+      this.say(text);
+    } catch {
+      // No reply (offline, aborted): the decision still hears it.
+      if (!this.finished) this.say('Got it. I’ll keep that in mind.');
+    } finally {
+      this.emit([{ type: 'typing.changed', typing: false }]);
+    }
   }
 
   /** Queued messages are delivered at the next step boundary (§6.1). */
@@ -1620,6 +2082,8 @@ export class RealRun {
     const n = this.state.queued.length;
     if (n === 0) return;
     this.emit([{ type: 'queued.delivered', count: n }]);
+    // With a conversation, each message was already answered when it was sent.
+    if (this.deps.converse) return;
     this.say(
       n === 1
         ? 'Got your note. I’ll keep that in mind.'
@@ -1635,6 +2099,10 @@ export class RealRun {
 
   answer(itemId: string, answer: string): void {
     const item = this.state.chat.find((c) => c.id === itemId);
+    if (item?.type === 'review' && item.answer === undefined) {
+      this.answerReview(item, answer);
+      return;
+    }
     if (!item || (item.type !== 'state' && item.type !== 'question') || item.answer !== undefined)
       return;
     this.emit([{ type: 'chat.item.updated', item: { ...item, answer } }]);

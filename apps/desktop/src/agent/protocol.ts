@@ -68,6 +68,14 @@ export type SiteOp =
   | { op: 'reveal'; ref: string }
   | { op: 'png'; jpegBase64: string }
   | { op: 'saveAsset'; runId: string; name: string; base64: string }
+  /** A style board (SPEC-phase3 §2): main embeds its fonts and saves it as an asset. */
+  | {
+      op: 'board';
+      runId: string;
+      name: string;
+      html: string;
+      fonts: { family: string; id: string; weights: number[] }[];
+    }
   /** A site the owner admires, screenshotted as design inspiration (never clicked). */
   | { op: 'reference'; url: string }
   /** The fix pipeline's privileged half, in main (§9). */

@@ -169,6 +169,8 @@ The decider chooses *which* ability; it never gets to skip what an ability does 
 | A fix is verified before its PR opens | `fix` (the pipeline, §9.2), unchanged |
 | Destructive actions ask first; writes are held | the gate (§13), unchanged, inside `explore` |
 | Every page and control is tried, or skipped with a reason, before `finish` | `finish` refuses while coverage is incomplete unless the owner said to stop; it says what's left |
+| A run never ends unreviewed | `finish` refuses until the phone pass, the link check and the review have run (built in Q0) |
+| A decider can't spin on a refusal | the decision after a refused one comes from `ScriptedDecider` (built in Q0) |
 | The budget cap holds | `BudgetGuard` before every ability and every model call, unchanged |
 | A run that goes in circles moves on, then ends (§1.5) | the loop, unchanged |
 | Live sites are audit-only | `fix` and `apply_look` are not offered to the decider for a live origin |

@@ -7,6 +7,11 @@ import { BudgetGuard } from '../../src/agent/ledger/budget';
 import { CostLedger } from '../../src/agent/ledger/ledger';
 import { RealRun, type RunDeps } from '../../src/agent/orchestrator/run';
 import type { AxNode, AxSnapshot } from '../../src/agent/protocol';
+import {
+  scriptedNext,
+  type Decision,
+  type Situation,
+} from '../../src/agent/orchestrator/abilities';
 import type { Site } from '../../src/agent/site-client';
 import { copy } from '../../src/renderer/copy';
 
@@ -128,6 +133,9 @@ function setup({
   cap = 20,
   mode = 'ask-unsure',
   maxSteps,
+  decider,
+  converse,
+  reviseLooks,
   themeFit,
   origin = 'http://localhost:5173',
   media,
@@ -139,6 +147,9 @@ function setup({
   cap?: number;
   mode?: RunState['mode'];
   maxSteps?: number;
+  decider?: RunDeps['decider'];
+  converse?: RunDeps['converse'];
+  reviseLooks?: RunDeps['reviseLooks'];
   themeFit?: RunDeps['themeFit'];
   origin?: string;
   media?: RunDeps['media'];
@@ -155,6 +166,9 @@ function setup({
       ...(fixer ? { fixer } : {}),
       ...(redesigner ? { redesigner } : {}),
       ...(maxSteps ? { maxSteps } : {}),
+      ...(decider ? { decider } : {}),
+      ...(converse ? { converse } : {}),
+      ...(reviseLooks ? { reviseLooks } : {}),
       site,
       brain,
       ledger,
@@ -368,6 +382,75 @@ async function skipLogin(state: () => RunState | undefined, run: RealRun) {
   run.answer(card(state(), 'login-wall')?.id ?? '', 'skip');
 }
 
+const review = (s: RunState | undefined) => s?.chat.find((c) => c.type === 'review');
+
+describe('style boards (SPEC-phase3 §2)', () => {
+  it('each direction gets a board in the site’s words, with its fonts, posted on its option', async () => {
+    const boards: { name: string; html: string; fonts: string[] }[] = [];
+    const site = fakeSite({
+      board: (_runId, name, html, fonts) => {
+        boards.push({ name, html, fonts: fonts.map((f) => f.family) });
+        return Promise.resolve(`fitts-asset://demo-chat/run-1/assets/${name}`);
+      },
+    });
+    const { run, state } = setup({
+      site,
+      themeFit: () =>
+        Promise.resolve({
+          fits: false,
+          why: 'Too loud.',
+          directions: [testDirection('a', 'Quiet stone'), testDirection('b', 'Soft linen')],
+        }),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => {
+      const item = state()?.chat.find((c) => c.type === 'directions');
+      return item?.type === 'directions' && item.options.every((o) => o.board);
+    }, 10_000);
+    const item = state()?.chat.find((c) => c.type === 'directions');
+    expect(item?.type === 'directions' && item.options.map((o) => o.board)).toEqual([
+      'fitts-asset://demo-chat/run-1/assets/board-a.html',
+      'fitts-asset://demo-chat/run-1/assets/board-b.html',
+    ]);
+    expect(boards[0]?.html).toContain('Quiet stone');
+    expect(boards[0]?.fonts.length).toBeGreaterThan(0);
+    run.dispose();
+  });
+});
+
+/** A project that can be fixed and redesigned: its fix calls answer like main would. */
+const redesignable = () => {
+  const calls: string[] = [];
+  const site = fakeSite({
+    fix: (call) => {
+      calls.push(call.fn);
+      if (call.fn === 'available') return Promise.resolve({ ok: true });
+      if (call.fn === 'prepare') return Promise.resolve({ job: 'j', branch: call.branch });
+      if (call.fn === 'verifyPages')
+        return Promise.resolve({
+          ok: true,
+          pages: call.routes.map((route) => ({
+            route,
+            loaded: true,
+            results: [],
+            focus: [],
+            viewport: [],
+            jpegBase64: 'AFTER',
+          })),
+        });
+      if (call.fn === 'prOpen') return Promise.resolve({ number: 7, url: 'dry-run://pr/7' });
+      return Promise.resolve({ ok: true });
+    },
+  });
+  const redesigner: RunDeps['redesigner'] = async (_task, tools) => {
+    await tools.write('src/theme.css', ':root{}');
+    return { patched: 1, summary: 'Restyled it.', wording: [] };
+  };
+  const fixer: RunDeps['fixer'] = () => Promise.resolve({ patched: 0, summary: '' });
+  return { site, calls, redesigner, fixer };
+};
+
 describe('theme-fit (§8.3)', () => {
   const verdict = {
     fits: false,
@@ -436,36 +519,6 @@ describe('theme-fit (§8.3)', () => {
   });
 
   /** A repo the redesign can change: main's side answers every fix call. */
-  const redesignable = () => {
-    const calls: string[] = [];
-    const site = fakeSite({
-      fix: (call) => {
-        calls.push(call.fn);
-        if (call.fn === 'available') return Promise.resolve({ ok: true });
-        if (call.fn === 'prepare') return Promise.resolve({ job: 'j', branch: call.branch });
-        if (call.fn === 'verifyPages')
-          return Promise.resolve({
-            ok: true,
-            pages: call.routes.map((route) => ({
-              route,
-              loaded: true,
-              results: [],
-              focus: [],
-              viewport: [],
-              jpegBase64: 'AFTER',
-            })),
-          });
-        if (call.fn === 'prOpen') return Promise.resolve({ number: 7, url: 'dry-run://pr/7' });
-        return Promise.resolve({ ok: true });
-      },
-    });
-    const redesigner: RunDeps['redesigner'] = async (_task, tools) => {
-      await tools.write('src/theme.css', ':root{}');
-      return { patched: 1, summary: 'Restyled it.', wording: [] };
-    };
-    const fixer: RunDeps['fixer'] = () => Promise.resolve({ patched: 0, summary: '' });
-    return { site, calls, redesigner, fixer };
-  };
 
   it('Ask modes: after the review it asks which look; a pick restyles every page in one PR', async () => {
     const r = redesignable();
@@ -482,7 +535,13 @@ describe('theme-fit (§8.3)', () => {
     await until(() => Boolean(question()));
     expect(state()?.waitingFor).toBe(`question:${question()?.id ?? ''}`);
     run.pickDirection('b');
+    // The final review (SPEC-phase3 §2.4): the PR waits for "It's good".
+    await until(() => Boolean(review(state())));
+    expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBeUndefined();
+    expect(state()?.waitingFor).toBe(`question:${review(state())?.id ?? ''}`);
+    run.answer(review(state())?.id ?? '', 'ok');
     await until(() => state()?.phase === 'done');
+    expect(review(state())?.answer).toBe('ok');
     const change = state()?.changes.find((c) => c.kind === 'redesign');
     expect(change).toMatchObject({
       title: 'Redesign: Soft linen',
@@ -750,6 +809,397 @@ describe('Done: replays and the step cap (Allen’s feedback, round 4)', () => {
     await until(() => Boolean(card(state(), 'nothing-found')));
     run.answer(card(state(), 'nothing-found')?.id ?? '', 'finish');
     await until(() => state()?.phase === 'done');
+    run.dispose();
+  });
+});
+
+describe('the guarantees hold against a hostile decider (SPEC-phase3 §1.6)', () => {
+  /** A decider that always asks for one thing, and records what it saw. */
+  const always = (ability: string) => {
+    const seen: { ended: boolean; recent: string[] }[] = [];
+    return {
+      seen,
+      next: (s: {
+        coverage: { ended: boolean };
+        recent: { ability: string; result: string }[];
+      }) => {
+        seen.push({
+          ended: s.coverage.ended,
+          recent: s.recent.map((o) => `${o.ability}:${o.result}`),
+        });
+        return Promise.resolve({ ability } as never);
+      },
+    };
+  };
+
+  it('finish is refused while pages and controls are left; the run still covers everything', async () => {
+    const decider = always('finish');
+    const { run, state } = setup({ decider: decider });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    const s = state();
+    expect(s?.controlsTried.done).toBe(s?.controlsTried.total);
+    expect(decider.seen.some((x) => x.recent.includes('finish:refused'))).toBe(true);
+    run.dispose();
+  });
+
+  it('a live site refuses fixes, however often they are asked for', async () => {
+    const decider = always('fix');
+    const { run, state } = setup({ decider: decider, origin: 'https://example.com' });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    expect(decider.seen.some((x) => x.recent.includes('fix:refused'))).toBe(true);
+    expect(state()?.chat.some((c) => c.type === 'approval.batch')).toBe(false);
+    run.dispose();
+  });
+
+  it('a decider that throws falls back to the scripted order and the run finishes', async () => {
+    const { run, state } = setup({
+      decider: { next: () => Promise.reject(new Error('model down')) },
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    expect(state()?.controlsTried.done).toBe(state()?.controlsTried.total);
+    run.dispose();
+  });
+});
+
+describe('the owner steers (SPEC-phase3 §1.3, §1.4)', () => {
+  /**
+   * A decider that does what the scripted one would, except for what the owner asks: "skip
+   * /c" skips it, "look at /c" opens it, "not a problem" while pointing dismisses it. After the
+   * review it waits for a message, so a test can steer then.
+   */
+  const listening = (waitAfterReview = false) => ({
+    seen: [] as string[][],
+    next(s: Situation) {
+      this.seen.push(s.messages);
+      for (const m of s.messages) {
+        if (/skip \/c/.test(m))
+          return Promise.resolve<Decision>({
+            ability: 'skip_pages',
+            paths: ['/c'],
+            say: 'Skipping /c.',
+          });
+        if (/look at \/c/.test(m))
+          return Promise.resolve({
+            ability: 'explore',
+            route: '/c',
+            say: 'Opening /c next.',
+          } as Decision);
+        const ref = /pointing at ref (\S+?)[:\]]/.exec(m)?.[1];
+        if (/not a problem/.test(m) && ref)
+          return Promise.resolve({ ability: 'dismiss', ref } as Decision);
+      }
+      if (waitAfterReview && s.ran.review && !s.recent.some((o) => o.ability === 'dismiss'))
+        return new Promise<Decision>((r) => setTimeout(() => r({ ability: 'check_theme' }), 10));
+      return Promise.resolve({ ability: scriptedNext(s) });
+    },
+  });
+
+  it('“skip /c” skips that page: its controls are never tried, and Fitts says so', async () => {
+    const decider = listening();
+    const { run, site, state } = setup({ decider });
+    run.start();
+    run.sendMessage('please skip /c');
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    expect(state()?.routes.find((r) => r.path === '/c')).toMatchObject({
+      status: 'done',
+      label: 'skipped',
+    });
+    expect(site.log).not.toContain('click c-home');
+    expect(state()?.chat.some((c) => c.type === 'fitts.message' && c.text === 'Skipping /c.')).toBe(
+      true,
+    );
+    run.dispose();
+  });
+
+  it('“look at /c” opens it next, within one step of saying so', async () => {
+    const decider = listening();
+    const { run, site } = setup({ decider });
+    run.start();
+    await until(() => site.log.length >= 1);
+    const at = site.log.length;
+    run.sendMessage('look at /c next');
+    await until(() => site.log.includes('nav /c'), 3000);
+    // One step to finish what it was doing, then /c.
+    expect(site.log.indexOf('nav /c') - at).toBeLessThanOrEqual(2);
+    run.dispose();
+  });
+
+  it('“not a problem” while pointing dismisses the finding on that element', async () => {
+    const decider = listening(true);
+    const site = fakeSite({
+      probes: () =>
+        Promise.resolve([
+          {
+            probe: 'target-size' as const,
+            pass: false,
+            items: [
+              { ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' },
+            ],
+          },
+        ]),
+    });
+    const { run, state } = setup({ site, decider });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => Boolean(state()?.findings.find((f) => f.elementRef === 'go-b')), 10_000);
+    run.sendMessage('that’s not a problem', {
+      pointingAt: 'go-b',
+      pointingLabel: '“Open B” button',
+    });
+    await until(
+      () => state()?.findings.find((f) => f.elementRef === 'go-b')?.status === 'dismissed',
+      3000,
+    );
+    run.dispose();
+  });
+
+  it('every message gets a reply from converse while the work goes on, and no canned line', async () => {
+    const asked: string[] = [];
+    const converse = (input: { message: string; now: string }) => {
+      asked.push(`${input.message} | ${input.now}`);
+      return Promise.resolve('The nav reads well, but its labels are small.');
+    };
+    const { run, state } = setup({ converse: converse });
+    run.start();
+    run.sendMessage('what do you think of the nav?');
+    await until(() =>
+      Boolean(
+        state()?.chat.some(
+          (c) =>
+            c.type === 'fitts.message' &&
+            c.text === 'The nav reads well, but its labels are small.',
+        ),
+      ),
+    );
+    expect(asked[0]).toMatch(/^what do you think of the nav\? \| /);
+    expect(
+      state()?.chat.some(
+        (c) => c.type === 'fitts.message' && /keep (that|them) in mind/.test(c.text),
+      ),
+    ).toBe(false);
+    run.dispose();
+  });
+
+  it('a live site refuses a new look', async () => {
+    const decider = {
+      asked: false,
+      next(s: Situation) {
+        if (!this.asked) {
+          this.asked = true;
+          return Promise.resolve({ ability: 'new_look', wish: 'darker' } as Decision);
+        }
+        return Promise.resolve({ ability: scriptedNext(s) });
+      },
+    };
+    const outcomes: string[] = [];
+    const spy = {
+      next: (s: Situation) => {
+        outcomes.push(...s.recent.map((o) => `${o.ability}:${o.result}`));
+        return decider.next(s);
+      },
+    };
+    const { run, state } = setup({ decider: spy, origin: 'https://example.com' });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    expect(outcomes).toContain('new_look:refused');
+    expect(state()?.brief.look).toBeUndefined();
+    run.dispose();
+  });
+});
+
+describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
+  const directions = (prefix: string) => [
+    testDirection(`${prefix}a`, `${prefix} stone`),
+    testDirection(`${prefix}b`, `${prefix} linen`),
+  ];
+  /** Revises on "warmer"; otherwise the scripted order. */
+  const reviser = {
+    next(s: Situation) {
+      const m = s.messages.find((x) => /warmer|none of these/i.test(x));
+      if (m) return Promise.resolve<Decision>({ ability: 'revise_looks', wish: m });
+      return Promise.resolve<Decision>({ ability: scriptedNext(s) });
+    },
+  };
+
+  it('feedback on the directions makes round 2, with new ids and boards', async () => {
+    const asked: { n: number; feedback: string; previous: string[] }[] = [];
+    const site = fakeSite({
+      board: (_r, name) => Promise.resolve(`fitts-asset://demo-chat/run-1/assets/${name}`),
+    });
+    const { run, state } = setup({
+      site,
+      decider: reviser,
+      themeFit: () =>
+        Promise.resolve({ fits: false, why: 'Too cold.', directions: directions('Cold') }),
+      reviseLooks: (input) => {
+        asked.push({
+          n: input.round.n,
+          feedback: input.round.feedback,
+          previous: input.round.previous.map((d) => d.name),
+        });
+        return Promise.resolve(directions('Warm'));
+      },
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => Boolean(state()?.chat.find((c) => c.type === 'directions')));
+    run.sendMessage('make them warmer');
+    const second = () => state()?.chat.find((c) => c.type === 'directions' && c.round === 2);
+    await until(() => {
+      const d = second();
+      return d?.type === 'directions' && d.options.every((o) => o.board);
+    }, 10_000);
+    expect(asked).toEqual([
+      { n: 2, feedback: 'make them warmer', previous: ['Cold stone', 'Cold linen'] },
+    ]);
+    const d = second();
+    expect(d?.type === 'directions' && d.options.map((o) => o.id)).toEqual([
+      'r2-Warma',
+      'r2-Warmb',
+    ]);
+    run.dispose();
+  });
+
+  it('a message while Fitts waits for a pick goes to the decider, and a round comes back', async () => {
+    const r = redesignable();
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      decider: reviser,
+      themeFit: () =>
+        Promise.resolve({ fits: false, why: 'Too cold.', directions: directions('Cold') }),
+      reviseLooks: () => Promise.resolve(directions('Warm')),
+    });
+    run.start();
+    await skipLogin(state, run);
+    const pick = () =>
+      state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook);
+    await until(() => Boolean(pick()), 10_000);
+    run.sendMessage('None of these, warmer please');
+    await until(
+      () => Boolean(state()?.chat.find((c) => c.type === 'directions' && c.round === 2)),
+      10_000,
+    );
+    expect(pick()).toMatchObject({ answer: 'None of these, warmer please' });
+    // Then it asks for a pick again, from round 2.
+    await until(
+      () =>
+        (state()?.chat.filter((c) => c.type === 'question' && c.text === copy.fitts.whichLook)
+          .length ?? 0) === 2,
+      10_000,
+    );
+    run.pickDirection('r2-Warmb');
+    await until(() => Boolean(review(state())), 10_000);
+    run.answer(review(state())?.id ?? '', 'ok');
+    await until(() => state()?.phase === 'done', 10_000);
+    expect(state()?.changes.find((c) => c.kind === 'redesign')?.title).toBe('Redesign: Warm linen');
+    run.dispose();
+  });
+
+  it('what the owner says during the review changes the branch before the PR', async () => {
+    const r = redesignable();
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      themeFit: () =>
+        Promise.resolve({ fits: false, why: 'Too cold.', directions: directions('Cold') }),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(
+      () =>
+        Boolean(
+          state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook),
+        ),
+      10_000,
+    );
+    run.pickDirection('Colda');
+    await until(() => Boolean(review(state())), 10_000);
+    const before = r.calls.filter((c) => c === 'verifyPages').length;
+    run.sendMessage('make the headings bigger');
+    await until(() =>
+      Boolean(
+        state()?.chat.some((c) => c.type === 'fitts.message' && c.text === copy.fitts.reviewAgain),
+      ),
+    );
+    expect(r.calls.filter((c) => c === 'verifyPages').length).toBe(before + 1);
+    expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBeUndefined();
+    run.answer(review(state())?.id ?? '', 'ok');
+    await until(() => state()?.phase === 'done', 10_000);
+    expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBe(7);
+    run.dispose();
+  });
+
+  it('“Start over” rolls the redesign back and opens the looks again', async () => {
+    const r = redesignable();
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      decider: {
+        next: (s: Situation) =>
+          Promise.resolve<Decision>(
+            s.messages.some((m) => m.startsWith('Start over'))
+              ? { ability: 'revise_looks', wish: 'none of it works' }
+              : { ability: scriptedNext(s) },
+          ),
+      },
+      themeFit: () =>
+        Promise.resolve({ fits: false, why: 'Too cold.', directions: directions('Cold') }),
+      reviseLooks: () => Promise.resolve(directions('Warm')),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(
+      () =>
+        Boolean(
+          state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook),
+        ),
+      10_000,
+    );
+    run.pickDirection('Colda');
+    await until(() => Boolean(review(state())), 10_000);
+    run.answer(review(state())?.id ?? '', 'restart');
+    await until(
+      () => state()?.changes.find((c) => c.kind === 'redesign')?.status === 'rolled-back',
+      10_000,
+    );
+    await until(
+      () => Boolean(state()?.chat.find((c) => c.type === 'directions' && c.round === 2)),
+      10_000,
+    );
+    expect(r.calls).toContain('discard');
+    expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBeUndefined();
+    run.dispose();
+  });
+
+  it('Autonomous opens the PR and leaves the review open with “Send it back”', async () => {
+    const r = redesignable();
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      mode: 'autonomous',
+      themeFit: () =>
+        Promise.resolve({ fits: false, why: 'Too cold.', directions: directions('Cold') }),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.changes.find((c) => c.kind === 'redesign')?.prNumber === 7, 10_000);
+    expect(review(state())).toMatchObject({ autonomous: true });
+    run.answer(review(state())?.id ?? '', 'back');
+    expect(review(state())?.answer).toBe('back');
+    expect(state()?.chat.at(-1)).toMatchObject({ type: 'fitts.message' });
     run.dispose();
   });
 });

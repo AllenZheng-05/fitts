@@ -25,6 +25,8 @@ export type RunEvent =
   | { type: 'activity.changed'; activity: RunActivity }
   | { type: 'mode.changed'; mode: Mode }
   | { type: 'clock.tick'; elapsedMs: number }
+  /** SPEC-phase3 §4: the ability Fitts is using; none between them. */
+  | { type: 'ability.changed'; ability?: { name: string; since: number } }
   // Steps and routes
   | { type: 'step.started'; step: number; stepEstimate: number }
   | { type: 'step.finished'; step: number; shot?: string }
@@ -116,6 +118,15 @@ export function reduce(s: RunState | undefined, e: RunEvent): RunState | undefin
       return { ...s, mode: e.mode };
     case 'clock.tick':
       return { ...s, elapsedMs: e.elapsedMs };
+    case 'ability.changed': {
+      if (!e.ability) {
+        if (!s.ability) return s;
+        const rest = { ...s };
+        delete rest.ability;
+        return rest;
+      }
+      return { ...s, ability: e.ability };
+    }
     case 'step.started':
       return { ...s, step: e.step, stepEstimate: e.stepEstimate };
     case 'step.finished':
@@ -270,6 +281,12 @@ export function diff(prev: RunState | undefined, next: RunState): RunEvent[] {
   if (prev.activity !== next.activity)
     out.push({ type: 'activity.changed', activity: next.activity });
   if (prev.mode !== next.mode) out.push({ type: 'mode.changed', mode: next.mode });
+  if (JSON.stringify(prev.ability) !== JSON.stringify(next.ability))
+    out.push(
+      next.ability
+        ? { type: 'ability.changed', ability: next.ability }
+        : { type: 'ability.changed' },
+    );
   if (prev.step !== next.step || prev.stepEstimate !== next.stepEstimate)
     out.push({ type: 'step.started', step: next.step, stepEstimate: next.stepEstimate });
   if (prev.elapsedMs !== next.elapsedMs)

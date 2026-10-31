@@ -2236,3 +2236,122 @@ Allen ran a live audit of openteamsheets.com and tried the mic. What changed, an
   and move on, 24 anywhere end the crawl, and Fitts says so both times. `stepEstimate` is no
   longer capped at 200 either. SPEC-phase3 §1.5 has the decider change course itself first,
   with this as the backstop.
+
+## Phase 3 — Q0: abilities and the scripted decider
+
+Allen approved SPEC-phase3 v0.2 on Oct 31. CLAUDE.md still names Phase 2 as the current phase;
+it isn't mine to edit, so SPEC-phase3 governs from here and CLAUDE.md's "Current phase" needs
+Allen's update (NEEDS-ALLEN).
+
+- **The loop is "decide, do, repeat".** `RealRun.loop` asks a `Decider` for the next ability
+  and runs it through `use()`, where the guarantees live. The Phase 2 stages are the
+  abilities: `explore`, `phone_pass`, `check_links`, `review`, `check_theme`, `looks` (pick
+  and apply a direction, as `redesignStep` did), `fix` and `finish`. `ScriptedDecider` returns
+  Phase 2's order and is the default, so every Phase 2 run test passes unchanged.
+- **Explore is the crawl, a stretch at a time.** It runs until the page it started on is done
+  or 12 steps pass, then hands back. Each step starts from a fresh snapshot, so splitting the
+  crawl into stretches changes nothing about what it does. The theme check still starts on its
+  own after 3 pages, as in Phase 2; `check_theme` starts it if it hasn't and waits for it.
+- **Two guarantees the spec didn't list.** A hostile-decider test showed `finish` straight after
+  the crawl skipped the review, so `finish` now refuses until the phone pass, the link check
+  and the review have run. And the decision after a refused one comes from the scripted
+  fallback, so a decider can't spin on a refusal. Both are in the spec's §1.6 table now.
+- **`bench:chat` waits for Q1.** It spends money, and Q0 can't change the order (the scripted
+  decider is Phase 2's order, checked by the unchanged run tests). It runs once after Q1,
+  where the order can change.
+
+## Phase 3 — Q1: the decision step and the conversation
+
+- **`SparkDecider`** (`orchestrator/decider.ts`, prompt `docs/prompts/decide.md`): one Spark
+  call per decision, minimal reasoning, one function tool per ability, each with a `say` line.
+  An unknown tool or no tool call throws, and the run uses the scripted order for that
+  decision. Ledger task `crawl` (phase crawling), so decisions count as crawling cost. Off with
+  `FITTS_DECIDER=scripted`, and without a model (offline, no key).
+- **Four pivot abilities**, so the owner's asks have something to call: `skip_pages` (the pages
+  are skipped and stay skipped: controls found there later are skipped too, and the site map
+  says "skipped"), `stop_exploring` (the crawl ends; the checks still run before finish),
+  `new_look` (the wish becomes the brief's `look` and the theme is judged again; refused on a
+  live site or once a look is applied), `dismiss` (the open finding on the element the owner
+  points at). "Look at Y next" is `explore` with a route; "try that again" and "go on" need
+  no tool of their own.
+- **Messages reach the decision within a step.** Every owner message goes into an inbox the
+  next decision sees (`messages`, then `earlier`, the ten before). Explore hands back right
+  after the step in progress when the inbox isn't empty, so "look at /c next" opens /c within
+  two site actions (a test checks it). The queued row still shows while Fitts acts; it clears
+  at the step boundary.
+- **`converse`** (`docs/prompts/converse.md`): every owner message during the audit gets a
+  reply from Spark, from what Fitts is doing and has seen, while the work carries on; the
+  typing dots show meanwhile. It's told something else decides and does things, so it says
+  what will happen and never claims it happened. The canned "Got it. I'll keep that in mind"
+  is now only the fallback when there's no model or the call fails. Task `interview` (it's
+  the same kind of chat), so it counts as crawling cost.
+- **`RunState.ability`** and the `ability.changed` event record which ability is running
+  (spec §4). While the real decider thinks, the Now line says "Thinking about what's next".
+- **Q0 to Q3 went in one commit.** Each milestone's edits landed in the same files (the
+  run, the schema, the run tests) while the previous one's e2e run was going; splitting them
+  after the fact would have meant committing states that were never tested on their own. Q0
+  and Q1 together passed the full suite before Q2 began (134/134), Q0 to Q2 passed it again
+  (134/134), and the commit passed it with Q3. From Q4 on each milestone is committed before
+  the next one starts. An earlier Q0 e2e failure (a site-down card mid-crawl in the coverage-gate test)
+  was load: it happened only while other checks ran beside the suite, and the test passed
+  5 of 6 times alone and in the clean full run.
+
+## Phase 3 — Q2: style boards
+
+- **A board is a page built by code.** `buildBoard` (`packages/styles/src/board.ts`) turns a
+  direction's resolved spec into one HTML page: the hero, the colors with each text pair's
+  contrast ratio, the type scale in the real faces, the nav, buttons (primary, secondary,
+  quiet, disabled), fields (with help, with an error), a select, a checkbox and a switch,
+  cards with tags, a table, a toast, a dialog header and icons. The shape language's own CSS
+  and the decorations' CSS go in as the redesigner would use them.
+- **In the site's words.** `boardWords` takes them from the crawl: the title up to its
+  separator, the first h1, a real button, a real field (never a password field), the nav's
+  labels, with the host as the fallback name. Every word is escaped.
+- **Icons are code; the hero is the image model.** Image models draw icons badly and they'd
+  cost a call each, so six icons are SVG paths in the shape language's line weight. The image
+  model makes one hero illustration per direction (about $0.01). It only edits images, so it
+  paints on a blank canvas in the direction's background (`solidPng`, a minimal PNG writer).
+  No picture, no problem: the board shows a gradient in the accents instead and still posts.
+  The redesigner now gets that illustration where it used to get the page mockup.
+- **No network, enforced twice.** Main embeds the fonts as data URIs (through the font store,
+  from its cache after the first download) where the board leaves a slot. And the asset
+  protocol serves `.html` assets with their own policy (`default-src 'none'`, inline styles,
+  data: images and fonts only), so even a board that tried to load something couldn't. The
+  viewer shows it in an iframe with `sandbox=""`, and the app's own CSP allows frames only
+  from `fitts-asset:`. Boards are new `.html` run assets, which the asset name checks now
+  allow.
+- **What I saw.** I rendered two boards (calm Japandi on organic shapes; hard shadows with
+  halftone) and looked at them. Two fixes came out of it: the organic shape's blob radius
+  turned the hero and the toast into ellipses that cropped their content, so boxes that big
+  use a plain radius (28px when the shape's isn't a length); and an error field bordered in
+  the second accent read as success when that accent was green, so it's a 2px text-colored
+  border now.
+- **Mockups stay only in the test build.** The real engine no longer makes page mockups
+  (spec §2.5); the `mockup` field stays for the test build's stand-in directions, and the
+  viewer shows a board when there is one, else a mockup.
+
+## Phase 3 — Q3: rounds and the final review
+
+- **Feedback is a message.** "What would you change about Quiet stone?" in the board viewer
+  sends "About Quiet stone: …" like any message, and "None of these" under the directions puts
+  "None of these work for me: " in the message box. No new engine methods: the decider reads
+  it and calls `revise_looks`, which gives the compose call the directions the owner saw (with
+  their parts) and what they said, and asks it to keep what wasn't mentioned. Round 2's
+  directions get ids prefixed `r2-`, so a pick on an older board can't land on a newer one; the
+  new item says "Round 2" and the first change. No limit on rounds; the budget is the limit.
+- **Talking instead of picking.** While Fitts waits for a pick ("Which look should I use?"),
+  a message answers that question with what was said and hands back to the decider, which
+  makes a round from it; then the pick question comes back for the new boards. Before this, a
+  message there would have sat unheard until a pick.
+- **The final review sits inside the redesign.** After the redesign passes its checks and is
+  committed, and before its PR opens, the pipeline asks the run for a review. In the Ask
+  modes a `review` card shows each page before and after with "It's good, open the PR" and
+  "Start over", and anything the owner says meanwhile goes to the redesigner on the same
+  branch (checked like the first pass), then Fitts asks again. In Autonomous (and Dangerous)
+  the PR opens straight away, as Allen chose, and the card stays with "Send it back", which
+  asks what to change and updates the PR from the next message.
+- **"Start over" uses the rollback that exists.** It throws inside the redesign, so the branch
+  is discarded the way a failed redesign is, the findings the redesign had fixed go back to
+  open, its wording changes are undone, and "Start over on the look" goes to the decider,
+  which makes a new round. The rollback line still says "I rolled the redesign back: you asked
+  to start over", which reads fine.

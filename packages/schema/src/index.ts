@@ -576,10 +576,21 @@ export type ChatItem =
   | {
       id: string;
       type: 'directions';
-      /** `mockup` (SPEC-phase2 §10): a Muse Image picture of the direction, an asset URL. */
-      options: { id: string; name: string; swatches: string[]; mockup?: string }[];
+      /**
+       * `board` (SPEC-phase3 §2): the direction's style board, an .html asset shown in a
+       * sandboxed iframe. `mockup` (SPEC-phase2 §10, the test build's stand-ins only): a picture.
+       */
+      options: { id: string; name: string; swatches: string[]; board?: string; mockup?: string }[];
       selectedId?: string;
+      /** SPEC-phase3 §2.3: which round of directions (1 when absent), and what changed. */
+      round?: number;
+      changed?: string;
     }
+  /**
+   * SPEC-phase3 §2.4: the redesign's final review, before (or, in Autonomous, after) its PR
+   * opens. Answers: `ok` (open the PR), `restart` (back to the boards), `back` (send it back).
+   */
+  | { id: string; type: 'review'; changeId: string; autonomous?: boolean; answer?: string }
   | {
       id: string;
       type: 'progress';
@@ -657,6 +668,8 @@ export interface RunState {
   phase: RunPhase;
   activity: RunActivity;
   mode: Mode;
+  /** SPEC-phase3 §4: the ability Fitts is using right now, and since when (elapsedMs). */
+  ability?: { name: string; since: number };
   step: number;
   stepEstimate: number;
   elapsedMs: number;

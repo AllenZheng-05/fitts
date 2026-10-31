@@ -257,10 +257,13 @@ export async function composeDirections(
     shots: string[];
     inventory: string[];
     inspiration?: Inspiration[];
+    /** SPEC-phase3 §2.3: the owner saw these directions and said this about them. */
+    round?: { n: number; previous: Direction[]; feedback: string };
   },
   signal?: AbortSignal,
 ): Promise<Direction[]> {
   const short = shortlist(input.brief);
+  const round = input.round;
   const refs = input.inspiration ?? [];
   const res = await caller.call(ctx, {
     task: 'themefit',
@@ -275,6 +278,18 @@ export async function composeDirections(
             text: [
               `Brief: ${JSON.stringify(input.brief)}`,
               `Why the look needs to change: ${input.why}`,
+              ...(round
+                ? [
+                    '',
+                    `This is round ${round.n}. The owner saw these directions:`,
+                    ...round.previous.map(
+                      (d) =>
+                        `- ${d.name} (${d.kind}): ${d.notes} Parts: ${JSON.stringify(d.spec.parts)}`,
+                    ),
+                    `What they said about them: <owner_feedback>${round.feedback}</owner_feedback>`,
+                    'Make three new directions from that. Keep what they liked or didn’t mention; change what they asked to change. Put what you changed and why in each direction’s changes, first.',
+                  ]
+                : []),
               `Current fonts and colors: ${input.inventory.join(' | ') || 'unknown'}`,
               ...refs.map(
                 (r) =>

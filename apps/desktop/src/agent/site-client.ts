@@ -39,6 +39,13 @@ export interface Site {
   reveal?(ref: string): Promise<void>;
   png(jpegBase64: string): Promise<string>;
   saveAsset(runId: string, name: string, base64: string): Promise<string>;
+  /** A style board (SPEC-phase3 §2): fonts embedded by main, saved as an asset; its URL. */
+  board?(
+    runId: string,
+    name: string,
+    html: string,
+    fonts: { family: string; id: string; weights: number[] }[],
+  ): Promise<string>;
   /** The fix pipeline's privileged half in main (§9). */
   fix(call: FixCall): Promise<unknown>;
   /** A site the owner admires: two screenshots and a style line (design inspiration). */
@@ -120,6 +127,8 @@ export class SiteRpc {
       png: async (jpegBase64) => (await expect({ op: 'png', jpegBase64 }, 'png')).pngBase64,
       saveAsset: async (runId, name, base64) =>
         (await expect({ op: 'saveAsset', runId, name, base64 }, 'saved')).url,
+      board: async (runId, name, html, fonts) =>
+        (await expect({ op: 'board', runId, name, html, fonts }, 'saved')).url,
     };
   }
 }

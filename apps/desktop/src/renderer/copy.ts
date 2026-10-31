@@ -41,6 +41,17 @@ export const copy = {
     caption:
       'A generated picture of the idea, not code. The real redesign is built and checked on your site.',
     noMockup: 'No picture for this one yet. You can still choose it.',
+    boardTitle: 'The {name} style board',
+    boardCaption:
+      'What this direction’s parts look like as components, in your site’s words. Not your pages yet: the real redesign is built and checked on your site.',
+    boardChip: 'Style board',
+    round: 'Round {n}',
+    noneOfThese: 'None of these',
+    noneOfTheseDraft: 'None of these work for me: ',
+    feedbackLabel: 'What would you change about {name}?',
+    feedbackPlaceholder: 'Warmer colors, a rounder font, less busy…',
+    feedbackSend: 'Send to Fitts',
+    feedbackPrefix: 'About {name}: {text}',
     chosen: 'Your pick',
     keepLooking: 'Keep looking',
     choose: 'Choose this one',
@@ -261,6 +272,23 @@ export const copy = {
     reverted: 'Revert PR #{n} opened',
     lookfeelTag: "Look & feel · doesn't fit the purpose",
     directionsLabel: 'Design directions',
+    review: {
+      title: 'Review the new look',
+      before: 'Before',
+      after: 'After',
+      ok: 'It’s good, open the PR',
+      restart: 'Start over',
+      hint: 'Or tell me what to change in the message box, and I’ll change it first.',
+      back: 'Send it back',
+      autonomousHint:
+        'The pull request is open. Not right? Send it back and tell me what to change.',
+      answered: {
+        ok: 'You said it’s good',
+        restart: 'You started over',
+        back: 'You sent it back',
+      },
+      pageAlt: '{route}, {when}',
+    },
     directionMockupAlt: 'A generated picture of the {name} direction',
     undoRedesign: 'Undo redesign',
     adjust: 'Adjust it',
@@ -870,6 +898,9 @@ export const copy = {
     showFindingPaused:
       'Here’s “{title}” on {route}, outlined. I’ve paused so you can look; press Resume when you’re done.',
     showFindingDone: 'Here’s “{title}” on {route}, outlined.',
+    reviewAsk:
+      'The new look is on every page and they all still work. Have a look before I open the pull request: **what works, and what doesn’t?**',
+    reviewAgain: 'Changed and checked. **How about now?**',
     stepCap:
       'I stopped testing at {max} steps, the most one run takes. {controls} controls on {pages} weren’t tried.',
     circlingPage:

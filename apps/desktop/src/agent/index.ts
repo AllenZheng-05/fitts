@@ -27,9 +27,10 @@ import { contributorFor, modelFor, reviewerRoster, SPARK_OPEN, type Profile } fr
 import { testKey } from './llm/test-key';
 import { recording } from './llm/fake';
 import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
+import { SparkDecider, sparkConverse } from './orchestrator/decider';
 import { isLiveOrigin, RealRun } from './orchestrator/run';
 import { ReviewerPanel } from './review/reviewers';
-import { themeFit } from './review/themefit';
+import { composeDirections, themeFit } from './review/themefit';
 import { briefFromSummary, interviewTurn } from './interview/interview';
 import { runFixer } from './fix/fixer';
 import { runRedesigner } from './fix/redesign';
@@ -279,6 +280,22 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
           }).model,
       )
     : new ExplorerBrain();
+  // Fitts decides what to do next and talks while it works (SPEC-phase3 §1.2, §1.3). Without a
+  // model (offline, no key, FITTS_DECIDER=scripted), Phase 2's order and short replies.
+  const runCtx = () => ({
+    runId: from.runId,
+    projectId,
+    contributor,
+    allowed: () => runRef.current?.allowed() ?? true,
+  });
+  const modelOpts = { contributor, baseten: Boolean(keys.baseten) };
+  const deciding = useModel && process.env['FITTS_DECIDER'] !== 'scripted';
+  const decider = deciding
+    ? new SparkDecider(runCaller, runCtx, () => modelFor('crawl', profile(), modelOpts).model)
+    : undefined;
+  const converse = online()
+    ? sparkConverse(runCaller, runCtx, () => modelFor('chat', profile(), modelOpts).model)
+    : undefined;
   let seq = seqs.get(projectId) ?? 0;
   const capUsd = set?.capUsd ?? from.cost.capUsd;
   const run = new RealRun(
@@ -296,6 +313,8 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       },
       onEconomy: () => profiles.set(projectId, 'economy'),
       ...(panel ? { panel } : {}),
+      ...(decider ? { decider } : {}),
+      ...(converse ? { converse } : {}),
       ...(online() && keys.meta && process.env['FITTS_NO_MEDIA'] !== '1'
         ? { media: new Media(keys.meta, ledger) }
         : {}),
@@ -340,6 +359,15 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
         : {}),
       ...(online()
         ? {
+            reviseLooks: (input: Parameters<typeof composeDirections>[3], signal?: AbortSignal) =>
+              composeDirections(
+                runCaller,
+                callCtx(),
+                modelFor('themefit', profile(), { contributor, baseten: Boolean(keys.baseten) })
+                  .model,
+                input,
+                signal,
+              ),
             themeFit: (input: Parameters<typeof themeFit>[3], signal?: AbortSignal) =>
               themeFit(
                 runCaller,

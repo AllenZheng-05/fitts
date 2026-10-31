@@ -52,7 +52,7 @@ function deviceById(id: string | null): SiteDevice | null {
   return DEVICES.find((d) => d.id === id) ?? null;
 }
 
-const ASSET_NAME = /^[\w.-]+\.(jpg|png|svg)$/;
+const ASSET_NAME = /^[\w.-]+\.(jpg|png|svg|html)$/;
 
 export class SiteManager {
   private readonly live = new Map<string, Live>();
@@ -248,6 +248,8 @@ export class SiteManager {
     if (request.op === 'png' || request.op === 'saveAsset') return this.media(projectId, request);
     if (request.op === 'reference')
       return { op: 'reference', ...(await captureReference(request.url)) };
+    // Boards need the font store: main/index answers them before they get here.
+    if (request.op === 'board') throw new Error('boards are saved by main');
     const win = live?.window;
     if (!win) throw new Error('The site is not running');
     switch (request.op) {
