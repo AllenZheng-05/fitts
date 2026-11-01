@@ -531,6 +531,11 @@ export interface Finding {
   assets?: { shot?: string; after?: string; mask?: string; mockup?: string };
   prUrl?: string;
   /**
+   * The device it shows up on (a DEVICES id), when it only happens at that size: "Show me on the
+   * site" switches to it first (Allen's feedback, round 5).
+   */
+  seenOn?: string;
+  /**
    * How Fitts got to it (Allen's feedback, round 4): the steps that led there, each with its
    * shot at runs/<runId>/shots/<step>.jpg, the last one where it found the problem.
    */

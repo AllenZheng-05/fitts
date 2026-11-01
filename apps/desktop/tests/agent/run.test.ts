@@ -1212,3 +1212,73 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
     run.dispose();
   });
 });
+
+describe('fixing what was asked (Allen’s feedback, round 5)', () => {
+  /** A fixable tap target on /, through the real pipeline with a fixer that patches. */
+  const fixRun = () => {
+    const r = redesignable();
+    r.site.probes = () =>
+      Promise.resolve([
+        {
+          probe: 'target-size' as const,
+          pass: false,
+          items: [{ ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' }],
+        },
+      ]);
+    return setup({ site: r.site, fixer: r.fixer, redesigner: r.redesigner });
+  };
+
+  it('“Fix it” on a finding outside the batch leaves the batch waiting', async () => {
+    const { run, state } = fixRun();
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.waitingFor === 'approval', 10_000);
+    const batch = state()?.chat.find((c) => c.type === 'approval.batch');
+    const outside = state()?.findings.find(
+      (f) => batch?.type === 'approval.batch' && !batch.findingIds.includes(f.id),
+    );
+    expect(outside).toBeDefined();
+    run.approveFixes([outside?.id ?? '']);
+    // It says it can't fix that one, and the batch still waits for its own answer.
+    expect(
+      state()?.chat.some(
+        (c) =>
+          c.type === 'fitts.message' && c.text.startsWith(`I can’t fix “${outside?.title ?? ''}”`),
+      ),
+    ).toBe(true);
+    expect(state()?.waitingFor).toBe('approval');
+    expect(state()?.phase).toBe('audit');
+    run.dispose();
+  });
+  it('“Show me on the site” switches to the size the problem happens at', async () => {
+    const devices: (string | null)[] = [];
+    const site = fakeSite({
+      device: (id) => {
+        devices.push(id);
+        return Promise.resolve(null);
+      },
+      viewportSweep: () =>
+        Promise.resolve([
+          {
+            ref: 'e1',
+            selector: '',
+            measured: 'page is 980px wide at 360px',
+            expected: 'no sideways scrolling at 360px',
+          },
+        ]),
+    });
+    const { run, state } = setup({ site });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => Boolean(state()?.findings.find((f) => f.seenOn === 'phone')), 10_000);
+    const f = state()?.findings.find((x) => x.seenOn === 'phone');
+    devices.length = 0;
+    await run.showFinding(f?.id ?? '');
+    expect(devices).toEqual(['phone']);
+    const last = state()?.chat.at(-1);
+    expect(last?.type === 'fitts.message' && last.text).toContain(
+      'I switched the view to iPhone · 390×844',
+    );
+    run.dispose();
+  });
+});

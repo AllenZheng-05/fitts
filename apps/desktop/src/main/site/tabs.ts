@@ -2,6 +2,7 @@
 // and new windows a page opens from your clicks, open in tabs beside it. Each off-site tab is its
 // own offscreen window in the project's session (so a sign-in made there is the site's too),
 // streamed only while it's the one showing. Fitts never acts in them.
+import { ICON_PATH } from '../window';
 import { BrowserWindow, type WebContents } from 'electron';
 import type { SiteTab } from '@fitts/schema';
 
@@ -65,6 +66,8 @@ export class TabSet {
       width,
       height,
       show: false,
+      skipTaskbar: true,
+      icon: ICON_PATH,
       useContentSize: true,
       webPreferences: {
         offscreen: true,

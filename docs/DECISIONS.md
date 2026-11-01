@@ -2394,3 +2394,25 @@ Allen's update (NEEDS-ALLEN).
 - **`pnpm bench:chat` runs every bench file**, and only `audit.bench.ts` skips itself, so after
   chat failed Playwright went on to p10 (real SAM calls, about $0.06) until I stopped it. Run
   one bench with `playwright test -c playwright.bench.config.ts tests/bench/chat.bench.ts`.
+
+## Phase 3 — Allen's walkthrough feedback (round 5)
+
+- **"Fix it" on one finding answered the whole batch.** On the portfolio run Fitts asked to fix 8
+  findings; while it waited, "Fix it" on a ninth (the guestbook button that "does nothing
+  visible") closed the batch with only that one. Fitts has no check that proves a fix for that
+  kind of finding, so nothing was queued, and the run said "All done". Now only the batch's own
+  answer (a subset of its findings) closes it; "Fix it" elsewhere is that finding alone. And
+  when Fitts can't fix something it says so, with the fix in words, instead of doing nothing.
+  The run log showed this, not the decider: it chose `fix` and the batch was posted.
+- **Showing a finding at the size it happens.** A finding now records `seenOn` (a device id): the
+  phone pass's device, or for the viewport sweep the smallest width it broke at, as the nearest
+  device (≤480px a phone, else a tablet). "Show me on the site" switches to it first, says so,
+  and the device picker follows.
+- **Replays only when they explain something.** A finding measured on the page as a whole had a
+  replay of the next few steps after arriving, which had nothing to do with it (the sideways
+  scroll replayed "Tapped About Me, My Werk, Jobz"). Those get just the arrival now.
+- **The taskbar icon.** The app window's icon and Windows relaunch details are set (since
+  P12). The offscreen site, tab and reference windows had none; they're now `skipTaskbar` with
+  the Fitts icon, so none can ever show Electron's. Running `pnpm dev` is electron.exe, so
+  Windows can still group under its icon from its cache or a pin; the packaged build has the
+  icon in its own exe.

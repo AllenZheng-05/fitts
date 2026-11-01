@@ -329,3 +329,31 @@ describe('titles', () => {
     expect(quoted('  ')).toBe('');
   });
 });
+
+describe('where a finding shows up (Allen’s feedback, round 5)', () => {
+  it('a page too wide at 360px is seen on a phone; at 768px only, on a tablet', () => {
+    const at = (width: number) =>
+      aggregate({
+        runId: 'run-1',
+        probes: [
+          probe({
+            evidenceId: 'run-1-ev1',
+            probe: 'viewport-sweep',
+            route: '/',
+            items: [
+              {
+                ref: 'e1',
+                selector: '',
+                measured: `page is 980px wide at ${width}px`,
+                expected: `no sideways scrolling at ${width}px`,
+              },
+            ],
+          }),
+        ],
+        reviews: [],
+        stepOf,
+      })[0];
+    expect(at(360)?.seenOn).toBe('phone');
+    expect(at(768)?.seenOn).toBe('tablet');
+  });
+});

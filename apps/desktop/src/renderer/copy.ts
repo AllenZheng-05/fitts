@@ -906,6 +906,9 @@ export const copy = {
     reviewAsk:
       'The new look is on every page and they all still work. Have a look before I open the pull request: **what works, and what doesn’t?**',
     reviewAgain: 'Changed and checked. **How about now?**',
+    cantFix:
+      'I can’t fix “{title}” on my own: I have no check that would prove the fix worked. Here’s what to change: {fix}',
+    showFindingDevice: 'I switched the view to {device}, where it happens.',
     stepCap:
       'I stopped testing at {max} steps, the most one run takes. {controls} controls on {pages} weren’t tried.',
     circlingPage:

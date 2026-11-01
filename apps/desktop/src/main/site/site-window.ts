@@ -1,6 +1,7 @@
 // The user's site in a hidden offscreen window (SPEC-phase2 §5.1), streamed to the renderer as
 // JPEG frames. No preload; sandboxed; a session per project; every permission denied. Fitts's
 // own queries (element boxes, refs) run in an isolated world, never the page's.
+import { ICON_PATH } from '../window';
 import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
 import PROBES from '@fitts/probes/page.js?raw';
 import {
@@ -65,6 +66,9 @@ export class SiteWindow {
       width: 1024,
       height: 700,
       show: false,
+      // Never a taskbar button of its own (it would carry Electron's icon), even when focused.
+      skipTaskbar: true,
+      icon: ICON_PATH,
       useContentSize: true,
       webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, session: ses },
     });

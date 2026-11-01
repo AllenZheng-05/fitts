@@ -494,6 +494,7 @@ function toFinding(
     },
     evidence,
     ...(c.refs[0] ? { elementRef: c.refs[0] } : {}),
+    ...seenOn(c),
     ...sourceOf(c.items),
     stepIndex: at.stepIndex,
     atMs: at.atMs,
@@ -508,6 +509,22 @@ function toFinding(
         }
       : {}),
   };
+}
+
+/**
+ * The device a finding needs to be seen: the phone pass's own, or for the viewport sweep the
+ * smallest width it broke at ("page is 980px wide at 360px"), as the nearest device.
+ */
+function seenOn(c: Cluster): Pick<Finding, 'seenOn'> | Record<string, never> {
+  if (c.device) return { seenOn: c.device };
+  if (c.probe !== 'viewport-sweep') return {};
+  const widths = c.items.flatMap((i) => {
+    const m = / at (\d+)px/.exec(i.measured);
+    return m ? [Number(m[1])] : [];
+  });
+  if (widths.length === 0) return {};
+  const w = Math.min(...widths);
+  return { seenOn: w <= 480 ? 'phone' : 'tablet' };
 }
 
 /** `data-fitts-src` from the Fitts plugin ("src/pages/Compose.tsx:118:9"): high confidence. */

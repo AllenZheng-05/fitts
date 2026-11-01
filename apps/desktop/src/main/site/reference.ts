@@ -2,6 +2,7 @@
 // once in a hidden, sandboxed window with its own throwaway session, screenshotted at the top and
 // one screen down, and summarized (fonts, colors, corners). Nothing on it is clicked, nothing it
 // asks for is granted, and nothing it downloads or opens is allowed.
+import { ICON_PATH } from '../window';
 import { BrowserWindow, session } from 'electron';
 
 const SIZE = { width: 1440, height: 900 };
@@ -56,6 +57,8 @@ export async function captureReference(raw: string): Promise<Reference> {
   const win = new BrowserWindow({
     ...SIZE,
     show: false,
+    skipTaskbar: true,
+    icon: ICON_PATH,
     paintWhenInitiallyHidden: true,
     webPreferences: {
       session: ses,

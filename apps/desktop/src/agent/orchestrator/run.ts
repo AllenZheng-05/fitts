@@ -682,16 +682,28 @@ export class RealRun {
   /** Approve the batch, or "Fix it" on one finding (§9.3: approving covers its PR). */
   approveFixes(findingIds: string[]): void {
     if (!this.pipeline) return;
-    if (this.approvalId) {
-      const item = this.state.chat.find((c) => c.id === this.approvalId);
-      if (item?.type === 'approval.batch')
-        this.emit([{ type: 'chat.item.updated', item: { ...item, answer: findingIds.join(',') } }]);
+    const item = this.state.chat.find((c) => c.id === this.approvalId);
+    // Only the batch's own answer closes it. "Fix it" on another finding while the batch waits
+    // is that one finding, not an answer for the rest (Allen's feedback, round 5).
+    const answersBatch =
+      item?.type === 'approval.batch' &&
+      (findingIds.length === 0 || findingIds.every((id) => item.findingIds.includes(id)));
+    if (answersBatch) {
+      this.emit([{ type: 'chat.item.updated', item: { ...item, answer: findingIds.join(',') } }]);
       this.approvalId = undefined;
       this.emit([{ type: 'waiting.changed' }]);
       if (!this.finished) this.setActivity('acting');
     }
+    // What Fitts can't check a fix for, it says so instead of quietly doing nothing.
+    const fixable = this.pipeline.fixable(findingIds);
+    const cant = this.state.findings.filter(
+      (f) => findingIds.includes(f.id) && !fixable.includes(f.id),
+    );
+    for (const f of cant.slice(0, 3))
+      this.say(format(copy.fitts.cantFix, { title: f.title, fix: f.fix }));
+    if (fixable.length === 0) return;
     this.fixPhase = true;
-    this.pipeline.start(findingIds);
+    this.pipeline.start(fixable);
     if (!this.pipeline.busy) this.fixesSettled();
   }
 
@@ -1518,7 +1530,9 @@ export class RealRun {
     const used = f.elementRef
       ? this.trail.find((t) => t.route === f.route && t.ref === f.elementRef && t.step >= arrived)
       : undefined;
-    const last = used?.step ?? arrived + 3;
+    // Measured on the page as a whole (a probe, the phone pass): the steps after arriving have
+    // nothing to do with it, so the replay is only the arrival (Allen's feedback, round 5).
+    const last = used?.step ?? arrived;
     const steps = this.trail
       .filter((t) => t.step >= arrived && t.step <= last)
       .slice(-REPLAY_STEPS)
@@ -2125,6 +2139,9 @@ export class RealRun {
     if (!f) return;
     if (this.state.activity === 'acting') this.setActivity('paused');
     if (this.state.rewindStep !== undefined) this.emit([{ type: 'rewind.set' }]);
+    // A problem that only happens at one size is shown at that size (Allen's feedback, round 5).
+    const device = f.seenOn ? DEVICES.find((d) => d.id === f.seenOn) : undefined;
+    if (device) await this.deps.site.device?.(device.id).catch(() => null);
     try {
       await this.deps.site.navigate(f.route);
       if (f.elementRef) await this.deps.site.reveal?.(f.elementRef);
@@ -2152,7 +2169,7 @@ export class RealRun {
       format(
         this.state.phase === 'done' ? copy.fitts.showFindingDone : copy.fitts.showFindingPaused,
         { title: f.title, route: f.route },
-      ),
+      ) + (device ? ` ${format(copy.fitts.showFindingDevice, { device: device.label })}` : ''),
     );
   }
 
