@@ -73,6 +73,8 @@ export class SiteManager {
   onHeld: ((projectId: string, held: HeldRequest) => void) | undefined;
   /** Worktrees and ports for versions of a site, set by main. */
   versions: VersionSource | undefined;
+  /** The Fitts plugin, added to Vite dev servers from outside the project (set by main). */
+  pluginFile: string | undefined;
 
   constructor(
     private readonly root: string,
@@ -138,7 +140,7 @@ export class SiteManager {
       return;
     }
     if (this.live.get(siteId) !== live) return;
-    live.server = new DevServer(dir, devCommandOnPort(dir, port), port);
+    live.server = new DevServer(dir, devCommandOnPort(dir, port, this.pluginFile), port);
     this.status(siteId, { url: live.server.url });
     const ok = await live.server.start(90_000);
     if (!ok || this.live.get(siteId) !== live) {
@@ -182,7 +184,7 @@ export class SiteManager {
     const custom = project.devCommand && project.devCommand !== detection?.devCommand;
     const server = new DevServer(
       folder,
-      custom ? (project.devCommand ?? '') : devCommandOnPort(folder, port),
+      custom ? (project.devCommand ?? '') : devCommandOnPort(folder, port, this.pluginFile),
       port,
     );
     const live: Live = { server, status: { projectId, status: 'starting' } };

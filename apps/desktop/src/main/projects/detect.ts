@@ -5,6 +5,7 @@ import type { Detection } from '@fitts/schema';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { run } from '../spawn';
+import { fittsViteConfig } from './fitts-config';
 
 interface Pkg {
   name?: string;
@@ -66,7 +67,7 @@ export function detectDevCommand(folder: string, pkg: Pkg): { command: string; p
  * --strictPort so a busy port fails instead of moving (Vite ignores `PORT`, and scripts often pin
  * `--port 5173`); anything else is the detected command, which gets `PORT` in its environment.
  */
-export function devCommandOnPort(folder: string, port: number): string {
+export function devCommandOnPort(folder: string, port: number, pluginFile?: string): string {
   let pkg: Pkg = {};
   try {
     pkg = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')) as Pkg;
@@ -81,7 +82,14 @@ export function devCommandOnPort(folder: string, port: number): string {
       : findUp(folder, 'yarn.lock')
         ? 'yarn'
         : 'npx';
-    return `${runner} ${rest} --port ${port} --strictPort`;
+    // The Fitts plugin, from outside the repo (fitts-config.ts), unless the project chose its
+    // own config or already has the plugin.
+    const ownConfig = /\s(--config|-c)[=\s]/.test(` ${rest}`);
+    const has = Boolean(
+      pkg.dependencies?.['@fitts/vite-plugin'] ?? pkg.devDependencies?.['@fitts/vite-plugin'],
+    );
+    const config = ownConfig || has ? null : fittsViteConfig(folder, pluginFile);
+    return `${runner} ${rest} --port ${port} --strictPort${config ? ` --config "${config}"` : ''}`;
   }
   return detectDevCommand(folder, pkg).command;
 }

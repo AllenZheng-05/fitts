@@ -152,10 +152,13 @@ export function stamp(code, file) {
   return out + code.slice(at);
 }
 
-/** Does the stamped file still compile? Vite's own compiler says (oxc, else esbuild). */
-async function compiles(code, file) {
+/**
+ * Does the stamped file still compile? Vite's own compiler says (oxc, else esbuild). `vite` is
+ * the module when the config passed it in (Vite's config runner can't import it from here).
+ */
+async function compiles(code, file, given) {
   try {
-    const vite = await import('vite');
+    const vite = given ?? (await import('vite'));
     const lang = file.endsWith('.tsx') ? 'tsx' : 'jsx';
     if (typeof vite.transformWithOxc === 'function')
       await vite.transformWithOxc(code, file, { lang });
@@ -169,7 +172,7 @@ async function compiles(code, file) {
 }
 
 /** Add `fitts()` to `plugins` in vite.config. Dev only; does nothing in a build. */
-export default function fitts() {
+export default function fitts(opts = {}) {
   let root = process.cwd();
   return {
     name: 'fitts',
@@ -182,7 +185,7 @@ export default function fitts() {
       const file = id.split('?')[0];
       if (!/\.[jt]sx$/.test(file) || file.includes('/node_modules/')) return null;
       const stamped = stamp(code, relative(root, file).split('\\').join('/'));
-      if (!stamped || !(await compiles(stamped, file))) return null;
+      if (!stamped || !(await compiles(stamped, file, opts.vite))) return null;
       // Stamps go on the same line as the tag, so line numbers in errors stay right.
       return { code: stamped, map: null };
     },

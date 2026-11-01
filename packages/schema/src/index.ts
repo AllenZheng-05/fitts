@@ -35,10 +35,6 @@ export interface FittsBridge {
    * them out), then the run is over.
    */
   finishRun?: (projectId: string, runId: string) => Promise<void>;
-  /** Adds the Fitts dev plugin to a Vite project, as its own small pull request. */
-  installPlugin?: (
-    projectId: string,
-  ) => Promise<{ ok: true; number: number; url: string } | { ok: false; message: string }>;
   /** Opens a pull request (or another GitHub page) in the user's browser. https only. */
   openLink?: (url: string) => void;
   /** What's installed on this computer, for Welcome's chips (each null when missing). */
@@ -387,7 +383,6 @@ export const IPC = {
   notificationClick: 'fitts:notification-click',
   openLink: 'fitts:open-link',
   runFinish: 'fitts:run-finish',
-  pluginInstall: 'fitts:plugin-install',
   siteOpenInBrowser: 'fitts:site-open-in-browser',
   engineCall: 'fitts:engine-call',
   engineEvents: 'fitts:engine-events',

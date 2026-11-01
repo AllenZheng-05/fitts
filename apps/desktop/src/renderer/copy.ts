@@ -158,7 +158,8 @@ export const copy = {
     devServer: 'Dev server: ',
     change: 'Change',
     repo: 'GitHub repo: ',
-    pluginWarning: 'Fixes will be less precise without the Fitts source plugin',
+    pluginWarning:
+      'Fixes will be less precise here: the Fitts source plugin only works with Vite projects',
     noRepo: 'No GitHub repo found. Fixes stay on local branches.',
   },
   header: {
@@ -728,11 +729,6 @@ export const copy = {
     codeTabHint: 'Audit and fix · opens pull requests',
     liveTab: 'Live site only',
     liveTabHint: 'Audit only · no code changes',
-    plugin: 'Add the Fitts plugin to this project (a small pull request)',
-    pluginHint:
-      'Dev only: it marks each element with the line of code that renders it, so my fixes land in the right place. Your live site doesn’t change.',
-    pluginOpened: 'Opened PR #{n} to add the Fitts plugin.',
-    pluginFailed: 'I couldn’t add the Fitts plugin: {message}',
     name: 'Name',
     url: 'Site URL',
     urlPlaceholder: 'https://example.com',

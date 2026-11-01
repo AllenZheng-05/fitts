@@ -2,7 +2,7 @@ import type { SiteVerification } from '@fitts/schema';
 import { FolderOpen, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/Button';
-import { Checkbox, TextField } from '../../components/fields';
+import { TextField } from '../../components/fields';
 import { IconButton } from '../../components/IconButton';
 import { Modal } from '../../components/overlay/Modal';
 import { Tabs } from '../../components/Tabs';
@@ -13,33 +13,12 @@ import { useDetection } from '../../lib/use-detection';
 import type { Detection } from '@fitts/schema';
 import { projectFromFolder, projectFromUrl } from '../../lib/new-project';
 import { addAndOpenProject } from '../../state/actions';
-import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { LiveVerify } from './LiveVerify';
 
 type Kind = 'code' | 'live';
 
 /** Add a project: code on this computer or a live site (SPEC §6.11). */
-/**
- * "Add the Fitts plugin": its PR, once main has the new project (the project list is saved a
- * moment after it's added). The result shows as a toast.
- */
-function addPlugin(projectId: string) {
-  const install = bridge().installPlugin;
-  if (!install) return;
-  setTimeout(() => {
-    void install(projectId).then((r) =>
-      useToasts
-        .getState()
-        .show(
-          r.ok
-            ? format(copy.addProject.pluginOpened, { n: r.number })
-            : format(copy.addProject.pluginFailed, { message: r.message }),
-        ),
-    );
-  }, 1500);
-}
-
 export function AddProjectDialog() {
   const open = useUi((s) => s.addProjectOpen);
   const close = () => useUi.getState().set({ addProjectOpen: false });
@@ -53,7 +32,6 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
   const [folder, setFolder] = useState('');
   const [name, setName] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
-  const [plugin, setPlugin] = useState(true);
   const [devCommand, setDevCommand] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   const [verification, setVerification] = useState<Omit<SiteVerification, 'verifiedAt'> | null>(
@@ -62,12 +40,6 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
   const verified = verification !== null;
 
   const detection = useDetection(folder);
-  // The plugin is for Vite projects that don't have it yet.
-  const canAddPlugin = Boolean(
-    detection &&
-    !detection.hasPlugin &&
-    /vite/i.test(`${detection.framework} ${detection.devCommand}`),
-  );
   const suggested =
     kind === 'code'
       ? (detection?.name ?? '')
@@ -85,8 +57,7 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
         ...detection,
         devCommand: devCommand ?? detection.devCommand,
       });
-      const id = addAndOpenProject(project);
-      if (plugin && canAddPlugin) addPlugin(id);
+      addAndOpenProject(project);
     } else {
       addAndOpenProject({
         ...projectFromUrl(url.trim(), shownName),
@@ -165,19 +136,6 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
                       devCommand={devCommand}
                       onDevCommand={setDevCommand}
                     />
-                  )}
-                  {canAddPlugin && (
-                    <div className="flex flex-col gap-1">
-                      <Checkbox
-                        label={copy.addProject.plugin}
-                        checked={plugin}
-                        onChange={(e) => setPlugin(e.target.checked)}
-                        className="items-center"
-                      />
-                      <span className="pl-8 text-[13px] text-muted">
-                        {copy.addProject.pluginHint}
-                      </span>
-                    </div>
                   )}
                   {nameField}
                 </>
@@ -293,7 +251,8 @@ function DetectionList({
           )}
         </span>
       </li>
-      {!detection.hasPlugin && (
+      {/* Vite projects get the plugin from Fitts when it runs them; others can't have it. */}
+      {!detection.hasPlugin && !/vite/i.test(`${detection.framework} ${detection.devCommand}`) && (
         <li className="flex gap-2.5">
           {warn}
           <span className="flex-1">{copy.detection.pluginWarning}</span>

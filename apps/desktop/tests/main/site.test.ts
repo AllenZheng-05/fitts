@@ -1,12 +1,12 @@
 // @vitest-environment node
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ net: {}, protocol: {}, ipcMain: { on: vi.fn(), handle: vi.fn() } }));
 const { assetPath } = await import('../../src/main/asset-protocol');
-const { detectDevCommand, detectFramework, detectProject, githubRepo } =
+const { detectDevCommand, detectFramework, detectProject, devCommandOnPort, githubRepo } =
   await import('../../src/main/projects/detect');
 const { splitCommand, spawnProcess } = await import('../../src/main/spawn');
 
@@ -93,5 +93,38 @@ describe('fitts-asset paths', () => {
     expect(assetPath(root, 'fitts-asset://demo-chat/run-7/events/19.jpg')).toBeNull();
     expect(assetPath(root, 'fitts-asset://demo-chat/run-7/shots/x.ndjson')).toBeNull();
     expect(assetPath(root, 'fitts-asset://../run-7/shots/1.jpg')).toBeNull();
+  });
+});
+
+describe('the Fitts plugin from outside the project (Allen’s feedback, round 5)', () => {
+  const PLUGIN = resolve(__dirname, '../../resources/plugin/fitts.vite.mjs');
+  const vite = (deps: Record<string, string> = {}, script = 'vite') => {
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ scripts: { dev: script }, devDependencies: { vite: '8', ...deps } }),
+    );
+    writeFileSync(join(dir, 'vite.config.ts'), 'export default {};');
+  };
+
+  it('runs Vite with a config in node_modules/.fitts that wraps the project’s own', () => {
+    vite();
+    mkdirSync(join(dir, 'node_modules'));
+    const cmd = devCommandOnPort(dir, 5200, PLUGIN);
+    const config = join(dir, 'node_modules', '.fitts', 'vite.config.mjs');
+    expect(cmd).toBe(`npx vite --port 5200 --strictPort --config "${config}"`);
+    expect(readFileSync(config, 'utf8')).toContain("import project from '../../vite.config.ts';");
+    expect(existsSync(join(dir, 'node_modules', '.fitts', 'fitts.vite.mjs'))).toBe(true);
+  });
+
+  it('leaves it out without node_modules, with the plugin already in, or with its own --config', () => {
+    vite();
+    expect(devCommandOnPort(dir, 5200, PLUGIN)).not.toContain('--config');
+    mkdirSync(join(dir, 'node_modules'));
+    vite({ '@fitts/vite-plugin': '0.1.0' });
+    expect(devCommandOnPort(dir, 5200, PLUGIN)).not.toContain('--config');
+    vite({}, 'vite --config other.config.ts');
+    expect(devCommandOnPort(dir, 5200, PLUGIN)).toBe(
+      'npx vite --config other.config.ts --port 5200 --strictPort',
+    );
   });
 });

@@ -73,14 +73,9 @@ void app.whenReady().then(() => {
         : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.versions = fixes;
-  // "Add the Fitts plugin" (Add project): its own small PR. Offline (e2e), nothing happens.
-  ipcMain.handle(IPC.pluginInstall, async (_e, projectId: unknown) => {
-    if (typeof projectId !== 'string' || process.env['FITTS_OFFLINE'] === '1')
-      return { ok: false, message: 'offline' };
-    return fixes
-      .installPlugin(projectId)
-      .catch((e: unknown) => ({ ok: false, message: (e as Error).message }));
-  });
+  sites.pluginFile = app.isPackaged
+    ? join(process.resourcesPath, 'plugin', 'fitts.vite.mjs')
+    : join(__dirname, '../../resources/plugin/fitts.vite.mjs');
   ipcMain.handle(IPC.runFinish, async (_e, projectId: unknown, runId: unknown) => {
     if (typeof projectId !== 'string' || typeof runId !== 'string' || !SAFE_ID.test(runId)) return;
     sites.closeVersions(projectId);

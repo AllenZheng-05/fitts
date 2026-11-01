@@ -1,8 +1,8 @@
 // @vitest-environment node
-// The one-file Fitts plugin a project gets in a PR: it stamps host JSX elements with their
+// The Fitts plugin, added to Vite dev servers from outside the project: it stamps host JSX elements with their
 // source line, and leaves everything that only looks like JSX alone.
 import { describe, expect, it } from 'vitest';
-import { withFittsPlugin } from '../../src/main/fix/fix-host';
+import { wrapper } from '../../src/main/projects/fitts-config';
 // @ts-expect-error: a plain .mjs file shipped as a resource, without types.
 import { stamp } from '../../resources/plugin/fitts.vite.mjs';
 
@@ -50,27 +50,13 @@ describe('the Fitts plugin', () => {
     expect(out?.match(/data-fitts-src/g)).toHaveLength(3);
   });
 
-  it('adds itself to vite.config: the import after the others, fitts() first in plugins', () => {
-    const config = [
-      "import { defineConfig } from 'vite';",
-      "import react from '@vitejs/plugin-react';",
-      '',
-      'export default defineConfig({',
-      '  plugins: [react()],',
-      '});',
-    ].join('\n');
-    expect(withFittsPlugin(config)).toBe(
-      [
-        "import { defineConfig } from 'vite';",
-        "import react from '@vitejs/plugin-react';",
-        "import fitts from './fitts.vite.mjs';",
-        '',
-        'export default defineConfig({',
-        '  plugins: [fitts(), react()],',
-        '});',
-      ].join('\n'),
-    );
-    expect(withFittsPlugin('export default {}')).toBeNull();
-    expect(withFittsPlugin(withFittsPlugin(config) ?? '')).toBeNull();
+  it('wraps the project’s own config from node_modules/.fitts, plugin first, any config shape', () => {
+    const w = wrapper('vite.config.ts');
+    expect(w).toContain("import fitts from './fitts.vite.mjs';");
+    expect(w).toContain("import project from '../../vite.config.ts';");
+    expect(w).toContain("typeof project === 'function' ? project(env) : project");
+    expect(w).toContain('plugins: [fitts({ vite }), ...(base.plugins ?? [])]');
+    // No config of its own: Vite's defaults, with the plugin.
+    expect(wrapper(undefined)).toContain('const project = {};');
   });
 });

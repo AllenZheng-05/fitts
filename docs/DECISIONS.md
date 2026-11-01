@@ -2416,3 +2416,22 @@ Allen's update (NEEDS-ALLEN).
   the Fitts icon, so none can ever show Electron's. Running `pnpm dev` is electron.exe, so
   Windows can still group under its icon from its cache or a pin; the packaged build has the
   icon in its own exe.
+
+## Phase 3 — the Fitts plugin, from outside the project
+
+- **Nothing goes in the owner's repo.** "Add the Fitts plugin" opened a PR with a vendored
+  `fitts.vite.mjs` and an edit to vite.config, and that PR failed Allen's CI on formatting. Fitts
+  only needs the plugin while it runs the site, and it always starts the dev server itself, so
+  now it starts Vite with `--config node_modules/.fitts/vite.config.mjs`: a config Fitts writes
+  (with a copy of the plugin) that loads the project's own config, whatever its shape, and puts
+  `fitts()` first in its plugins. node_modules is never committed and formatters and linters
+  skip it; bare imports in the project's config still resolve from the project's node_modules.
+  The same goes for fix worktrees and site versions.
+- **When it isn't added:** no node_modules yet, the project already has `@fitts/vite-plugin`, the
+  dev script passes its own `--config`, or the project isn't a plain `vite` script. The Add
+  project dialog no longer offers a PR; it notes the plugin only for projects that can't have it.
+- **The plugin takes Vite from its config.** It checks each stamped file with Vite's compiler,
+  which it imported dynamically; now the wrapper passes `vite` in (`fitts({ vite })`), with the
+  dynamic import kept as the fallback for projects that list the plugin themselves. Checked by
+  hand on demo/chat (its config without its own plugin) under both config loaders, `bundle` and
+  `runner`: App.tsx came back stamped both ways.
