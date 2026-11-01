@@ -5,32 +5,29 @@ usability problems (Nielsen's 10 heuristics plus accessibility, performance and
 look-and-feel lenses), fixes the code, verifies each fix and opens pull requests.
 Users talk to Fitts by chat or voice while it works.
 
-## Current phase: Phase 3 — Fitts decides
+## Current phase: Phase 4 — Fitts understands
 
-Phase 2 (the real engine, SPEC-phase2) is done. Phase 3 turns its fixed script into abilities
-that Fitts chooses between, with the owner steering. Spec: docs/SPEC-phase3.md (v0.2, approved
-Oct 31). Where it's silent, SPEC-phase2, then docs/DECISIONS.md, then SPEC-phase1 apply.
+Phases 2 and 3 are done (one run branch, one PR, self-repairing fixes). Phase 4 adds the App
+Model (Fitts reads the code), journeys and the device matrix, reproducible findings, owner-first
+control (only the owner ends a run; owner rules are remembered), a code-aware fixer with an edit
+allowlist, the App Map on Done, and Android (Expo on the emulator). Spec: docs/SPEC-phase4.md.
+Where it's silent, SPEC-phase3, SPEC-phase2, docs/DECISIONS.md, then SPEC-phase1 apply.
 
-- Built: Q0 abilities and the scripted decider · Q1 the Spark decider, `converse` and the
-  owner's pivots · Q2 style boards · Q3 rounds of looks and the final review · Q4 tabs in the
-  mirror · after Allen's run 1: one run branch and one PR per run, fixes that run the project's
-  CI checks and repair themselves, and a decider that hears about rollbacks (`retry_fix`).
-- Left: Q5, real runs on Allen's portfolio and openteamsheets.com with Allen (a redesign PR
-  touches GitHub, and judging boards needs his eyes).
-- The guarantees in SPEC-phase3 §1.6 live in the abilities (`orchestrator/run.ts` `use()`),
-  never in a decider: a decider may choose badly, never unsafely.
-- The `RunEngine` interface still has 22 methods; new behavior goes through `sendMessage`,
-  `answerQuestion` and `pickDirection`, not new methods.
-
-Do one milestone at a time, each ending green (typecheck, lint, test, test:e2e) and committed
-before the next starts.
-Real network calls are allowed only in apps/desktop/src/agent/llm/, apps/desktop/src/main/voice/, apps/desktop/src/main/fonts/ (Fontsource, for redesign and style-board fonts),
-apps/desktop/src/agent/verify-site/, apps/desktop/src/main/github/, apps/desktop/src/main/hosts/, and the gh/git spawner. The renderer never makes network
-calls, and a style board never does (served with its own CSP, fonts embedded). Never log or
-commit API keys. Never run git or gh outside the project's .fitts-worktrees/ except the
-read-only checks in SPEC-phase2 §4 and the PR steps in §9.3.
+Do one milestone (U0–U10, with U5b and U5c after U5) at a time, in order, each ending green
+(typecheck, lint, test, test:e2e) and committed before the next starts. Cut only in §13's order.
+Every observation line in the chat is a template in copy.ts over a measurement; never add a model
+call to narrate.
+Real network calls are allowed only in apps/desktop/src/agent/llm/, apps/desktop/src/main/voice/,
+apps/desktop/src/main/fonts/, apps/desktop/src/agent/verify-site/, apps/desktop/src/main/github/,
+apps/desktop/src/main/hosts/, and the gh/git/muse spawner. main/understand/ and main/android/
+make no network calls (adb and the emulator are local processes). The renderer never makes
+network calls. Never log or commit API keys or saved test logins. The one place a key leaves
+Secrets for a child process is `muse --api-key-stdin` (stdin only, then closed). Never write Fitts's own files
+(App Model, memory, FITTS.md) into the user's repo. Never run git or gh outside the project's
+.fitts-worktrees/ except the read-only checks in SPEC-phase2 §4 and the PR steps in §9.3.
+The guarantees in SPEC-phase4 §14 live in code, never in a decider or a prompt.
 Commit messages and PR bodies: no Co-Authored-By, session links or "Generated with" lines.
-Log judgment calls in docs/DECISIONS.md under "Phase 3".
+Log judgment calls in docs/DECISIONS.md under "Phase 4".
 
 ## Commands
 
