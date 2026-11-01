@@ -140,7 +140,9 @@ test('Add a project: code folder and live site', async () => {
   await dialog.getByLabel('Project folder').fill('~/code/portfolio');
   await expect(dialog.getByText('Next.js 15 detected')).toBeVisible();
   await expect(
-    dialog.getByText('Fixes will be less precise without the Fitts source plugin'),
+    dialog.getByText(
+      'Fixes will be less precise here: the Fitts source plugin only works with Vite projects',
+    ),
   ).toBeVisible();
   await expect(dialog.getByLabel('Name')).toHaveValue('portfolio');
 
