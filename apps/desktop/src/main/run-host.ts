@@ -6,6 +6,8 @@ import {
   IPC,
   STUB_ENGINE_METHODS,
   reduce,
+  type AppModel,
+  type AppModelPatch,
   type EngineCall,
   type EngineEvents,
   type KeyName,
@@ -20,6 +22,7 @@ import type {
   MainMessage,
   SiteOp,
   SiteOpResult,
+  UnderstandAsk,
 } from '../agent/protocol';
 import { devRepoRoot } from './dev-root';
 import type { Secrets } from './secrets';
@@ -59,6 +62,22 @@ export class RunHost {
   siteHeld(projectId: string, held: HeldRequest): void {
     this.send({ kind: 'siteHeld', projectId, held });
   }
+
+  /** SPEC-phase4 §3: asks the agent to understand a project. */
+  understand(ask: UnderstandAsk): void {
+    this.send({ kind: 'understand', ask });
+  }
+
+  /** The agent built an App Model, or the owner corrected one (main stores both). */
+  onAppModel:
+    | ((
+        projectId: string,
+        model: AppModel,
+        hashes: Record<string, string>,
+        modeled: boolean,
+      ) => void)
+    | undefined;
+  onAppModelPatch: ((projectId: string, patches: AppModelPatch[]) => void) | undefined;
 
   /** Speech in and out, for the cost ledger (§11). */
   voiceUsage(
@@ -181,6 +200,12 @@ export class RunHost {
       case 'verifyResult':
         this.pending.get(m.id)?.({ ok: m.ok, message: m.message });
         this.pending.delete(m.id);
+        return;
+      case 'appModel':
+        if (SAFE_ID.test(m.projectId)) this.onAppModel?.(m.projectId, m.model, m.hashes, m.modeled);
+        return;
+      case 'appModelPatch':
+        if (SAFE_ID.test(m.projectId)) this.onAppModelPatch?.(m.projectId, m.patches);
         return;
     }
   }

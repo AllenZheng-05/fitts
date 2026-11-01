@@ -3,7 +3,7 @@
 import type { Provider } from './call';
 
 export type Profile = 'quality' | 'economy' | 'open';
-export type Job = 'interview' | 'chat' | 'crawl' | 'aggregate' | 'themefit' | 'fix';
+export type Job = 'interview' | 'understand' | 'chat' | 'crawl' | 'aggregate' | 'themefit' | 'fix';
 
 export interface ModelChoice {
   provider: Provider;
@@ -31,6 +31,7 @@ const wonder: ModelChoice = { provider: 'meta', model: WONDER };
 export function modelFor(job: Job, profile: Profile, o: RouteOptions): ModelChoice {
   switch (job) {
     case 'interview':
+    case 'understand':
     case 'chat':
     case 'crawl':
       return spark(o);

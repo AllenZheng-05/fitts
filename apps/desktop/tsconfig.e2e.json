@@ -5,5 +5,10 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
-  "include": ["tests/e2e/**/*", "tests/bench/**/*", "src/renderer/env.d.ts"]
+  "include": [
+    "tests/e2e/**/*",
+    "tests/bench/**/*",
+    "src/renderer/env.d.ts",
+    "src/main/site/source-chain.ts"
+  ]
 }

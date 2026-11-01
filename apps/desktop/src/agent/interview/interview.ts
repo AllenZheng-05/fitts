@@ -2,7 +2,7 @@
 // The model sees the conversation, the brief so far, the screen the user is on and the path they
 // clicked; it returns Fitts's reply, the brief fields the message filled, and the whole brief as
 // one paragraph (what the user sees and edits).
-import type { Brief, RunState } from '@fitts/schema';
+import type { AppModelSummary, Brief, RunState } from '@fitts/schema';
 import prompt from '../../../../../docs/prompts/interview.md?raw';
 import type { CallContext, LlmCaller } from '../llm/call';
 
@@ -69,6 +69,18 @@ export interface InterviewInput {
   auditOnly?: boolean;
   /** What the user wants to be called (Settings › General). */
   name?: string;
+  /** SPEC-phase4 §3.3: what Fitts understands from the code, when it's ready. */
+  appModel?: AppModelSummary;
+}
+
+/** The App Model, for the interview: the summary, the pages and the journeys to offer. */
+export function appModelContext(m: AppModelSummary): string {
+  return [
+    `What you understand from the code${m.modeled ? '' : ' (read without a model: routes and forms only)'}: ${m.summary}`,
+    `Pages (${m.pages.length}): ${m.pages.map((p) => `${p.route}${p.title ? ` (${p.title})` : ''}${p.gate ? ` [needs ${p.gate}]` : ''}`).join(', ')}`,
+    `Journeys you could offer as flows: ${m.journeys.map((j) => `${j.name} (priority ${j.priority})`).join('; ') || 'none yet'}`,
+    'Use this to ask sharper questions ("I can see a checkout and an admin area. Which matters most?") and offer the journeys as quick replies for flows. The owner can also correct the map in the chat.',
+  ].join('\n');
 }
 
 /** Checks the model's turn; throws when it isn't usable (the caller falls back to the script). */
@@ -171,6 +183,7 @@ export function interviewInput({
   path,
   auditOnly,
   name,
+  appModel,
 }: InterviewInput): unknown[] {
   const history = state.chat.flatMap((c) =>
     c.type === 'fitts.message'
@@ -188,6 +201,7 @@ export function interviewInput({
       : 'The site isn’t on screen.',
     `Path the user clicked: ${path.join(' → ') || 'none yet'}`,
     ...(name ? [`The owner's name: ${name}`] : []),
+    ...(appModel ? [appModelContext(appModel)] : []),
     ...(auditOnly
       ? [
           'This is a live site with no code: you can audit it and report, but not fix or redesign it.',

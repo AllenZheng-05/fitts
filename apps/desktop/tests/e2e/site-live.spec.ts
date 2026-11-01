@@ -2,6 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { Finding } from '@fitts/schema';
 import { launchApp, type LaunchedApp } from './helpers/launch';
 
 const DEMO = resolve(__dirname, '../../../../demo/chat');
@@ -155,6 +156,7 @@ async function runState(page: Page) {
       chat: { type: string; stateKind?: string; text?: string }[];
       step: number;
       gate?: { id: string; action: string; heldRequest: string };
+      findings: Finding[];
     };
   });
 }
@@ -266,6 +268,24 @@ test('the real crawl reaches every route and tries every primary control (covera
   expect(failing('focus-visible').length).toBeGreaterThan(0); // #23
   expect(refs('links')).toContain('inbox-help'); // #24
   expect(probes.every((r) => /^run-\d+-ev\d+$/.test(r.evidenceId))).toBe(true);
+
+  // SPEC-phase4 §2.2: every shown finding says where in the code it is, and how sure Fitts is.
+  // demo/chat runs the Fitts plugin, so element findings come at plugin confidence with their
+  // component chain; the rest are found by searching the project.
+  const shown = s.findings.filter((f) => f.lane !== 'suggestion');
+  expect(shown.length).toBeGreaterThan(5);
+  // Until U2's App Model maps every route to its file, a page-level finding on "/" (nothing to
+  // search for) may still lack one.
+  const unsourced = shown.filter((f) => !f.source && !(f.route === '/' && !f.elementRef));
+  expect(unsourced.map((f) => f.title)).toEqual([]);
+  const confidences = new Set(shown.map((f) => f.source?.confidence));
+  expect(confidences.has('plugin')).toBe(true);
+  // React renders "To: (null)" as three text nodes, so the probe sees "null" on its own.
+  const nullLeak = shown.find((f) => /\bnull\b/.test(f.title));
+  expect(nullLeak?.source).toEqual(
+    expect.objectContaining({ file: 'src/pages/Compose.tsx', confidence: 'plugin' }),
+  );
+  expect(nullLeak?.sourceChain?.map((x) => x.component)).toContain('ComposeRecipient');
 });
 
 interface LoggedProbe {

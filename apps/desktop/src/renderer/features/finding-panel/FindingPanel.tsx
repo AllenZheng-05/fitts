@@ -127,6 +127,7 @@ function Panel({ run, finding, wide }: { run: RunState; finding: Finding; wide: 
         <p className="text-[14px] leading-normal">
           <strong>{copy.finding.fixPrefix}</strong> {finding.fix}
         </p>
+        {finding.source && <SourceLine finding={finding} />}
         <Tabs
           label={copy.finding.tabs}
           selected={tab}
@@ -181,6 +182,30 @@ function Panel({ run, finding, wide }: { run: RunState; finding: Finding; wide: 
 
       <Footer run={run} finding={finding} batch={batch} />
     </div>
+  );
+}
+
+/**
+ * Where in the code (SPEC-phase4 §2.2): the file and line, how sure Fitts is, and the
+ * components the element sits in, nearest first.
+ */
+function SourceLine({ finding }: { finding: Finding }) {
+  const source = finding.source;
+  if (!source) return null;
+  const chain = (finding.sourceChain ?? [])
+    .filter((f) => f.kind === 'call' && f.component)
+    .map((f) => f.component)
+    .slice(0, 4)
+    .join(' ‹ ');
+  return (
+    <p className="font-mono text-[12px] leading-normal text-ink-2">
+      <span className="font-sans font-semibold">{copy.finding.sourceLabel}:</span> {source.file}:
+      {source.line}
+      <span className="text-muted"> · {copy.finding.sourceConfidence[source.confidence]}</span>
+      {chain && (
+        <span className="block text-muted">{format(copy.finding.sourceChain, { chain })}</span>
+      )}
+    </p>
   );
 }
 

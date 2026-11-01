@@ -542,13 +542,18 @@ export interface Finding {
   lane?: 'shown' | 'suggestion';
   /** Same issue on several screens. */
   locations?: { route: string; elementRef?: string; stepIndex: number }[];
-  /** Where the element is rendered, and how sure Fitts is (§9.1). */
+  /**
+   * Where the element is rendered, and how sure Fitts is (§9.1; SPEC-phase4 §2.2's ladder:
+   * plugin > source-map > search > model).
+   */
   source?: {
     file: string;
     line: number;
     col?: number;
-    confidence: 'plugin' | 'source-map' | 'search';
+    confidence: 'plugin' | 'source-map' | 'search' | 'model';
   };
+  /** SPEC-phase4 §2.2: the component chain from the element up, nearest first. */
+  sourceChain?: SourceFrame[];
   /** Asset ids (fitts-asset://) for the step shot, the after shot, the SAM mask, the mockup. */
   assets?: { shot?: string; after?: string; mask?: string; mockup?: string };
   prUrl?: string;
@@ -593,6 +598,118 @@ export interface Change {
   attempts?: number;
   /** A redesign's pages (§8.3): each route's shot before, and the verifier's shot after. */
   pages?: { route: string; before?: string; after: string }[];
+}
+
+// ── The App Model (SPEC-phase4 §3) ───────────────────────────────────────────
+
+/** One JSON document per project per commit: what the code says the app is. */
+export interface AppModel {
+  version: 1;
+  projectId: string;
+  /** HEAD's sha, with "+dirty" when the tree has changes. */
+  commit: string;
+  kind: 'web' | 'android';
+  stack: {
+    framework: string;
+    language: 'ts' | 'js' | 'mixed';
+    styling: string[];
+    router: string;
+    ui: string[];
+    tests: string[];
+  };
+  /** 3–6 sentences: what the app is and how it's built. */
+  summary: string;
+  pages: AppPage[];
+  journeys: Journey[];
+  tokens: { file: string; kind: 'css-vars' | 'tailwind' | 'theme-object'; names: string[] }[];
+  apis: { method: string; path: string; file: string; line: number; usedBy: string[] }[];
+  /** From Tailwind screens and CSS media queries in source. */
+  breakpoints: number[];
+  media: { darkMode: boolean; reducedMotion: boolean };
+  /** Files the fixer may not touch without asking (§7.3). */
+  sensitive: string[];
+  /** Anything the model wants the owner to confirm, and what validation dropped. */
+  notes: string[];
+}
+
+export interface AppPage {
+  /** "/compose", "/team/:id" */
+  route: string;
+  /** The route or screen component file. */
+  file?: string;
+  source: 'code' | 'crawl' | 'both';
+  title?: string;
+  features: { id: string; name: string; description: string; files: string[] }[];
+  forms: {
+    name: string;
+    fields: { name: string; type: string; required: boolean; rule?: string }[];
+    submit?: string;
+    file: string;
+    line: number;
+  }[];
+  /** Why a crawler might not reach it. */
+  gate?: 'login' | 'role' | 'flag' | 'data';
+  dynamic?: { param: string; example?: string };
+  /** The layout file(s) wrapping it. */
+  layout?: string;
+}
+
+export interface Journey {
+  id: string;
+  /** "Send a message to Grandma" */
+  name: string;
+  /** What done looks like, checkable on the page. */
+  goal: string;
+  /** The route it starts on. */
+  start: string;
+  /** A plain-language plan, 2–10 steps. */
+  steps: string[];
+  /** The routes it passes through. */
+  pages: string[];
+  /** 1 = from the brief's flows or the app's core purpose. */
+  priority: 1 | 2 | 3;
+  needs?: ('login' | 'data' | 'payment' | 'email')[];
+  source: 'code' | 'brief' | 'owner' | 'crawl';
+  /** The owner unchecked it on the understanding card: not run, out of scope. */
+  enabled?: boolean;
+}
+
+/** The owner's corrections to the model (§3.3), kept across cache refreshes. */
+export type AppModelPatch =
+  | { op: 'addJourney'; journey: Journey }
+  | { op: 'dropJourney'; id: string }
+  | { op: 'priority'; id: string; priority: 1 | 2 | 3 }
+  | { op: 'outOfScope'; routes: string[] };
+
+/** What the UI needs of the model (`RunState.appModel`): not the whole document. */
+export interface AppModelSummary {
+  summary: string;
+  commit: string;
+  pages: {
+    route: string;
+    title?: string;
+    file?: string;
+    source: AppPage['source'];
+    gate?: AppPage['gate'];
+    features: { id: string; name: string; description: string }[];
+    forms: number;
+  }[];
+  journeys: Journey[];
+  notes: string[];
+  /** Pass 2 ran (a model wrote the summary, features and journeys); else Pass 1 alone. */
+  modeled: boolean;
+}
+
+/**
+ * One step of a finding's source chain (SPEC-phase4 §2.2): the host element's own stamp
+ * (`host`), a component and where it was used (`call`, from the plugin's call-site stamp), or
+ * a frame from the page's own debug info (`debug`: React's `_debugStack`, Svelte, Vue).
+ */
+export interface SourceFrame {
+  component?: string;
+  /** "src/pages/Compose.tsx:118:9" (a project path when main could map it). */
+  src?: string;
+  kind: 'host' | 'call' | 'debug';
 }
 
 export interface GateRequest {
@@ -664,7 +781,13 @@ export type ChatItem =
       /** The site-down card: whose site, the last dev-server lines, and whether it's live. */
       detail?: { url: string; live: boolean; log?: string[] };
     }
-  | { id: string; type: 'driving' };
+  | { id: string; type: 'driving' }
+  /**
+   * SPEC-phase4 §3.3: "Here's what I understand": the App Model's summary, pages and journeys,
+   * before the audit. Answers: `looks-right` (with the unchecked journey ids after a colon), or
+   * `change` (the owner is typing a correction).
+   */
+  | { id: string; type: 'understanding'; answer?: string };
 
 export type ChatItemType = ChatItem['type'];
 
@@ -685,6 +808,7 @@ export type CostPhase = 'fixes' | 'reviewers' | 'crawling' | 'summing' | 'media'
 /** SPEC-phase2 §11: what a model call was for. Rolls up into the five CostPhase values. */
 export type CostTask =
   | 'interview'
+  | 'understand'
   | 'crawl'
   | 'review'
   | 'aggregate'
@@ -761,6 +885,10 @@ export interface RunState {
   waitingFor?: string;
   /** "You clicked …" lines logged while the user has the wheel (§7.3). */
   driverClicks: string[];
+
+  // SPEC-phase4 additions (all optional, so earlier UI and logs still work).
+  /** What Fitts understands from the code (§3): the summary fields the UI needs. */
+  appModel?: AppModelSummary;
 }
 
 /** SPEC §9.2: the UI talks only to this interface. Phase 2 implements it over IPC. */

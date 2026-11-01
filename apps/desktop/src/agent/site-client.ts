@@ -1,7 +1,7 @@
 // The agent's only way to touch the user's site: RPC to main (SPEC-phase2 §1). Main runs each
 // operation on the project's site window (and, from P8, through the permission gate).
 import type { PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
-import type { ProbeItem, SiteRect } from '@fitts/schema';
+import type { ProbeItem, SiteRect, SourceFrame } from '@fitts/schema';
 import type { AgentMessage, AxSnapshot, FixCall, OpTrace, SiteOp, SiteOpResult } from './protocol';
 
 export interface ActionResult {
@@ -37,6 +37,10 @@ export interface Site {
   rects(refs: string[]): Promise<Record<string, SiteRect>>;
   /** Scrolls an element into view, to show what Fitts is about to touch. */
   reveal?(ref: string): Promise<void>;
+  /** SPEC-phase4 §2.2: the element's component chain, nearest first (page data, a hint). */
+  sourceOf?(ref: string): Promise<SourceFrame[]>;
+  /** The chains of every element on the page at once, by ref (a page's first visit). */
+  sourcesOf?(refs: string[]): Promise<Record<string, SourceFrame[]>>;
   png(jpegBase64: string): Promise<string>;
   saveAsset(runId: string, name: string, base64: string): Promise<string>;
   /** A style board (SPEC-phase3 §2): fonts embedded by main, saved as an asset; its URL. */
@@ -124,6 +128,8 @@ export class SiteRpc {
       reveal: async (ref) => {
         await expect({ op: 'reveal', ref }, 'revealed');
       },
+      sourceOf: async (ref) => (await expect({ op: 'source', ref }, 'source')).frames,
+      sourcesOf: async (refs) => (await expect({ op: 'sources', refs }, 'sources')).chains,
       png: async (jpegBase64) => (await expect({ op: 'png', jpegBase64 }, 'png')).pngBase64,
       saveAsset: async (runId, name, base64) =>
         (await expect({ op: 'saveAsset', runId, name, base64 }, 'saved')).url,

@@ -1,5 +1,13 @@
 // Phase 1 RunEngine: plays scripted scenarios against a ticking clock (SPEC §9.3).
-import type { Brief, EdgeStateKind, Mode, RunActivity, RunEngine, RunState } from '@fitts/schema';
+import type {
+  AppModelSummary,
+  Brief,
+  EdgeStateKind,
+  Mode,
+  RunActivity,
+  RunEngine,
+  RunState,
+} from '@fitts/schema';
 import { copy } from '../copy';
 import { format } from '../lib/format';
 import type { Beat, BeatContext, ChatItemInput, Handler, MockProfile, Scenario } from './script';
@@ -170,6 +178,26 @@ export class MockRunEngine implements RunEngine {
     this.mutate(this.ensure(projectId), (_s, ctx) => ctx.say(text));
   }
 
+  /**
+   * SPEC-phase4 §3.3: what Fitts understands from the code, shown once during the interview
+   * ("Here's what I understand"); a later model (the owner's correction) updates the state and
+   * the card stays. Nothing posts once the audit has begun.
+   */
+  understandingReady(projectId: string, appModel: AppModelSummary): void {
+    const ctrl = this.ensure(projectId);
+    this.mutate(ctrl, (s, ctx) => {
+      s.appModel = appModel;
+      if (s.phase !== 'interview') return;
+      if (s.chat.some((c) => c.type === 'understanding')) return;
+      ctx.post({ type: 'understanding' });
+    });
+  }
+
+  /** The run's model as the UI sees it (the agent applies the owner's answers to it). */
+  appModelOf(projectId: string): AppModelSummary | undefined {
+    return this.runs.get(projectId)?.state.appModel;
+  }
+
   startInterview(projectId: string): void {
     const previous = this.runs.get(projectId);
     const ctrl = previous ?? this.create(projectId);
@@ -263,6 +291,18 @@ export class MockRunEngine implements RunEngine {
       ctx.say(reply.say);
       if (reply.quickReplies.length > 0)
         ctx.post({ type: 'quick-replies', options: reply.quickReplies });
+    });
+  }
+
+  /** The owner corrected the map (§3.3): the new model, and Fitts's one line about it. */
+  understandingPatched(projectId: string, appModel: AppModelSummary, say: string): void {
+    const ctrl = this.ensure(projectId);
+    this.mutate(ctrl, (s, ctx) => {
+      s.fittsTyping = false;
+      s.appModel = appModel;
+      const card = s.chat.find((c) => c.type === 'understanding');
+      if (card?.type === 'understanding' && card.answer === undefined) card.answer = 'change';
+      ctx.say(say);
     });
   }
 
@@ -395,7 +435,8 @@ export class MockRunEngine implements RunEngine {
     answer: string,
   ) {
     const item = s.chat.find((c) => c.id === itemId);
-    if (item?.type !== 'question' && item?.type !== 'state') return;
+    if (item?.type !== 'question' && item?.type !== 'state' && item?.type !== 'understanding')
+      return;
     if (item.answer !== undefined) return;
     item.answer = answer;
     const handler = ctrl.handlers.get(itemId);

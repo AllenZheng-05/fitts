@@ -17,6 +17,7 @@
     "bench:chat": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test -c playwright.bench.config.ts"
   },
   "dependencies": {
+    "@babel/parser": "8.0.10",
     "@fitts/probes": "workspace:*",
     "@fitts/schema": "workspace:*",
     "@fitts/styles": "workspace:*",

@@ -1,6 +1,7 @@
 // Which script and fixtures the MockRunEngine plays for each project.
 import type { Scenario, MockProfile } from '../state/script';
 import { LIVE_FIXES } from './fixtures/demo-chat';
+import { DEMO_CHAT_MODEL } from './fixtures/demo-chat-model';
 import { DEMO_CHAT, HARTWELL, MOCK_USER } from './fixtures/projects';
 import { demoChatAudit } from './scenarios/demo-chat';
 import { hartwellAudit } from './scenarios/hartwell';
@@ -56,6 +57,7 @@ const PROFILES: Record<string, Omit<MockProfile, 'projectId'>> = {
     audit: demoChatAudit,
     checks: CHECKS,
     fixes: LIVE_FIXES,
+    appModel: DEMO_CHAT_MODEL,
   },
   [HARTWELL]: {
     name: 'hartwell-site',

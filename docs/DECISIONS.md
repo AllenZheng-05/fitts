@@ -2617,3 +2617,116 @@ understand the project's CI before coding; and one PR for the whole run.
 - **GitHub: nothing to build.** Settings › GitHub already says sign-in isn't set up in this
   build and that Fitts uses the GitHub CLI instead (`copy.github.unavailable`).
 - **The Autonomous line** says "checked before it goes on the run's branch" (one PR per run).
+
+## Phase 4 — U1: the source plugin, v2
+
+- **Only known tags get a host stamp.** `HTML_TAGS` and `SVG_TAGS` are static allowlists in the
+  plugin (`packages/vite-plugin/src/tags.ts`; the one-file copy in `resources/plugin` carries the
+  same lists inline, since it has no imports). Any other lowercase tag (`<mesh>`,
+  `<boxGeometry>`, a custom element) is left alone: react-three-fiber turns a dashed prop into
+  a pierced path on a THREE object, which broke Allen's portfolio hero.
+- **Components get their call site.** `<Button>`, `<motion.div>` and `<Foo.Bar>` are stamped
+  with the same attribute. It reaches the DOM only when the component forwards it (harmless);
+  it always sits in the component fiber's `memoizedProps`, which is what the chain reads. So a
+  finding on a `<button>` inside `Button.tsx` now also knows `Compose.tsx:118` used it.
+- **A `<Canvas>` subtree is skipped** when `Canvas` is imported from `@react-three/fiber`, under
+  whatever local name (`Canvas as Scene`). A `Canvas` from anywhere else is an ordinary
+  component. `// fitts-ignore-file` (or `/* fitts-ignore-file */`) leaves a file untouched.
+  The Babel plugin walks the AST and refuses to descend into the Canvas element; the scanner
+  in the one-file copy marks the Canvas tag's stack entry and its children entry, and stamps
+  nothing while one is on the stack.
+- **The chain is read in the main world through CDP.** `SiteWindow.sourcesOf(refs)` runs one
+  `Runtime.evaluate` (no `contextId`: the page's own world, where React's `__reactFiber$`
+  expando lives; the isolated world can't see it) over every ref's selector at once, on a
+  page's first visit, and `RealRun.remember()` keeps the result per page. One evaluation per
+  page instead of one per element, and no navigation during the review: a finding's chain
+  comes from what its page recorded (or from any page that had the ref, since a finding on
+  several pages keeps the first as its route), with a live read only when the site happens to
+  be on that page. The function returns at most 8 frames; everything is trimmed and
+  shape-checked (`cleanFrames`) before the agent sees it.
+- **Without the plugin:** React 19's `_debugStack` (an Error captured where the JSX was
+  created) gives the first non-library frame as a dev-server URL; main maps it to a project path
+  (the path after the origin, `/@fs/` paths under the project folder, query dropped). Line
+  numbers there are of the transformed module, not the source, so they're `source-map`
+  confidence ("Medium · the page's debug info"), not plugin. Svelte 5's `__svelte_meta.loc` is
+  a host frame; Vue 3's `__vueParentComponent.type.__file` a call frame with the file only.
+- **Every shown finding gets a source.** After aggregation (`withSources`): the element's
+  chain (its first frame with a `src`; `host`/`call` are plugin confidence, `debug` is
+  source-map), else a read-only text search of the project (`FixHost` `grep`, no worktree) for
+  the element's accessible name and the quoted text in the evidence, taking the first hit in a
+  source file (`search` confidence). Live sites are never searched. The App Model's route →
+  file map (`model` confidence) comes with U2. Checked end to end on demo/chat: the e2e crawl
+  now asserts every shown finding has a source, that plugin confidence appears, and that the
+  "(null)" finding points at `src/pages/Compose.tsx` with `ComposeRecipient` in its chain.
+- **The Finding panel** shows "In the code: file:line · High · Fitts plugin" and the components
+  it sits in ("Used by Button ‹ ComposePage"); the full "See it yourself" tab is U4.
+- **The React fixture e2e** builds `tests/fixtures/react-chain` with Vite in dev mode (so fibers
+  carry `_debugStack`) and the plugin's `stampSource`, through `tsx` in a child process (the
+  script imports the plugin's TypeScript source), then loads the bundle in a bare Electron
+  window. With the plugin: `[host Button.tsx:5:5, call Compose.tsx:7:7 (Button), call
+  main.tsx:5:35 (ComposePage)]`; without it, both components are still named from the debug
+  info. It adds about 4 seconds to the suite.
+- **Next.js, webpack and Turbopack projects** get no build-time stamps in Phase 4 (the wrapper
+  config trick is Vite's); they get the debug chain and, from U2, the App Model's route map.
+
+## Phase 4 — U2: Understand, the App Model
+
+- **Pass 1 runs in the agent process, from a module under `main/understand/`.** The spec puts
+  the extractor in main; parsing a thousand files with Babel would block main's event loop (the
+  frames, the IPC) for seconds, so main only asks (`understand` message: the folder, the commit,
+  its cache, the owner's patches) and stores what comes back (`appModel`, `appModelPatch`
+  messages). The extractor, the repo map and `fitts-md` are pure Node modules with no Electron
+  import, listed in the agent's tsconfig too. demo/chat extracts in about 100 ms.
+- **Routes come from four file conventions and three code shapes.** Next app and pages
+  routers, SvelteKit, Astro, Expo Router and TanStack file routes by path; react-router's
+  `createBrowserRouter`/`useRoutes` arrays and `<Route path element>` by AST, resolving the
+  element's import to a file; and a `switch (path)` with string cases returning JSX, which is
+  how demo/chat routes (no router dependency at all). Without that last shape the "react-router-
+  vite (demo/chat itself)" fixture would have had zero pages. Forms are JSX `<form>`s with their
+  inputs (name, type, required, pattern/min/max/minLength as a `rule`), API calls are
+  `fetch`/`axios`/`ky` string URLs plus server-side `/api/...` strings (Next `route.ts` exports,
+  SvelteKit `+server`, a Vite or Express middleware), gates are `redirect('/login')`,
+  `<Navigate to="/login">`, `if (!session)` in a route file, and `middleware.ts` matchers.
+- **Pass 2 is one Spark call, reasoning medium, with a strict JSON schema** (`docs/prompts/
+  understand.md`): the summary, each page's title and features (with files), the journeys and
+  notes, over Pass 1's JSON, the README, package.json, the repo map (PageRank over the import
+  graph, 20 iterations, rendered under 6k tokens) and each route file's code (16k chars each).
+  Over 250k input tokens only the map and route files go. On demo/chat it cost $0.028 and
+  named 8 pages (every one with features) and 7 journeys, "Send a message to Grandma" first;
+  its notes caught the `draft.recipient` / `draft.to` mismatch (planted #1) from the code alone.
+  The recorded fixture is `tests/fixtures/llm/understand.json`, made by the gated recorder
+  `tests/agent/record-understand.test.ts` (skipped unless `FITTS_RECORD_UNDERSTAND=1`).
+- **Validation is deterministic and says what it dropped.** Features whose files don't exist,
+  pages not in Pass 1, journeys starting on unknown routes or with fewer than two steps are
+  dropped, each with a note ("I couldn't confirm …"); journey pages are filtered to known
+  routes; every page with a form gets a journey if none passes through it. Offline the model is
+  Pass 1 alone: a plain summary ("demo-chat is a Vite + React app with 8 pages …, read without a
+  model") and one journey per form, marked `modeled: false` so the card and the interview say so.
+- **The cache is by commit, keyed by route-file hashes.** Main keeps
+  `userData/projects/<id>/app-model/<sha>.json` with the model, the sha1 of each route file and
+  whether a model wrote it. A dirty tree re-runs Pass 1 always and reuses Pass 2 when the route
+  files' hashes all match (merging by route would have been more code for the same result on a
+  dirty tree); an offline reading is rebuilt as soon as a model is available. The owner's
+  patches (`owner.json`) are reapplied over every build, so they survive refreshes. FITTS.md
+  (summary, pages with features, journeys, tokens, notes) sits beside them for Muse Code.
+- **The card.** `{ type: 'understanding' }` posts during the interview as soon as the model is
+  ready, once per run (`understandingReady` is idempotent; a later model only updates
+  `RunState.appModel`). Journeys are checkboxes, priority 3 off by default; "Looks right"
+  answers `looks-right:<unchecked ids>` and the agent marks those journeys `enabled: false`
+  (U5 skips them; the brief's `outOfScope` carries their names when the audit starts). "Change
+  something" prefills "Change the map: "; a message with that prefix during the interview goes
+  to a small structured call (`understand-patch.md`) that returns add/drop/priority/outOfScope
+  patches, checked against known routes and ids, applied, sent to main, and answered in one
+  line. Offline (the test build), the demo project's profile carries a hand-written model
+  (`mock/fixtures/demo-chat-model.ts`, in the fixture's wording) so the card shows in e2e; a
+  real reading replaces it the moment the agent has one.
+- **The interview and the decider see it.** `interviewInput` adds the summary, the pages and
+  the journeys (with a prompt section: ask sharper questions, offer journeys as flow replies,
+  the owner's words win); `situation.app` gives the decider the summary, pages with gates, and
+  the enabled journeys. The `model` confidence rung is in: a finding with no chain and no search
+  hit takes its route's component file at line 1.
+- **U1 and U2 landed in one commit.** U1's full suite ran (139 of 140, the one being my own
+  new assertion, then made right) while U2's first files were written in the same tree, and the
+  shared files (schema, run.ts, copy, protocol) couldn't be split without committing states that
+  were never tested on their own. From here each milestone's shared-file edits wait for the
+  previous milestone's commit; the e2e wait is for planning and new files only.

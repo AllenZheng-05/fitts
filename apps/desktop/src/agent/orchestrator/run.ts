@@ -4,6 +4,7 @@
 import {
   DEVICES,
   reduce,
+  type AppModel,
   type Change,
   type ChatItem,
   type Finding,
@@ -11,6 +12,7 @@ import {
   type Mode,
   type RunEvent,
   type RunState,
+  type SourceFrame,
 } from '@fitts/schema';
 import type { BudgetGuard } from '../ledger/budget';
 import type { CostLedger } from '../ledger/ledger';
@@ -77,6 +79,8 @@ export interface RunDeps {
   converse?: Converse;
   /** What the owner wants to be called (Settings › General). */
   ownerName?: string;
+  /** SPEC-phase4 §3: what Fitts understands from the code, when the project has one. */
+  appModel?: AppModel;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
   /** SAM outlines and Muse Image mockups (§10). Without it, the UI keeps DOM boxes. */
@@ -130,6 +134,15 @@ const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
 export const isLiveOrigin = (origin: string): boolean => !LOCAL_ORIGIN.test(origin);
 /** A message about the redesign ("For the redesign, instead…", the Adjust it prefill). */
 const ADJUST = /\b(redesign|the (new )?look)\b/i;
+/** Files a text search may point a finding at (not a lockfile or a build). */
+const SOURCE_FILE = /\.(tsx?|jsx?|vue|svelte|astro|html|css|scss)$/i;
+
+/** "src/pages/Compose.tsx:118:9" → file, line and column. */
+export function parseSrc(src: string): { file: string; line: number; col?: number } | null {
+  const m = /^(.+?):(\d+)(?::(\d+))?$/.exec(src);
+  if (!m?.[1]) return null;
+  return { file: m[1], line: Number(m[2]), ...(m[3] ? { col: Number(m[3]) } : {}) };
+}
 
 export class RealRun {
   state: RunState;
@@ -222,6 +235,8 @@ export class RealRun {
       /** The shot's size and element boxes (SAM's box prompts, §10). */
       size?: { width: number; height: number };
       rects?: Record<string, SiteRect>;
+      /** Each control's component chain (SPEC-phase4 §2.2), read on the first visit. */
+      chains?: Record<string, SourceFrame[]>;
     }
   >();
 
@@ -639,6 +654,19 @@ export class RealRun {
       messages: [...this.inbox],
       earlier: this.heard.slice(-10),
       budget: { spentUsd: this.state.cost.spentUsd, capUsd: this.state.cost.capUsd },
+      ...(this.deps.appModel
+        ? {
+            app: {
+              summary: this.deps.appModel.summary.slice(0, 600),
+              pages: this.deps.appModel.pages.map(
+                (p) => `${p.route}${p.gate ? ` (needs ${p.gate})` : ''}`,
+              ),
+              journeys: this.deps.appModel.journeys
+                .filter((j) => j.enabled !== false)
+                .map((j) => `${j.name} (${j.start}, priority ${j.priority})`),
+            },
+          }
+        : {}),
     };
   }
 
@@ -941,12 +969,24 @@ export class RealRun {
         // Reviewed without a screenshot; SAM falls back to DOM boxes.
       }
     }
+    // Where each control, and each element a probe flagged, is rendered, while the page is here
+    // (SPEC-phase4 §2.2): a probe's element is often no control (a stamp, a "To:" line).
+    const chainRefs = new Set([
+      ...snap.nodes.map((n) => n.ref),
+      ...this.probes.results
+        .filter((r) => r.route === route)
+        .flatMap((r) => r.items.map((i) => i.ref)),
+    ]);
+    const chains = await this.deps.site
+      .sourcesOf?.([...chainRefs].filter(Boolean))
+      .catch(() => undefined);
     this.pages.set(route, {
       evidence: { route, snapshot: snap, trace: [], ...(shot ? { shot } : {}) },
       stepIndex: this.state.step,
       atMs: this.state.elapsedMs,
       ...(size ? { size } : {}),
       ...(rects ? { rects } : {}),
+      ...(chains && Object.keys(chains).length ? { chains } : {}),
     });
   }
 
@@ -1622,10 +1662,116 @@ export class RealRun {
       },
     });
     this.checks = checks;
-    const withReplay = findings.map((f) => this.withReplay(f));
+    const withReplay = await this.withSources(findings.map((f) => this.withReplay(f)));
     this.post(withReplay);
     const shown = withReplay.filter((f) => f.lane !== 'suggestion');
     void this.evidence(shown).then(() => this.media(shown));
+  }
+
+  /**
+   * Every shown finding gets a source (SPEC-phase4 §2.2): its element's component chain from
+   * the page (the plugin's stamps, else the page's own debug info), then a text search of the
+   * project for what the element says. Page data is a hint; the fixer re-reads the file.
+   */
+  private async withSources(findings: Finding[]): Promise<Finding[]> {
+    const out: Finding[] = [];
+    for (const f of findings) {
+      if (this.finished) return [...out, ...findings.slice(out.length)];
+      out.push(f.lane === 'suggestion' ? f : await this.withSource(f));
+    }
+    return out;
+  }
+
+  private async withSource(f: Finding): Promise<Finding> {
+    let next = f;
+    if (f.elementRef) {
+      const chain = await this.sourceChain(f.route, f.elementRef);
+      if (chain.length) next = { ...next, sourceChain: chain };
+      if (!next.source) {
+        const frame = chain.find((x) => x.src);
+        const parsed = frame?.src ? parseSrc(frame.src) : null;
+        if (parsed)
+          next = {
+            ...next,
+            source: {
+              ...parsed,
+              confidence: frame?.kind === 'debug' ? 'source-map' : 'plugin',
+            },
+          };
+      }
+    }
+    if (!next.source && !isLiveOrigin(this.deps.origin)) {
+      const hit = await this.searchSource(f);
+      if (hit) next = { ...next, source: { ...hit, confidence: 'search' } };
+    }
+    // Last: the App Model's route → component file (§3), the lowest rung of the ladder.
+    if (!next.source) {
+      const page = this.deps.appModel?.pages.find((p) => p.route === f.route);
+      if (page?.file) next = { ...next, source: { file: page.file, line: 1, confidence: 'model' } };
+    }
+    return next;
+  }
+
+  /**
+   * The chain for an element on a route: what the page's first visit recorded, else a live
+   * read when the site is on that page right now (never a navigation: the review shouldn't
+   * move the site around).
+   */
+  private async sourceChain(route: string, ref: string): Promise<SourceFrame[]> {
+    const cached =
+      this.pages.get(route)?.chains?.[ref] ??
+      [...this.pages.values()].map((p) => p.chains?.[ref]).find((c) => c?.length);
+    if (cached?.length) return cached;
+    const site = this.deps.site;
+    if (!site.sourceOf) return [];
+    try {
+      const snap = await site.snapshot();
+      if (routeOf(snap.path) !== route) return [];
+      return await site.sourceOf(ref);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * A text search for the element's own words: its accessible name from the page, then the
+   * quoted text in the finding's evidence. The first hit in a source file wins.
+   */
+  private async searchSource(f: Finding): Promise<{ file: string; line: number } | null> {
+    // The element's name from whichever page's snapshot has it (a finding on several pages
+    // keeps the first page as its route).
+    const node = f.elementRef
+      ? [this.pages.get(f.route), ...this.pages.values()]
+          .flatMap((p) => p?.evidence.snapshot.nodes ?? [])
+          .find((n) => n.ref === f.elementRef)
+      : undefined;
+    const quoted = f.evidence.flatMap((e) =>
+      [...e.matchAll(/[“"]([^”"]{3,80})[”"]/g)].map((m) => m[1] ?? ''),
+    );
+    // A finding about the page as a whole (no element): where its route is named in the code
+    // (the router entry), which is the closest a search gets to "this page".
+    const routeNeedle = !f.elementRef && f.route.length > 1 ? [`'${f.route}'`, `"${f.route}"`] : [];
+    const needles = [
+      ...new Set(
+        [node?.name ?? '', ...quoted, ...routeNeedle]
+          .map((s) => s.trim())
+          .filter((s) => s.length >= 3),
+      ),
+    ];
+    for (const text of needles.slice(0, 4)) {
+      let hits: unknown;
+      try {
+        hits = await this.deps.site.fix({ fn: 'grep', text });
+      } catch {
+        return null;
+      }
+      if (!Array.isArray(hits)) return null;
+      const hit = (hits as { path: string; line: number }[]).find(
+        (h) => typeof h?.path === 'string' && SOURCE_FILE.test(h.path),
+      );
+      if (hit) return { file: hit.path, line: hit.line };
+    }
+    return null;
   }
 
   /**

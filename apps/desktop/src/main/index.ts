@@ -16,6 +16,7 @@ import { registerTools } from './tools';
 import { githubPages, recheck, registerVerify } from './verify-site';
 import { createGitHub, registerGitHub } from './github';
 import { SiteManager } from './site/manager';
+import { UnderstandHost } from './understand';
 import { ProjectStore } from './store/projects';
 import { SAFE_ID } from './store/run-log';
 import { APP_ID, createMainWindow, ICON_PATH } from './window';
@@ -79,6 +80,17 @@ void app.whenReady().then(() => {
         : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.versions = fixes;
+  // Understand (SPEC-phase4 §3): a local project opening is read in the background, cached by
+  // commit under userData, never in the repo.
+  const understand = new UnderstandHost(
+    userData,
+    (id) => projects.get(id),
+    (ask) => host.understand(ask),
+  );
+  sites.onOpen = (projectId) => void understand.start(projectId).catch(() => undefined);
+  host.onAppModel = (projectId, model, hashes, modeled) =>
+    understand.store(projectId, model, hashes, modeled);
+  host.onAppModelPatch = (projectId, patches) => understand.addPatches(projectId, patches);
   ipcMain.on(IPC.dataDelete, () => {
     sites.closeAll();
     app.relaunch({ args: [...process.argv.slice(1).filter((a) => a !== WIPE_FLAG), WIPE_FLAG] });

@@ -18,6 +18,10 @@
     "src/renderer/state/script.ts",
     "src/renderer/copy.ts",
     "src/renderer/lib/format.ts",
-    "src/main/raw.d.ts"
+    "src/main/raw.d.ts",
+    "src/main/understand/files.ts",
+    "src/main/understand/extract.ts",
+    "src/main/understand/repomap.ts",
+    "src/main/understand/fitts-md.ts"
   ]
 }

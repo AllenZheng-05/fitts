@@ -9,6 +9,7 @@ import {
   type SiteStatus,
   type SiteDevice,
   type SiteVersion,
+  type SourceFrame,
   SCREEN_DEVICE,
 } from '@fitts/schema';
 import { BrowserWindow, ipcMain, nativeImage, screen, shell, type WebContents } from 'electron';
@@ -20,6 +21,7 @@ import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
 import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
+import { mapDebugSrc } from './source-chain';
 import { hostOf, SITE_TAB, TabSet } from './tabs';
 
 interface Live {
@@ -75,6 +77,8 @@ export class SiteManager {
   versions: VersionSource | undefined;
   /** The Fitts plugin, added to Vite dev servers from outside the project (set by main). */
   pluginFile: string | undefined;
+  /** A local project is being opened (SPEC-phase4 §3: Understand starts in the background). */
+  onOpen: ((projectId: string) => void) | undefined;
 
   constructor(
     private readonly root: string,
@@ -176,6 +180,7 @@ export class SiteManager {
       this.broadcast(IPC.siteStatus, { projectId, status: 'unavailable' } satisfies SiteStatus);
       return;
     }
+    this.onOpen?.(projectId);
     const detection = await detectProject(folder);
     const forced = Number(process.env['FITTS_SITE_PORT'] ?? '');
     const port = forced || detection?.port || 5173;
@@ -313,6 +318,24 @@ export class SiteManager {
       case 'reveal':
         await win.reveal(request.ref).catch(() => undefined);
         return { op: 'revealed' };
+      case 'source':
+      case 'sources': {
+        // Debug frames name dev-server URLs; main knows the origin and the project folder, so
+        // it maps them to project paths (best effort) before the agent sees them.
+        const origin = new URL(live.server.url || live.status.url || 'http://localhost').origin;
+        const folder = this.projectFor(projectId)?.folder;
+        const map = (frames: SourceFrame[]) =>
+          frames.map((f) =>
+            f.kind === 'debug' && f.src ? { ...f, src: mapDebugSrc(f.src, origin, folder) } : f,
+          );
+        if (request.op === 'source')
+          return { op: 'source', frames: map(await win.sourceOf(request.ref).catch(() => [])) };
+        const chains = await win.sourcesOf(request.refs).catch(() => ({}));
+        return {
+          op: 'sources',
+          chains: Object.fromEntries(Object.entries(chains).map(([k, v]) => [k, map(v)])),
+        };
+      }
     }
   }
 

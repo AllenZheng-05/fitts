@@ -62,6 +62,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@babel/parser':
+        specifier: 8.0.10
+        version: 8.0.10
       '@fitts/probes':
         specifier: workspace:*
         version: link:../../packages/probes

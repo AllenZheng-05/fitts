@@ -84,6 +84,8 @@ export class FixHost {
         return this.list(call.job, call.dir);
       case 'search':
         return this.search(call.job, call.text);
+      case 'grep':
+        return searchIn(this.root(projectId), call.text);
       case 'patch':
         return this.patch(call.job, call.path, call.find, call.replace);
       case 'write':
@@ -275,30 +277,7 @@ export class FixHost {
 
   /** Lines containing `text` (case-insensitive) in source files, at most 30. */
   search(id: string, text: string): { path: string; line: number; text: string }[] {
-    const job = this.job(id);
-    const needle = text.toLowerCase();
-    const out: { path: string; line: number; text: string }[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        if (out.length >= 30) return;
-        if (SKIP.has(name)) continue;
-        const full = join(dir, name);
-        if (statSync(full).isDirectory()) walk(full);
-        else if (TEXT.test(name)) {
-          const lines = readFileSync(full, 'utf8').split(/\r?\n/);
-          lines.forEach((l, i) => {
-            if (out.length < 30 && l.toLowerCase().includes(needle))
-              out.push({
-                path: relative(job.dir, full).split(sep).join('/'),
-                line: i + 1,
-                text: l.trim().slice(0, 160),
-              });
-          });
-        }
-      }
-    };
-    walk(job.dir);
-    return out;
+    return searchIn(this.job(id).dir, text);
   }
 
   /** Replaces exactly one occurrence of `find` (an exact excerpt) with `replace`. */
@@ -701,6 +680,53 @@ export class FixHost {
     await git(root, 'worktree', 'prune');
     rmSync(runDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Lines containing `text` (case-insensitive) in a folder's source files, at most 30: the
+ * fixer's `search` in its worktree, and the read-only `grep` over the project for a finding's
+ * source (SPEC-phase4 §2.2). Dependencies, build output and worktrees are skipped.
+ */
+export function searchIn(
+  dir: string,
+  text: string,
+): { path: string; line: number; text: string }[] {
+  const needle = text.toLowerCase();
+  const out: { path: string; line: number; text: string }[] = [];
+  if (!needle.trim()) return out;
+  const walk = (folder: string) => {
+    let names: string[];
+    try {
+      names = readdirSync(folder);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (out.length >= 30) return;
+      if (SKIP.has(name)) continue;
+      const full = join(folder, name);
+      let isDir = false;
+      try {
+        isDir = statSync(full).isDirectory();
+      } catch {
+        continue;
+      }
+      if (isDir) walk(full);
+      else if (TEXT.test(name)) {
+        const lines = readFileSync(full, 'utf8').split(/\r?\n/);
+        lines.forEach((l, i) => {
+          if (out.length < 30 && l.toLowerCase().includes(needle))
+            out.push({
+              path: relative(dir, full).split(sep).join('/'),
+              line: i + 1,
+              text: l.trim().slice(0, 160),
+            });
+        });
+      }
+    }
+  };
+  walk(dir);
+  return out;
 }
 
 /** The project's package manager, by its lockfile. */

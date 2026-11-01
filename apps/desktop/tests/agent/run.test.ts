@@ -1,5 +1,11 @@
 // @vitest-environment node
-import { replay, type CostEvent, type RunEvent, type RunState } from '@fitts/schema';
+import {
+  replay,
+  type CostEvent,
+  type RunEvent,
+  type RunState,
+  type SourceFrame,
+} from '@fitts/schema';
 import { testDirection } from './design';
 import { describe, expect, it } from 'vitest';
 import { ExplorerBrain, type Brain } from '../../src/agent/crawler/brain';
@@ -1544,4 +1550,87 @@ describe('this run, replayed (Allen’s feedback, round 7)', () => {
     expect(state()?.findings.map((f) => f.title)).toContain('Tap target is too small');
     run.dispose();
   }, 20_000);
+});
+
+describe('every finding gets a source (SPEC-phase4 §2.2)', () => {
+  const smallTarget = () =>
+    Promise.resolve([
+      {
+        probe: 'target-size' as const,
+        pass: false,
+        items: [{ ref: 'save', selector: '', measured: '10×10px', expected: 'at least 24×24px' }],
+      },
+    ]);
+
+  it('takes the element’s chain from the page: the host stamp is the source, at plugin confidence', async () => {
+    const site = fakeSite({
+      probes: smallTarget,
+      sourcesOf: (refs) =>
+        Promise.resolve<Record<string, SourceFrame[]>>(
+          refs.includes('save')
+            ? {
+                save: [
+                  { kind: 'host' as const, src: 'src/B.tsx:4:5' },
+                  { kind: 'call' as const, component: 'SaveButton', src: 'src/Page.tsx:9:3' },
+                ],
+              }
+            : {},
+        ),
+    });
+    const { run, state } = setup({ site });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    expect(f?.source).toEqual({ file: 'src/B.tsx', line: 4, col: 5, confidence: 'plugin' });
+    expect(f?.sourceChain?.map((x) => x.component ?? x.kind)).toEqual(['host', 'SaveButton']);
+    run.dispose();
+  });
+
+  it('without a chain, searches the project for the element’s own words (search confidence)', async () => {
+    const greps: string[] = [];
+    const site = fakeSite({
+      probes: smallTarget,
+      sourcesOf: () => Promise.resolve({}),
+      fix: (call) => {
+        if (call.fn !== 'grep') return Promise.reject(new Error('no fixes in this fake'));
+        greps.push(call.text);
+        return Promise.resolve([
+          { path: 'pnpm-lock.yaml', line: 1, text: 'Save' },
+          { path: 'src/B.tsx', line: 7, text: '<button>Save</button>' },
+        ]);
+      },
+    });
+    const { run, state } = setup({ site });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    // The element's name first; the page-level finding (no element) searches for its route.
+    expect(greps).toEqual(['Save', "'/b'"]);
+    expect(f?.source).toEqual({ file: 'src/B.tsx', line: 7, confidence: 'search' });
+    const back = state()?.findings.find((x) => x.title === 'No back or cancel in this flow');
+    expect(back?.source?.confidence).toBe('search');
+    run.dispose();
+  });
+
+  it('a live site is never searched (there’s no code), and a page frame maps to source-map confidence', async () => {
+    const site = fakeSite({
+      probes: smallTarget,
+      sourcesOf: (refs) =>
+        Promise.resolve<Record<string, SourceFrame[]>>(
+          refs.includes('save')
+            ? { save: [{ kind: 'debug' as const, component: 'Save', src: 'src/B.tsx:4:5' }] }
+            : {},
+        ),
+      fix: () => Promise.reject(new Error('must not be called on a live site')),
+    });
+    const { run, state } = setup({ site, origin: 'https://openteamsheets.com' });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    expect(f?.source).toEqual({ file: 'src/B.tsx', line: 4, col: 5, confidence: 'source-map' });
+    run.dispose();
+  });
 });

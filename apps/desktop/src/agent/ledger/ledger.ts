@@ -4,6 +4,7 @@ import type { CostEvent, CostPhase, CostTask, RunState } from '@fitts/schema';
 
 export const PHASE_OF: Record<CostTask, CostPhase> = {
   interview: 'crawling',
+  understand: 'crawling',
   crawl: 'crawling',
   review: 'reviewers',
   aggregate: 'summing',

@@ -2,6 +2,7 @@
 // `reduce` over them. Main, the agent and the renderer share this one reducer, so the log
 // powers the UI, resume, replay, cost reports and the run picker.
 import type {
+  AppModelSummary,
   Brief,
   CostEvent,
   Change,
@@ -27,6 +28,8 @@ export type RunEvent =
   | { type: 'clock.tick'; elapsedMs: number }
   /** SPEC-phase3 §4: the ability Fitts is using; none between them. */
   | { type: 'ability.changed'; ability?: { name: string; since: number } }
+  /** SPEC-phase4 §3: what Fitts understands from the code (the UI's summary of the model). */
+  | { type: 'appmodel.set'; appModel: AppModelSummary }
   // Steps and routes
   | { type: 'step.started'; step: number; stepEstimate: number }
   | { type: 'step.finished'; step: number; shot?: string }
@@ -127,6 +130,8 @@ export function reduce(s: RunState | undefined, e: RunEvent): RunState | undefin
       }
       return { ...s, ability: e.ability };
     }
+    case 'appmodel.set':
+      return { ...s, appModel: e.appModel };
     case 'step.started':
       return { ...s, step: e.step, stepEstimate: e.stepEstimate };
     case 'step.finished':
@@ -243,6 +248,7 @@ const HANDLED = new Set<keyof RunState>([
   'fittsTyping',
   'waitingFor',
   'driverClicks',
+  'appModel',
 ]);
 
 /** Changes in a list keyed by id: created/updated, or `set` when items vanished or moved. */
@@ -292,6 +298,8 @@ export function diff(prev: RunState | undefined, next: RunState): RunEvent[] {
   if (prev.elapsedMs !== next.elapsedMs)
     out.push({ type: 'clock.tick', elapsedMs: next.elapsedMs });
   if (prev.nowText !== next.nowText) out.push({ type: 'now.changed', nowText: next.nowText });
+  if (next.appModel && !same(prev.appModel, next.appModel))
+    out.push({ type: 'appmodel.set', appModel: next.appModel });
 
   if (!same(prev.routes, next.routes)) {
     const prevPaths = prev.routes.map((r) => r.path);

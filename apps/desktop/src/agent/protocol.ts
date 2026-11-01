@@ -1,12 +1,15 @@
 // Messages between main and the agent utility process (process.parentPort).
 import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
 import type {
+  AppModel,
+  AppModelPatch,
   EngineCall,
   EngineEvents,
   KeyName,
   ProbeItem,
   SiteRect,
   SiteStatus,
+  SourceFrame,
 } from '@fitts/schema';
 
 /** One interactive element, as the crawler sees it (an accessibility-style snapshot). */
@@ -66,6 +69,10 @@ export type SiteOp =
   | { op: 'rects'; refs: string[] }
   /** Scrolls an element into view (to show what Fitts is about to touch). */
   | { op: 'reveal'; ref: string }
+  /** SPEC-phase4 §2.2: the element's component chain, read from the page's main world. */
+  | { op: 'source'; ref: string }
+  /** The chains of many elements at once (a page's first visit), one evaluation. */
+  | { op: 'sources'; refs: string[] }
   | { op: 'png'; jpegBase64: string }
   | { op: 'saveAsset'; runId: string; name: string; base64: string }
   /** A style board (SPEC-phase3 §2): main embeds its fonts and saves it as an asset. */
@@ -92,6 +99,8 @@ export type FixCall =
   | { fn: 'read'; job: string; path: string }
   | { fn: 'list'; job: string; dir: string }
   | { fn: 'search'; job: string; text: string }
+  /** Read-only text search over the project itself (no worktree): a finding's source (§2.2). */
+  | { fn: 'grep'; text: string }
   | { fn: 'patch'; job: string; path: string; find: string; replace: string }
   | { fn: 'write'; job: string; path: string; content: string }
   | { fn: 'diff'; job: string }
@@ -219,6 +228,8 @@ export type SiteOpResult =
   | { op: 'released' }
   | { op: 'rects'; rects: Record<string, SiteRect> }
   | { op: 'revealed' }
+  | { op: 'source'; frames: SourceFrame[] }
+  | { op: 'sources'; chains: Record<string, SourceFrame[]> }
   | { op: 'png'; pngBase64: string }
   | { op: 'saved'; url: string }
   | { op: 'reference'; ok: boolean; url: string; shots: string[]; style: string; error?: string }
@@ -231,8 +242,24 @@ export interface HeldRequest {
   url: string;
 }
 
+/**
+ * SPEC-phase4 §3: main asks the agent to understand a project (Pass 1 runs in the agent
+ * process so main's loop never blocks; Pass 2 is a model call). `cached`: the model main has for
+ * this commit, with the route files' hashes it was built from; `patches`: the owner's
+ * corrections, which survive every refresh.
+ */
+export interface UnderstandAsk {
+  projectId: string;
+  folder: string;
+  /** HEAD's sha, "+dirty" when the tree has changes. */
+  commit: string;
+  cached?: { model: AppModel; hashes: Record<string, string>; modeled: boolean };
+  patches: AppModelPatch[];
+}
+
 export type MainMessage =
   | { kind: 'call'; call: EngineCall }
+  | { kind: 'understand'; ask: UnderstandAsk }
   /** The current API keys (from safeStorage, or .env.local in dev builds). */
   | { kind: 'keys'; keys: Partial<Record<KeyName, string>> }
   | { kind: 'testKey'; id: number; name: KeyName; value: string }
@@ -253,6 +280,16 @@ export type MainMessage =
 
 export type AgentMessage =
   | { kind: 'ready' }
+  /** A freshly built App Model, for main's cache (never the user's repo). */
+  | {
+      kind: 'appModel';
+      projectId: string;
+      model: AppModel;
+      hashes: Record<string, string>;
+      modeled: boolean;
+    }
+  /** The owner corrected the model: main keeps the patches beside the cache. */
+  | { kind: 'appModelPatch'; projectId: string; patches: AppModelPatch[] }
   | { kind: 'events'; batch: EngineEvents }
   | { kind: 'keyResult'; id: number; ok: boolean; message: string }
   | { kind: 'verifyResult'; id: number; ok: boolean; message: string }

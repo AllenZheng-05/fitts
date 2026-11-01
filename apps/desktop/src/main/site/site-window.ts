@@ -13,6 +13,7 @@ import {
   type SiteNav,
   type SiteRect,
   type SiteStatus,
+  type SourceFrame,
 } from '@fitts/schema';
 
 /** A current mobile Chrome, so sites serve their phone experience. */
@@ -20,6 +21,7 @@ const MOBILE_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
 import type { AxSnapshot, HeldRequest, OpTrace } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
+import { cleanFrames, selectorFor, SOURCE_CHAIN_FN } from './source-chain';
 
 /** What "Point at something" picks when the pointer is inside one: a control, as a whole. */
 const CONTROLS =
@@ -754,6 +756,35 @@ export class SiteWindow {
       ...result,
       trace: { feedback, requests, ...(rect ? { rect } : {}), ...(opened ? { opened } : {}) },
     };
+  }
+
+  /**
+   * The element's component chain (SPEC-phase4 §2.2), read in the page's main world through
+   * the DevTools protocol (React's fiber lives on the DOM node as an expando the isolated
+   * world can't see). Read-only; the result is page data and is cleaned before use.
+   */
+  async sourceOf(ref: string): Promise<SourceFrame[]> {
+    return (await this.sourcesOf([ref]))[ref] ?? [];
+  }
+
+  /** Many elements' chains in one evaluation (a page's first visit), by ref. */
+  async sourcesOf(refs: string[]): Promise<Record<string, SourceFrame[]>> {
+    const dbg = this.wc.debugger;
+    const list = [...new Set(refs)].slice(0, 200);
+    if (!dbg.isAttached() || list.length === 0) return {};
+    const selectors = list.map((r) => selectorFor(r));
+    const expression = `(${JSON.stringify(selectors)}).map((s) => (${SOURCE_CHAIN_FN})(s))`;
+    const res = (await dbg
+      .sendCommand('Runtime.evaluate', { expression, returnByValue: true, timeout: 3000 })
+      .catch(() => null)) as { result?: { value?: unknown } } | null;
+    const value = res?.result?.value;
+    const out: Record<string, SourceFrame[]> = {};
+    if (!Array.isArray(value)) return out;
+    list.forEach((ref, i) => {
+      const frames = cleanFrames(value[i]);
+      if (frames.length) out[ref] = frames;
+    });
+    return out;
   }
 
   /** Scrolls an element to the middle of the view, so the user sees what Fitts will touch. */

@@ -12,3 +12,5 @@ docs
 .fitts-worktrees/
 # Vendored third-party builds.
 apps/desktop/resources/vendor/
+# Fixture repos for the App Model extractor are left as written.
+apps/desktop/tests/fixtures/repos/

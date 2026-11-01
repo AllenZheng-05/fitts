@@ -96,6 +96,9 @@ export function ChatItemView({ item, run }: { item: ChatItem; run: RunState }) {
     case 'driving':
       body = <Driving run={run} />;
       break;
+    case 'understanding':
+      body = <Understanding item={item} run={run} />;
+      break;
   }
   if (body === null) return null;
   return (
@@ -672,6 +675,129 @@ function Wording({ item, run }: { item: Item<'wording'>; run: RunState }) {
             onClick={() => getEngine().decideWording(run.projectId, item.id, 'undo')}
           >
             {copy.items.undoThis}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Here's what I understand" (SPEC-phase4 §3.3): the App Model's summary, counts, the journeys
+ * in priority order (each with a checkbox, on except priority 3), gated pages and notes.
+ * "Looks right" answers with the unchecked journeys; "Change something" prefills the box.
+ */
+function Understanding({ item, run }: { item: Item<'understanding'>; run: RunState }) {
+  const u = copy.items.understanding;
+  const model = run.appModel;
+  const [off, setOff] = useState<Set<string>>(
+    () =>
+      new Set(
+        model?.journeys.filter((j) => j.priority === 3 || j.enabled === false).map((j) => j.id),
+      ),
+  );
+  if (!model) return null;
+  const journeys = [...model.journeys].sort((a, b) => a.priority - b.priority);
+  const features = model.pages.reduce((n, p) => n + p.features.length, 0);
+  const gated = model.pages.filter((p) => p.gate);
+  const answered = item.answer !== undefined;
+  const skipped = item.answer?.startsWith('looks-right:')
+    ? item.answer.slice('looks-right:'.length).split(',').filter(Boolean).length
+    : 0;
+  const toggle = (id: string) =>
+    setOff((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  return (
+    <div className={cx(CARD, 'gap-2.5 bg-lilac-tint')}>
+      <span className="font-display text-[16px] font-bold">{u.title}</span>
+      <p className="text-[14px] leading-normal">{model.summary}</p>
+      <span className="text-[12px] font-semibold text-muted">
+        {format(u.counts, { pages: model.pages.length, features, journeys: model.journeys.length })}
+        {!model.modeled && <span className="block font-normal">{u.fromCode}</span>}
+      </span>
+      {journeys.length > 0 && (
+        <fieldset className="flex flex-col gap-1">
+          <legend className="text-[12px] font-bold">{u.journeys}</legend>
+          {journeys.map((j) => {
+            const on = !off.has(j.id);
+            return (
+              <label key={j.id} className="flex items-start gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-cobalt"
+                  checked={on}
+                  disabled={answered}
+                  onChange={() => toggle(j.id)}
+                  aria-label={format(u.journeyToggle, { name: j.name })}
+                />
+                <span className={on ? undefined : 'text-muted line-through'}>
+                  {j.name}
+                  <span className="text-muted no-underline">
+                    {' '}
+                    · {format(u.priority, { n: j.priority })}
+                    {j.needs?.length ? ` · ${format(u.needs, { what: j.needs.join(', ') })}` : ''}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+      )}
+      {gated.length > 0 && (
+        <div className="flex flex-col gap-0.5 text-[13px]">
+          <span className="text-[12px] font-bold">{u.pages}</span>
+          {gated.map((p) => (
+            <span key={p.route} className="font-mono text-[12px]">
+              {format(u.gate, { route: p.route, gate: p.gate ?? '' })}
+            </span>
+          ))}
+        </div>
+      )}
+      {model.notes.length > 0 && (
+        <div className="flex flex-col gap-0.5 text-[13px]">
+          <span className="text-[12px] font-bold">{u.notes}</span>
+          <ul className="list-disc pl-[18px] text-ink-2">
+            {model.notes.slice(0, 6).map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {answered ? (
+        <Chip className="self-start">
+          {item.answer?.startsWith('looks-right')
+            ? skipped > 0
+              ? format(u.answeredRightSkipped, { n: skipped })
+              : u.answeredRight
+            : u.answeredChange}
+        </Chip>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() =>
+              getEngine().answerQuestion(
+                run.projectId,
+                item.id,
+                `looks-right:${[...off].join(',')}`,
+              )
+            }
+          >
+            {u.looksRight}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              useUi.getState().set({ draft: u.changePrefill });
+              document.getElementById(MESSAGE_BOX_ID)?.focus();
+            }}
+          >
+            {u.change}
           </Button>
         </div>
       )}

@@ -1,13 +1,44 @@
 // The Fitts dev plugin for Vite (https://fitts.allenzheng.com). In `vite serve` only, it stamps
-// data-fitts-src="path/to/File.tsx:line:col" on every HTML element your JSX renders, so Fitts can
-// go from an element on the page straight to the line that renders it, and its fixes land in the
-// right place. It never runs in a build, so your live site doesn't change.
+// data-fitts-src="path/to/File.tsx:line:col" on every HTML and SVG element your JSX renders, and
+// on every component you use (<Button>, <motion.div>), so Fitts can go from an element on the
+// page straight to the line that renders it and to where that component was used, and its fixes
+// land in the right place. It never runs in a build, so your live site doesn't change.
 //
 // It has no dependencies: a small scanner finds the JSX tags, and Vite's own compiler checks the
-// stamped file before it's used (a file it can't stamp safely is served as it is).
+// stamped file before it's used (a file it can't stamp safely is served as it is). Lowercase
+// tags it doesn't know (react-three-fiber's <mesh>) and anything under a <Canvas> from
+// @react-three/fiber are left alone; `// fitts-ignore-file` opts a file out.
 import { relative } from 'node:path';
 
 export const ATTR = 'data-fitts-src';
+
+/** The HTML and SVG elements that get a stamp; any other lowercase tag is left alone. */
+export const HTML_TAGS = new Set(
+  'a abbr address area article aside audio b base bdi bdo blockquote body br button canvas caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe img input ins kbd label legend li link main map mark menu meta meter nav noscript object ol optgroup option output p picture pre progress q rp rt ruby s samp script search section select slot small source span strong style sub summary sup table tbody td template textarea tfoot th thead time title tr track u ul var video wbr'.split(
+    ' ',
+  ),
+);
+export const SVG_TAGS = new Set(
+  'svg animate animateMotion animateTransform circle clipPath defs desc ellipse feBlend feColorMatrix feComponentTransfer feComposite feConvolveMatrix feDiffuseLighting feDisplacementMap feDistantLight feDropShadow feFlood feFuncA feFuncB feFuncG feFuncR feGaussianBlur feImage feMerge feMergeNode feMorphology feOffset fePointLight feSpecularLighting feSpotLight feTile feTurbulence filter foreignObject g image line linearGradient marker mask metadata mpath path pattern polygon polyline radialGradient rect set stop switch symbol text textPath tspan use view'.split(
+    ' ',
+  ),
+);
+
+/** A comment anywhere in the file that opts it out. */
+const IGNORE_FILE = /(?:\/\/|\/\*)\s*fitts-ignore-file\b/;
+
+/** The local names `Canvas` from @react-three/fiber is imported as (`Canvas as Scene`). */
+function canvasNames(code) {
+  const out = new Set();
+  const re = /import\s*\{([^}]*)\}\s*from\s*['"]@react-three\/fiber['"]/g;
+  for (const m of code.matchAll(re)) {
+    for (const spec of m[1].split(',')) {
+      const parts = spec.trim().split(/\s+as\s+/);
+      if (parts[0] === 'Canvas') out.add(parts[1] ?? 'Canvas');
+    }
+  }
+  return out;
+}
 
 /** True when a `<` at `i` (in code) can start JSX: not after a value (`a < b`, `fn<T>()`). */
 function jsxCanStart(code, i) {
@@ -40,6 +71,8 @@ function skipString(code, i) {
  * there's nothing to stamp. `file` is the path shown in the stamp.
  */
 export function stamp(code, file) {
+  if (IGNORE_FILE.test(code)) return null;
+  const canvases = canvasNames(code);
   const lineStarts = [0];
   for (let i = 0; i < code.length; i++) if (code[i] === '\n') lineStarts.push(i + 1);
   const where = (index) => {
@@ -55,19 +88,29 @@ export function stamp(code, file) {
   const inserts = [];
   // What the scanner is inside: code (with its brace depth), a template, a tag, a tag's children.
   const stack = [{ kind: 'code', braces: 0 }];
-  /** Reads a tag name at `i` (just after `<`), stamps it if it's a host element. */
+  /** Inside a <Canvas> from @react-three/fiber: three.js, not the DOM, so nothing is stamped. */
+  const inCanvas = () => stack.some((e) => e.canvas);
+  /**
+   * Reads a tag name at `i` (just after `<`), stamps it if it's a known host element
+   * (`div`) or a component (`Button`, `motion.div`).
+   */
   const openTag = (i, lt) => {
-    const m = /^[A-Za-z][\w.:-]*/.exec(code.slice(i, i + 80));
+    const m = /^[A-Za-z_$][\w.:$-]*/.exec(code.slice(i, i + 80));
     if (!m) return -1;
     const name = m[0];
     const end = i + name.length;
     if (!/[\s/>]/.test(code[end] ?? '')) return -1;
-    if (/^[a-z]/.test(name) && !name.includes('.')) {
+    const canvas = canvases.has(name);
+    const host = /^[a-z]/.test(name) && !name.includes('.') && !name.includes(':');
+    const stampable = host
+      ? HTML_TAGS.has(name) || SVG_TAGS.has(name)
+      : !name.includes(':') && (/^[A-Z_$]/.test(name) || name.includes('.'));
+    if (stampable && !canvas && !inCanvas()) {
       const close = code.indexOf('>', end);
       const attrs = code.slice(end, close === -1 ? end + 400 : close);
       if (!attrs.includes(ATTR)) inserts.push([end, ` ${ATTR}="${file}:${where(lt)}"`]);
     }
-    stack.push({ kind: 'tag' });
+    stack.push({ kind: 'tag', ...(canvas ? { canvas: true } : {}) });
     return end;
   };
   let i = 0;
@@ -120,8 +163,9 @@ export function stamp(code, file) {
         stack.pop();
         i += 2;
       } else if (c === '>') {
-        stack.pop();
-        stack.push({ kind: 'children' });
+        // The children of a <Canvas> stay inside it.
+        const tag = stack.pop();
+        stack.push({ kind: 'children', ...(tag?.canvas ? { canvas: true } : {}) });
         i++;
       } else i++;
     } else {

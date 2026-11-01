@@ -80,6 +80,8 @@ export interface Situation {
   /** The ten before those. */
   earlier: string[];
   budget: { spentUsd: number; capUsd: number };
+  /** SPEC-phase4 §3: what the code says the app is, when Fitts read it. */
+  app?: { summary: string; pages: string[]; journeys: string[] };
 }
 
 export interface Decider {

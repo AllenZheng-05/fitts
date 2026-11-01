@@ -1,5 +1,5 @@
 // Types for the scripted runs the MockRunEngine plays (SPEC §9.3).
-import type { Brief, ChatItem, GateRequest, Mode, RunState } from '@fitts/schema';
+import type { AppModelSummary, Brief, ChatItem, GateRequest, Mode, RunState } from '@fitts/schema';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type ChatItemInput = DistributiveOmit<ChatItem, 'id'>;
@@ -80,6 +80,8 @@ export interface MockProfile {
   checks: string[];
   /** Change title, PR number and cost per finding, used when a fix finishes. */
   fixes: Record<string, { title: string; prNumber: number; costUsd: number }>;
+  /** SPEC-phase4 §3: the understanding card's stand-in, for the test build's demo projects. */
+  appModel?: AppModelSummary;
 }
 
 export const isBriefReady = (brief: Brief): boolean => Boolean(brief.for && brief.who);

@@ -10,6 +10,7 @@ import {
   diff,
   ENGINE_METHODS,
   STUB_ENGINE_METHODS,
+  type AppModel,
   type Brief,
   type EngineCall,
   type KeyName,
@@ -37,7 +38,9 @@ import { runRedesigner } from './fix/redesign';
 import { Media } from './llm/media';
 import { voiceEntry } from './llm/voice-cost';
 import { domainOf, verifyDns, verifyFile } from './verify-site/verify';
-import type { AgentMessage, MainMessage } from './protocol';
+import type { AgentMessage, MainMessage, UnderstandAsk } from './protocol';
+import { patchFromMessage, summaryOf } from './understand/understand';
+import { applyPatches, applyUnchecked, buildModel } from './understand/runner';
 import { SiteRpc } from './site-client';
 
 const port = process.parentPort;
@@ -79,6 +82,10 @@ const liveSites = new Map<string, { status: string; url?: string }>();
 const visited = new Map<string, string[]>();
 const online = () => Boolean(keys.meta) && process.env['FITTS_OFFLINE'] !== '1';
 const realRuns = new Map<string, RealRun>();
+/** What Fitts understands of each project (SPEC-phase4 §3), once main has asked. */
+const models = new Map<string, { model: AppModel; modeled: boolean }>();
+/** The card's "Change the map: " prefix (copy.items.understanding.changePrefill). */
+const CHANGE_MAP = /^change the map:\s*/i;
 const siteRpc = new SiteRpc(send);
 
 /** The engine's own states, and what was last sent (with ledger cost), per project. */
@@ -318,6 +325,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       ...(decider ? { decider } : {}),
       ...(converse ? { converse } : {}),
       ...(set?.name ? { ownerName: set.name } : {}),
+      ...(models.get(projectId) ? { appModel: models.get(projectId)?.model } : {}),
       ...(online() && keys.meta && process.env['FITTS_NO_MEDIA'] !== '1'
         ? { media: new Media(keys.meta, ledger) }
         : {}),
@@ -387,6 +395,72 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
   runRef.current = run;
   realRuns.set(projectId, run);
   run.start();
+  return true;
+}
+
+/** Main asked: Pass 1 here, Pass 2 with a model when online, then the card (§3.3). */
+async function understandProject(ask: UnderstandAsk): Promise<void> {
+  const { projectId } = ask;
+  const set = settings.get(projectId);
+  const contributor = contributorFor(projectId, set?.contributorMode ?? false);
+  const profile = profiles.get(projectId) ?? set?.modelProfile ?? 'quality';
+  const built = await buildModel(
+    ask,
+    online()
+      ? {
+          online: true,
+          caller,
+          ctx: ctxFor(projectId),
+          model: modelFor('understand', profile, { contributor, baseten: Boolean(keys.baseten) })
+            .model,
+        }
+      : undefined,
+  );
+  models.set(projectId, { model: built.model, modeled: built.modeled });
+  if (built.fresh)
+    send({
+      kind: 'appModel',
+      projectId,
+      model: built.model,
+      hashes: built.hashes,
+      modeled: built.modeled,
+    });
+  announceModel(projectId);
+}
+
+/** The understanding card, when the project's run is interviewing (idempotent). */
+function announceModel(projectId: string): void {
+  const m = models.get(projectId);
+  if (!m) return;
+  engine.understandingReady(projectId, summaryOf(m.model, m.modeled));
+}
+
+/**
+ * "Change the map: …" during the interview (§3.3): the owner's words become a patch, applied
+ * here, kept by main, and answered in one line. Offline, the interview's script answers.
+ */
+async function patchModel(projectId: string, text: string): Promise<boolean> {
+  const m = models.get(projectId);
+  if (!m || !online()) return false;
+  const set = settings.get(projectId);
+  const contributor = contributorFor(projectId, set?.contributorMode ?? false);
+  const profile = profiles.get(projectId) ?? set?.modelProfile ?? 'quality';
+  engine.interviewUser(projectId, text);
+  try {
+    const { patches, say } = await patchFromMessage(
+      caller,
+      ctxFor(projectId),
+      modelFor('understand', profile, { contributor, baseten: Boolean(keys.baseten) }).model,
+      m.model,
+      text.replace(CHANGE_MAP, ''),
+    );
+    const next = applyPatches(m.model, patches);
+    models.set(projectId, { model: next, modeled: m.modeled });
+    if (patches.length) send({ kind: 'appModelPatch', projectId, patches });
+    engine.understandingPatched(projectId, summaryOf(next, m.modeled), say);
+  } catch {
+    engine.understandingPatched(projectId, summaryOf(m.model, m.modeled), copy.fitts.ack);
+  }
   return true;
 }
 
@@ -516,10 +590,32 @@ function call({ projectId, method, args, brief, lastRunId, settings: set }: Engi
     return;
   }
   if (callReal(projectId, method, args)) return;
+  // The understanding card (§3.3): "Looks right" with the journeys left unchecked.
+  if (method === 'answerQuestion') {
+    const item = raw.get(projectId)?.chat.find((c) => c.id === args[0]);
+    const m = models.get(projectId);
+    if (item?.type === 'understanding' && m && String(args[1]).startsWith('looks-right')) {
+      const ids = String(args[1]).split(':')[1]?.split(',').filter(Boolean) ?? [];
+      const next = applyUnchecked(m.model, ids);
+      models.set(projectId, { model: next, modeled: m.modeled });
+      engine.understandingReady(projectId, summaryOf(next, m.modeled));
+    }
+  }
   // The real interview, with a key: a conversation with the model, whether or not the site is
   // up yet (the stub keeps the interview's state: the opener, the brief card, the ready bar).
   // A message sent while pointing at something is still an interview answer, with the element.
   const answering = method === 'answerInterview' || method === 'sendMessage';
+  if (
+    answering &&
+    raw.get(projectId)?.phase === 'interview' &&
+    typeof args[0] === 'string' &&
+    CHANGE_MAP.test(args[0])
+  ) {
+    void patchModel(projectId, args[0]).then((handled) => {
+      if (!handled) engine.interviewFallback(projectId, String(args[0]));
+    });
+    return;
+  }
   if (answering && raw.get(projectId)?.phase === 'interview' && online()) {
     const o = (args[1] ?? {}) as { spoken?: boolean; pointingAt?: string; pointingLabel?: string };
     void realInterviewTurn(projectId, typeof args[0] === 'string' ? args[0] : '', {
@@ -547,13 +643,26 @@ function call({ projectId, method, args, brief, lastRunId, settings: set }: Engi
   // A run takes the Settings cap when it starts.
   if ((method === 'startInterview' || method === 'startAudit') && set)
     engine.setCap(projectId, set.capUsd);
+  // The understanding card, once the interview is open: the real model when Fitts has read the
+  // code; offline, the test build's fixture for its demo projects.
+  if (method === 'startInterview') {
+    if (models.has(projectId)) announceModel(projectId);
+    else if (!online()) {
+      const fixture = profileFor(projectId).appModel;
+      if (fixture) engine.understandingReady(projectId, fixture);
+    }
+  }
 }
 
 port.on('message', (e: { data: MainMessage }) => {
   const message = e.data;
   try {
     if (message.kind === 'call') call(message.call);
-    else if (message.kind === 'keys') {
+    else if (message.kind === 'understand') {
+      void understandProject(message.ask).catch((e: unknown) =>
+        send({ kind: 'error', message: e instanceof Error ? e.message : String(e) }),
+      );
+    } else if (message.kind === 'keys') {
       for (const k of Object.keys(keys) as KeyName[]) delete keys[k];
       Object.assign(keys, message.keys);
     } else if (message.kind === 'siteStatus') {

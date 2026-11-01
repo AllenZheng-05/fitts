@@ -22,6 +22,8 @@ export default tseslint.config(
       '.fitts-dev/**',
       'apps/desktop/resources/vendor/**',
       '**/.fitts-worktrees/**',
+      // Fixture repos for the App Model extractor: other frameworks' code, not ours to lint.
+      'apps/desktop/tests/fixtures/repos/**',
       // An AudioWorklet module: plain JS loaded by URL, outside every tsconfig.
       'apps/desktop/src/renderer/lib/voice/pcm-worklet.js',
     ],
