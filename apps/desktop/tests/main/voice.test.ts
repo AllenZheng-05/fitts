@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Voice (§14) without a network: the Transcribe protocol against a local WebSocket server
 // that speaks V5's events.
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
 import { TranscribeSession, type TranscribeEvents } from '../../src/main/voice/transcribe';
 
@@ -126,7 +126,14 @@ describe('voice sessions (one at a time, by id)', () => {
       host.cancel(wake.session ?? -1);
       host.audio(mic.session ?? -1, new ArrayBuffer(4800));
       host.end(mic.session ?? -1);
-      await new Promise((r) => setTimeout(r, 150));
+      // The final text arrives when it arrives (a cold CI runner is slow), not after a guess.
+      await vi.waitFor(
+        () =>
+          expect(events).toContainEqual(
+            expect.objectContaining({ kind: 'final', session: mic.session }),
+          ),
+        { timeout: 10_000, interval: 50 },
+      );
       const closed = events.filter((e) => e.kind === 'closed').map((e) => e.session);
       expect(closed).toContain(wake.session);
       expect(events).toContainEqual(
@@ -136,5 +143,5 @@ describe('voice sessions (one at a time, by id)', () => {
       delete process.env['FITTS_TRANSCRIBE_URL'];
       own.close();
     }
-  });
+  }, 30_000);
 });

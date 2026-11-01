@@ -19,9 +19,10 @@ test.afterEach(async () => {
 test('opens at 1440×900, or as large as the screen allows', async () => {
   const { content, outer, workArea } = await getWindowMetrics(launched.app);
   const frame = { width: outer.width - content.width, height: outer.height - content.height };
+  // As large as the screen allows, but never under the 1200×720 minimum (a small CI screen).
   const expected = {
-    width: Math.min(1440, workArea.width - frame.width),
-    height: Math.min(900, workArea.height - frame.height),
+    width: Math.max(1200, Math.min(1440, workArea.width - frame.width)),
+    height: Math.max(720, Math.min(900, workArea.height - frame.height)),
   };
   expect(Math.abs(content.width - expected.width)).toBeLessThanOrEqual(DPI_SLACK);
   expect(Math.abs(content.height - expected.height)).toBeLessThanOrEqual(DPI_SLACK);

@@ -1031,11 +1031,14 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
 
   it('feedback on the directions makes round 2, with new ids and boards', async () => {
     const asked: { n: number; feedback: string; previous: string[] }[] = [];
-    const site = fakeSite({
-      board: (_r, name) => Promise.resolve(`fitts-asset://demo-chat/run-1/assets/${name}`),
-    });
+    // A project that can be redesigned, so the run waits for a pick (as the real app does)
+    // instead of finishing before the feedback arrives.
+    const r = redesignable();
+    r.site.board = (_r, name) => Promise.resolve(`fitts-asset://demo-chat/run-1/assets/${name}`);
     const { run, state } = setup({
-      site,
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
       decider: reviser,
       themeFit: () =>
         Promise.resolve({ fits: false, why: 'Too cold.', directions: directions('Cold') }),
@@ -1050,7 +1053,13 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
     });
     run.start();
     await skipLogin(state, run);
-    await until(() => Boolean(state()?.chat.find((c) => c.type === 'directions')));
+    await until(
+      () =>
+        Boolean(
+          state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook),
+        ),
+      10_000,
+    );
     run.sendMessage('make them warmer');
     const second = () => state()?.chat.find((c) => c.type === 'directions' && c.round === 2);
     await until(() => {
