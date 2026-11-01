@@ -875,7 +875,10 @@ export const copy = {
     keysTitle: 'API keys',
     keyRows: {
       meta: { name: 'Meta Model API', hint: 'Required. Runs the audit and writes fixes.' },
-      elevenlabs: { name: 'ElevenLabs', hint: 'Optional. Gives Fitts a voice of its own.' },
+      elevenlabs: {
+        name: 'ElevenLabs',
+        hint: 'Optional. Gives Fitts a voice of its own. When you make the key, give it Text to Speech access; it needs nothing else.',
+      },
       baseten: { name: 'Baseten', hint: 'Optional. Unlocks the Open weights profile.' },
     },
     keyWorks: 'Works',

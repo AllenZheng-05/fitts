@@ -2477,3 +2477,15 @@ Allen's update (NEEDS-ALLEN).
   empties the folder before anything opens a file there (retrying while the old one lets go),
   and starts like a fresh install. The user's code, branches and PRs are untouched.
 - Lint ignores `release/` (packaged builds), which a fresh `dist:dir` had put in its way.
+
+## Phase 3 — the ElevenLabs key needs only Text to Speech
+
+- The key check asked `GET /v1/user`, which needs ElevenLabs' "User" permission that Fitts
+  otherwise never uses. Now it asks text to speech, the one endpoint Fitts uses, for a voice that
+  can't exist (`FittsKeyCheck0000000`). Checked against ElevenLabs on Nov 1
+  (`scripts/verify/elevenlabs-key-check.ts`, free): a working key gets 404 `voice_not_found`
+  (nothing generated, nothing charged), a wrong key 400 `invalid_api_key`. The voice id must
+  be 20 letters and digits; a malformed one is rejected before the key is looked at.
+- A key without the Text to Speech permission is assumed to answer with a "missing
+  permissions" error, which the check names; not seen yet, since that needs a key made without
+  it. The Settings hint says to give the key Text to Speech access and nothing else.
