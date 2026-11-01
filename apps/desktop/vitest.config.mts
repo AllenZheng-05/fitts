@@ -14,5 +14,8 @@ export default defineConfig({
     ],
     setupFiles: ['tests/unit/setup.ts'],
     css: false,
+    // CI runners (Windows above all) are slow to spawn processes and import cold modules, so
+    // tests that start git or a socket there get 20s; here the 5s default still flags slow ones.
+    testTimeout: process.env['CI'] ? 20_000 : 5_000,
   },
 });
