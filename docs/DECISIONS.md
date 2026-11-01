@@ -2519,3 +2519,26 @@ Allen's update (NEEDS-ALLEN).
 - **Done isn't a dead end.** On Done, the header's "Audit & fix" and "Done" steps are buttons:
   the audit page (site, chat, findings) and the summary. "Try again" on a rolled-back fix
   switches to the audit page, to watch it work. Each run's Done starts on the summary.
+
+## Phase 3 — Allen's walkthrough feedback (round 7): checks before the crawl
+
+- **The audit's checks ran on nothing.** With a redesign brief, the Spark decider chose
+  new_look, looks, phone_pass, check_links, review and check_theme before exploring at all. Each
+  ran at once on no pages, found nothing and was marked done, so the review never ran on the
+  site; Fitts explored, then finished with 0 findings. Now `phone_pass`, `check_links`,
+  `review`, `looks` and `fix` are refused until the crawl has ended, and `check_theme` until a
+  page has been seen. The refusal is checked before the step's line is said, and the scripted
+  order takes the next decision (explore). A test replays the run.
+- **Lines said before anything happened.** The decider's `say` was spoken as it chose a step,
+  and it often wrote it as done ("That's the new look applied"). It's now said only for a step
+  that will run, and the prompt asks for what it's about to do.
+- **A reply that claimed a redesign.** `converse` now gets `look`: where the new look stands in
+  fact (nothing yet, looks showing, picked, being applied, applied), and is told not to claim
+  more.
+- **"Delete all my data" used the wrong folder.** The restarted app asked Electron for its user
+  data folder one line before `app.setName('Fitts')`. Electron fixes that folder on the first
+  ask, from the name at that moment: the package name, so `%APPDATA%\@fitts\desktop`. The
+  delete emptied that (empty) folder instead of `%APPDATA%\Fitts`, and the rest of the session
+  lived there, which looked like a fresh install with the real data untouched. The name is now
+  set first. Checked with a throwaway Electron app: path asked first gives `@fitts\desktop`,
+  name set first gives `Fitts`. Dev and release share `%APPDATA%\Fitts`.

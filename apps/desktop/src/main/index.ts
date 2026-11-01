@@ -20,14 +20,16 @@ import { ProjectStore } from './store/projects';
 import { SAFE_ID } from './store/run-log';
 import { APP_ID, createMainWindow, ICON_PATH } from './window';
 
+// The name first: Electron fixes the user data folder the first time anything asks for it, from
+// the app's name at that moment. Asked before this, it's the package name, @fitts/desktop, and
+// the whole session uses that folder (round 7: "Delete all my data" did exactly that).
+app.setName('Fitts');
 // E2E runs point user data at a throwaway folder so they never touch real settings.
 const userDataOverride = process.env['FITTS_USER_DATA'];
 if (userDataOverride) app.setPath('userData', userDataOverride);
 // "Delete all my data" restarts the app with this flag: the folder is emptied before anything
 // opens a file in it, so the app starts as if just installed.
 if (process.argv.includes(WIPE_FLAG)) wipeUserData(app.getPath('userData'));
-
-app.setName('Fitts');
 registerAssetScheme();
 // Windows groups taskbar buttons by app ID. Without one of its own, Fitts shares
 // electron.exe's identity and the taskbar shows Electron's icon instead of the window's.
