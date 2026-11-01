@@ -114,6 +114,21 @@ test('closing the app window quits Fitts, even with the site mirror running', as
   await page.getByRole('button', { name: 'Browse' }).click();
   await page.getByRole('button', { name: 'Open my project' }).click();
   await expect(address(page)).toHaveValue(`localhost:${PORT}/compose`, { timeout: 60_000 });
+  // On a Mac the app stays running with no windows, as Mac apps do: there, closing the app
+  // window must still close the site's hidden window with it.
+  if (process.platform === 'darwin') {
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()
+        .find((w) => !w.webContents.isOffscreen())
+        ?.close();
+    });
+    await expect
+      .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), {
+        timeout: 20_000,
+      })
+      .toBe(0);
+    return;
+  }
   const quit = new Promise<void>((r) => app.process().once('exit', () => r()));
   // The site's window is open (hidden); closing the app window must still end the app.
   await app.evaluate(({ BrowserWindow }) => {
