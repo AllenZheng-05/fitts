@@ -1436,3 +1436,40 @@ describe('the portfolio run, replayed (Allen’s feedback, round 6)', () => {
     run.dispose();
   });
 });
+
+describe('this run, replayed (Allen’s feedback, round 7)', () => {
+  it('a decider that jumps to the checks first is refused until the site is explored, and says nothing for them', async () => {
+    // What the run's decider did with a redesign brief: everything but explore, first.
+    const eager = ['new_look', 'looks', 'phone_pass', 'check_links', 'review', 'check_theme'];
+    const decider = {
+      next(s: Situation): Promise<Decision> {
+        const a = eager.shift();
+        if (a) return Promise.resolve({ ability: a, say: `About to ${a}` } as Decision);
+        return Promise.resolve({ ability: scriptedNext(s) });
+      },
+    };
+    const site = fakeSite({
+      probes: () =>
+        Promise.resolve([
+          {
+            probe: 'target-size' as const,
+            pass: false,
+            items: [
+              { ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' },
+            ],
+          },
+        ]),
+    });
+    const { run, state } = setup({ site, decider });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done' || Boolean(card(state(), 'nothing-found')), 10_000);
+    const said = state()?.chat.flatMap((c) => (c.type === 'fitts.message' ? [c.text] : [])) ?? [];
+    // The checks that would have run on nothing were refused, so none announced itself...
+    for (const a of ['looks', 'phone_pass', 'check_links', 'review'])
+      expect(said).not.toContain(`About to ${a}`);
+    // ...and the review ran after the crawl, on the pages, so it found the problem.
+    expect(state()?.findings.map((f) => f.title)).toContain('Tap target is too small');
+    run.dispose();
+  }, 20_000);
+});

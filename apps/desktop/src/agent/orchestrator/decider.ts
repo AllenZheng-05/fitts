@@ -119,6 +119,8 @@ export interface ConverseInput {
   pointingAt?: string;
   /** What the owner wants to be called. */
   name?: string;
+  /** Where the new look stands, as fact: nothing applied unless this says so. */
+  look?: string;
 }
 
 export type Converse = (input: ConverseInput, signal?: AbortSignal) => Promise<string>;

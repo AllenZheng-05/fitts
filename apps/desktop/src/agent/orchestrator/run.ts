@@ -402,20 +402,39 @@ export class RealRun {
       }
       if (this.finished) return;
       if (this.blocked() && !listening) continue;
-      if (decision.say) this.say(decision.say);
+      // The decider's line is what it's about to do: said only when the step will run, so a
+      // refused step never announces itself (Allen's feedback, round 7).
+      const refusal = this.refusal(decision);
+      if (decision.say && !refusal) this.say(decision.say);
       this.emit([
         {
           type: 'ability.changed',
           ability: { name: decision.ability, since: this.state.elapsedMs },
         },
       ]);
-      const outcome = await this.use(decision);
+      const outcome = refusal
+        ? { ability: decision.ability, result: 'refused' as const, note: refusal }
+        : await this.use(decision);
       if (!this.finished) this.emit([{ type: 'ability.changed' }]);
       refused = outcome.result === 'refused';
       this.recent.push(outcome);
       if (this.recent.length > RECENT) this.recent.shift();
       if (outcome.result === 'done' && outcome.ability === 'finish') return;
     }
+  }
+
+  /**
+   * Why a step can't run yet, or undefined (§1.6). The audit's checks need the site explored
+   * first: run before, they'd look at nothing, find nothing and count as done (Allen's
+   * feedback, round 7: a redesign brief sent the decider straight to them).
+   */
+  private refusal(d: Decision): string | undefined {
+    const needsPages: AbilityName[] = ['phone_pass', 'check_links', 'review', 'looks', 'fix'];
+    if (needsPages.includes(d.ability) && !this.crawlEnded)
+      return 'explore first: the crawl hasn’t finished';
+    if (d.ability === 'check_theme' && this.pages.size === 0)
+      return 'explore first: no page has been seen yet';
+    return undefined;
   }
 
   /** Runs one ability. The guarantees (§1.6) are checked here, not by the decider. */
@@ -2117,6 +2136,19 @@ export class RealRun {
     else if (this.state.activity !== 'acting') this.say('Got it. I’ll keep that in mind.');
   }
 
+  /** Where the new look stands, in words, so a reply never claims more than happened. */
+  private lookFacts(): string {
+    const redesign = this.state.changes.find((c) => c.kind === 'redesign');
+    if (redesign?.status === 'verified') return `applied: ${redesign.title}`;
+    if (redesign) return `tried and ${redesign.status}: ${redesign.title}`;
+    if (this.redesignStarted) return 'being applied now';
+    if (this.picked) return `picked ${this.picked.name}, not applied yet`;
+    if (this.directions.length > 0)
+      return `showing looks to pick from: ${this.directions.map((d) => d.name).join(', ')}`;
+    if (this.themeAsked) return 'the look was checked; no looks made';
+    return 'nothing yet: the site hasn’t been explored enough to judge the look';
+  }
+
   /** Fitts answers the owner (§1.3), from what it's doing and has seen. */
   private async reply(message: string, pointingAt?: string): Promise<void> {
     const converse = this.deps.converse;
@@ -2148,6 +2180,7 @@ export class RealRun {
             .map((f) => `${f.title} (${f.route})`),
           recent,
           message,
+          look: this.lookFacts(),
           ...(pointingAt ? { pointingAt } : {}),
           ...(this.deps.ownerName ? { name: this.deps.ownerName } : {}),
         },
