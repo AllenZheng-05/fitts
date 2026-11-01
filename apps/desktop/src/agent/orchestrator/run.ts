@@ -4,6 +4,7 @@
 import {
   DEVICES,
   reduce,
+  type Change,
   type ChatItem,
   type Finding,
   type EdgeStateKind,
@@ -182,7 +183,12 @@ export class RealRun {
   /** An approval card is open, or fixes are running: the run finishes when they settle. */
   private fixPhase = false;
   private approvalId: string | undefined;
-  private finalized = false;
+  /** A fix was rolled back: the decider gets a say before the run settles (§1.6). */
+  private nudged = false;
+  /** Findings the decider already retried once: never twice. */
+  private readonly deciderRetries = new Set<string>();
+  /** FINALIZE has begun: the run's PR is opening, then Done. */
+  private finishing = false;
   /** The open "Can I …?" question (Ask every action), resolved false if the run moves on. */
   private pendingAsk: ((ok: boolean) => void) | undefined;
   /** Ask every action: "Allow everything this run", and the pages where you allowed it all. */
@@ -331,7 +337,7 @@ export class RealRun {
       );
     if (action === 'stop')
       this.card('budget', (a) => {
-        if (a === 'stop') return this.finish();
+        if (a === 'stop') return this.finish({ stop: true });
         this.emit([
           { type: 'cost', cost: { ...this.state.cost, capUsd: this.state.cost.capUsd + 10 } },
         ]);
@@ -379,14 +385,17 @@ export class RealRun {
     while (!this.finished) {
       // Once fixes are underway (or waiting on your answer), Fitts still listens: each message
       // gets a decision, so "another round of looks" happens instead of being noted
-      // (Allen's feedback, round 6). Without a message there's nothing to decide.
-      const listening = this.fixPhase && this.inbox.length > 0 && this.state.activity !== 'paused';
-      if ((this.blocked() && !listening) || (this.fixPhase && this.inbox.length === 0)) {
+      // (Allen's feedback, round 6), and so does a rolled-back fix (Allen's feedback, run 1:
+      // a failed check is a reason to think, not to give up). Otherwise there's nothing to decide.
+      const news = this.inbox.length > 0 || this.nudged;
+      const listening = this.fixPhase && news && this.state.activity !== 'paused';
+      if ((this.blocked() && !listening) || (this.fixPhase && !news)) {
         await this.sleepUntilKicked();
         continue;
       }
       this.deliverQueued();
       const situation = this.situation();
+      this.nudged = false;
       this.heard.push(...this.inbox);
       this.inbox = [];
       // A real decision takes a moment: the Now line says what Fitts is doing meanwhile.
@@ -420,6 +429,8 @@ export class RealRun {
       this.recent.push(outcome);
       if (this.recent.length > RECENT) this.recent.shift();
       if (outcome.result === 'done' && outcome.ability === 'finish') return;
+      // A decision after a rollback that didn't start anything: the fixes have settled.
+      if (this.fixPhase) this.fixesSettled();
     }
   }
 
@@ -434,6 +445,9 @@ export class RealRun {
       return 'explore first: the crawl hasn’t finished';
     if (d.ability === 'check_theme' && this.pages.size === 0)
       return 'explore first: no page has been seen yet';
+    // Once fixes are underway the audit is over: what's left is the fixes and the owner.
+    const audit: AbilityName[] = ['explore', 'phone_pass', 'check_links', 'review', 'check_theme'];
+    if (this.fixPhase && audit.includes(d.ability)) return 'fixes are underway; the audit is over';
     return undefined;
   }
 
@@ -533,10 +547,40 @@ export class RealRun {
         this.dismissFinding(f.id);
         return outcome('done', f.title);
       }
+      case 'retry_fix': {
+        if (live) return outcome('refused', 'a live site can’t be changed');
+        if (this.state.mode === 'plan') return outcome('refused', 'Plan only never changes code');
+        const id = d.findingId ?? '';
+        const change = this.state.changes.find(
+          (c) => c.status === 'rolled-back' && c.findingIds.includes(id),
+        );
+        if (!change) return outcome('refused', 'no rolled-back fix for that finding');
+        if (this.deciderRetries.has(id))
+          return outcome(
+            'refused',
+            'that fix was already retried once; leave it, or tell the owner',
+          );
+        // The ask modes ask, as they do before any fix.
+        if (
+          (this.state.mode === 'ask-every' || this.state.mode === 'ask-unsure') &&
+          !(await this.ask(
+            `“${change.title}” didn’t pass: ${change.reason ?? 'it was rolled back'}. Can I try it again${d.hint ? ` (${d.hint})` : ' with a different approach'}?`,
+          ))
+        )
+          return outcome('nothing', 'the owner said to leave it');
+        this.deciderRetries.add(id);
+        await this.pipeline?.retry(change.id, d.hint);
+        return outcome('done', change.title);
+      }
       case 'finish':
         // Fixes still running or waiting on the owner end the run themselves when they settle.
         if (this.fixPhase && (this.approvalId !== undefined || this.pipeline?.busy))
           return outcome('refused', 'fixes are still going; the run ends when they settle');
+        // Fixes have settled: FINALIZE (the run's PR), then Done.
+        if (this.fixPhase) {
+          this.finish();
+          return outcome('done');
+        }
         // Every page and control is tried or skipped first, unless the crawl can't go on.
         if (!this.coverage.complete() && !this.crawlEnded)
           return outcome('refused', 'pages and controls are left to try');
@@ -580,6 +624,17 @@ export class RealRun {
           .map((f) => f.title),
       },
       ran: { ...this.ran },
+      changes: this.state.changes
+        .filter((c) => c.kind !== 'wording')
+        .slice(-8)
+        .map((c) => ({
+          id: c.id,
+          ...(c.findingIds[0] ? { findingId: c.findingIds[0] } : {}),
+          title: c.title.slice(0, 80),
+          status: c.status,
+          ...(c.reason ? { reason: c.reason.slice(0, 160) } : {}),
+          ...(c.attempts !== undefined ? { attempts: c.attempts } : {}),
+        })),
       recent: [...this.recent],
       messages: [...this.inbox],
       earlier: this.heard.slice(-10),
@@ -781,7 +836,7 @@ export class RealRun {
   }
 
   retryChange(changeId: string, hint?: string): void {
-    this.pipeline?.retry(changeId, hint);
+    void this.pipeline?.retry(changeId, hint);
   }
 
   undoChange(changeId: string): void {
@@ -790,20 +845,33 @@ export class RealRun {
       .catch((e: unknown) => this.say(`I couldn’t undo that: ${(e as Error).message}`));
   }
 
-  /** Every fix has settled: FINALIZE (preview branch, then Done), once. */
+  /**
+   * Every fix has settled: FINALIZE (the run's one PR, then Done), once. Not while a rollback
+   * waits for the decider's say: it may retry, and the loop calls this after it decides.
+   */
   private fixesSettled(): void {
-    if (this.approvalId || this.pipeline?.busy || this.finalized || !this.fixPhase) return;
-    this.finalized = true;
-    void (async () => {
-      try {
-        const branch = await this.pipeline?.preview();
-        if (branch)
-          this.say(`Every verified fix is merged into ${branch} so you can try them together.`);
-      } catch {
-        // The preview branch is a convenience; Done doesn't wait on it.
-      }
-      this.finish();
-    })();
+    if (this.approvalId || this.pipeline?.busy || this.nudged || !this.fixPhase) return;
+    this.finish();
+  }
+
+  /**
+   * A change settled: verified, or rolled back with why. The decider hears about both in
+   * `recent`, and a rollback wakes it (with a real decider) to weigh a retry before the run ends.
+   */
+  private changeSettled(change: Change): void {
+    const verified = change.status === 'verified';
+    this.recent.push({
+      ability: 'fix',
+      result: verified ? 'done' : 'nothing',
+      note: verified
+        ? `verified “${change.title}”`
+        : `rolled back “${change.title}”: ${change.reason ?? ''}`,
+    });
+    if (this.recent.length > RECENT) this.recent.shift();
+    if (!verified && this.deps.decider && !this.finished) {
+      this.nudged = true;
+      this.kick();
+    }
   }
 
   /**
@@ -1410,12 +1478,12 @@ export class RealRun {
   }
 
   private answerReview(item: Extract<ChatItem, { type: 'review' }>, answer: string): void {
-    // Autonomous: the PR is open; "Send it back" asks what to change.
+    // Autonomous: the look is on the branch; "Send it back" asks what to change.
     if (item.autonomous) {
       if (answer !== 'back') return;
       this.emit([{ type: 'chat.item.updated', item: { ...item, answer } }]);
       this.sendingBack = true;
-      this.say('What should I change? Tell me and I’ll update the pull request.');
+      this.say('What should I change? Tell me and I’ll change it on the branch.');
       return;
     }
     const review = this.reviewing;
@@ -1500,6 +1568,7 @@ export class RealRun {
         idle: () => this.fixesSettled(),
         restingActivity: () => (this.finished ? 'idle' : 'acting'),
         review: (changeId, adjust) => this.reviewRedesign(changeId, adjust),
+        settled: (change) => this.changeSettled(change),
       },
       this.deps.site,
       this.deps.fixer,
@@ -1954,7 +2023,27 @@ export class RealRun {
     this.finish();
   }
 
-  finish(): void {
+  /**
+   * FINALIZE (§9.3): the run's one PR with every verified change, then Done. A run the owner
+   * stopped pushes nothing: the branch keeps what passed. Once, whichever path ends the run.
+   */
+  finish(opts: { stop?: boolean } = {}): void {
+    if (this.finished || this.finishing) return;
+    this.finishing = true;
+    void (async () => {
+      if (!opts.stop) {
+        try {
+          await this.pipeline?.finalize();
+        } catch {
+          // finalize says what went wrong; Done doesn't wait on the PR.
+        }
+      }
+      this.end();
+    })();
+  }
+
+  /** Done: the run is over, with its closing line. */
+  private end(): void {
     if (this.finished) return;
     this.finished = true;
     if (this.clock) clearInterval(this.clock);
@@ -1972,11 +2061,18 @@ export class RealRun {
     const changes = this.state.changes.filter((c) => c.kind !== 'wording');
     const verified = changes.filter((c) => c.status === 'verified' && c.kind !== 'redesign').length;
     const redesigned = changes.some((c) => c.kind === 'redesign' && c.status === 'verified');
-    const prs = changes.filter((c) => c.status === 'verified' && c.prNumber !== undefined).length;
+    const pr = changes.find((c) => c.status === 'verified' && c.prNumber !== undefined)?.prNumber;
+    const branch = changes.find((c) => c.status === 'verified' && c.branch)?.branch;
     const rolled = changes.filter((c) => c.status === 'rolled-back').length;
+    const where =
+      pr !== undefined
+        ? ` and opened pull request #${pr}`
+        : branch
+          ? `; everything is on ${branch}, no pull request yet`
+          : '';
     this.say(
       changes.length > 0
-        ? `All done. I verified ${verified} ${verified === 1 ? 'fix' : 'fixes'}${redesigned ? ' and the redesign' : ''} and opened ${prs} pull ${prs === 1 ? 'request' : 'requests'}.` +
+        ? `All done. I verified ${verified} ${verified === 1 ? 'fix' : 'fixes'}${redesigned ? ' and the redesign' : ''}${where}.` +
             (rolled > 0
               ? ` ${rolled} ${rolled === 1 ? 'change' : 'changes'} didn’t pass my checks, so I rolled ${rolled === 1 ? 'it' : 'them'} back. Want me to try again with a different approach?`
               : '')
@@ -2030,7 +2126,7 @@ export class RealRun {
     if (this.finished) return;
     this.pause();
     this.card('stop-run-confirm', (a) => {
-      if (a === 'stop') return this.finish();
+      if (a === 'stop') return this.finish({ stop: true });
       this.say('Okay, carrying on.');
       this.resumeFromCard();
     });

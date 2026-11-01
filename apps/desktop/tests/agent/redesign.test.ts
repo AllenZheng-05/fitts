@@ -1,6 +1,6 @@
 // @vitest-environment node
 // Applying a direction (SPEC-phase2 §8.3): the redesign job's checks, and the pipeline running it
-// alone and first, with wording cards, "Adjust it", and later fixes stacked on its branch.
+// alone and first on the run's branch, with wording cards, "Adjust it", and later fixes on top.
 import {
   reduce,
   type Finding,
@@ -14,7 +14,7 @@ import {
   fixedByRedesign,
   judgeRedesign,
   judgeStyle,
-  redesignPrBody,
+  redesignSection,
   redesignTask,
 } from '../../src/agent/fix/redesign';
 import type { FixCall, TestRun, VerifyPagesResult } from '../../src/agent/protocol';
@@ -162,7 +162,7 @@ describe('redesign checks (§8.3)', () => {
     expect(fixedByRedesign(after, findings, checks)).toEqual(['f1']);
   });
 
-  it('the task carries the brief, direction and pages; the PR body has no AI attribution', () => {
+  it('the task carries the brief, direction, pages and checks; the PR section has no AI attribution', () => {
     const brief = { for: 'A portfolio', who: 'Recruiters', feel: 'Confident' };
     const t = redesignTask({
       brief,
@@ -170,13 +170,15 @@ describe('redesign checks (§8.3)', () => {
       direction,
       routes: ['/', '/about'],
       adjust: 'Bigger headings',
+      checks: [{ name: 'pnpm lint', passing: true }],
     });
     expect(t).toContain('Quiet stone');
     expect(t).toContain(`--bg: ${direction.spec.palette.bg};`);
     expect(t).toContain('### shape: Organic blobs');
     expect(t).toContain('Pages (every one must still work): /, /about');
+    expect(t).toContain('run each with run_check before done; they must pass): `pnpm lint`.');
     expect(t).toContain('The user asked for an adjustment: "Bigger headings"');
-    const body = redesignPrBody({
+    const body = redesignSection({
       why: 'Too loud.',
       direction,
       summary: 'Added a Quiet stone theme and made it the default.',
@@ -194,7 +196,7 @@ describe('redesign checks (§8.3)', () => {
   });
 });
 
-/** A fake main for the pipeline: jobs, page verification by pass, and a PR registry. */
+/** A fake main for the pipeline: the run's worktree, page verification by pass, a PR registry. */
 function harness(passes: VerifyPagesResult[], testRuns: TestRun[] = []) {
   let state = {
     runId: 'run-1',
@@ -208,13 +210,18 @@ function harness(passes: VerifyPagesResult[], testRuns: TestRun[] = []) {
   const calls: FixCall[] = [];
   let jobs = 0;
   let prs = 0;
+  let commits = 0;
   const site = {
     fix: (call: FixCall) => {
       calls.push(call);
       switch (call.fn) {
         case 'prepare':
           jobs += 1;
-          return Promise.resolve({ job: `run-1/${call.findingId}`, branch: call.branch });
+          return Promise.resolve({
+            job: `run-1/${call.findingId}`,
+            branch: call.branch,
+            sha: 'base',
+          });
         case 'verifyPages':
           return Promise.resolve(passes.shift() ?? stillOnAbout());
         case 'tests':
@@ -227,7 +234,9 @@ function harness(passes: VerifyPagesResult[], testRuns: TestRun[] = []) {
         case 'write':
           return Promise.resolve({ ok: true });
         case 'commit':
-          return Promise.resolve({ ok: true, sha: 'abc' });
+        case 'revertCommit':
+          commits += 1;
+          return Promise.resolve({ ok: true, sha: `c${commits}` });
         case 'diff':
           return Promise.resolve('');
         case 'prOpen':
@@ -288,11 +297,14 @@ function harness(passes: VerifyPagesResult[], testRuns: TestRun[] = []) {
     before: { '/': 'fitts-asset://p/run-1/shot-_.jpg' },
     saveShot: (route: string) => Promise.resolve(`fitts-asset://p/run-1/after${route}.jpg`),
   };
-  return { pipeline, state: () => state, calls, said, redesigns, request, jobs: () => jobs };
+  const wait = async () => {
+    for (let i = 0; i < 100 && pipeline.busy; i++) await new Promise((r) => setTimeout(r, 2));
+  };
+  return { pipeline, state: () => state, calls, said, redesigns, request, wait, jobs: () => jobs };
 }
 
 describe('the redesign job (§8.3, §9.2)', () => {
-  it('runs alone, checks every page, credits the findings it fixed, and opens one PR', async () => {
+  it('runs alone on the run’s branch, checks every page, credits the findings it fixed', async () => {
     const h = harness([
       { ok: true, pages: [page('/'), page('/about', [result('/about', 'target-size', [small])])] },
     ]);
@@ -307,9 +319,9 @@ describe('the redesign job (§8.3, §9.2)', () => {
     expect(change).toMatchObject({
       title: 'Redesign: Quiet stone',
       status: 'verified',
-      branch: 'fitts/redesign-quiet-stone',
+      branch: 'fitts/run-run-1',
+      sha: 'c1',
       findingIds: ['f1'],
-      prNumber: 1,
       pages: [
         {
           route: '/',
@@ -319,11 +331,11 @@ describe('the redesign job (§8.3, §9.2)', () => {
         { route: '/about', after: 'fitts-asset://p/run-1/after/about.jpg' },
       ],
     });
+    // No PR yet: it opens once at the end of the run.
+    expect(change?.prNumber).toBeUndefined();
+    expect(h.calls.some((c) => c.fn === 'prOpen')).toBe(false);
     // f1 is fixed by the new look; f2 still needs its own fix.
-    expect(s.findings.find((f) => f.id === 'f1')).toMatchObject({
-      status: 'pr-opened',
-      prNumber: 1,
-    });
+    expect(s.findings.find((f) => f.id === 'f1')?.status).toBe('verified');
     expect(s.findings.find((f) => f.id === 'f2')?.status).toBe('open');
     expect(s.chat.find((c) => c.type === 'wording')).toMatchObject({
       from: 'Party time',
@@ -331,7 +343,7 @@ describe('the redesign job (§8.3, §9.2)', () => {
     });
     expect(s.changes.find((c) => c.kind === 'wording')?.status).toBe('verified');
     expect(h.said.at(-1)).toBe(
-      'Your site now uses Quiet stone, and every page still works. The new look also fixed 1 of the problems I found. Pull request #1 is open.',
+      'Your site now uses Quiet stone, and every page still works. The new look also fixed 1 of the problems I found. It goes in the pull request when I’m done.',
     );
     expect(h.calls.find((c) => c.fn === 'commit')).toMatchObject({
       message: 'Redesign: Quiet stone (Fitts: look and feel)',
@@ -347,51 +359,68 @@ describe('the redesign job (§8.3, §9.2)', () => {
       ],
       three: false,
     });
-  });
-
-  it('later fixes start from the redesign’s branch and their PRs stack on it', async () => {
-    const h = harness([]);
-    await h.pipeline.redesign(h.request);
-    h.pipeline.start(['f1', 'f2']);
-    for (let i = 0; i < 100 && h.pipeline.busy; i++) await new Promise((r) => setTimeout(r, 2));
-    // f1 was fixed by the redesign (its page has no problems after), so only f2 runs.
-    const prepares = h.calls.filter((c) => c.fn === 'prepare');
-    expect(prepares.map((c) => c.fn === 'prepare' && c.findingId)).toEqual(['redesign', 'f2']);
-    expect(prepares[1]).toMatchObject({ base: 'fitts/redesign-quiet-stone' });
-    expect(h.calls.filter((c) => c.fn === 'prOpen').at(-1)).toMatchObject({
-      base: 'fitts/redesign-quiet-stone',
+    // The run's PR carries the redesign and names it.
+    await h.pipeline.finalize();
+    const pr = h.calls.find((c) => c.fn === 'prOpen');
+    expect(pr && 'title' in pr ? pr.title : '').toBe('Redesign: Quiet stone');
+    expect(pr && 'body' in pr ? pr.body : '').toContain('"Party time" → "Welcome"');
+    expect(h.state().findings.find((f) => f.id === 'f1')).toMatchObject({
+      status: 'pr-opened',
+      prNumber: 1,
     });
   });
 
-  it('a failed first pass gets a second with the reason; two failures roll it back', async () => {
+  it('later fixes commit on the same branch, after the redesign', async () => {
+    const h = harness([]);
+    await h.pipeline.redesign(h.request);
+    h.pipeline.start(['f1', 'f2']);
+    await h.wait();
+    // f1 was fixed by the redesign (its page has no problems after), so only f2 runs.
+    expect(h.jobs()).toBe(1);
+    expect(
+      h.calls.filter((c) => c.fn === 'commit').map((c) => c.fn === 'commit' && c.message),
+    ).toEqual([
+      'Redesign: Quiet stone (Fitts: look and feel)',
+      'Tap target is too small (Fitts: H7 sev 2)',
+    ]);
+    expect(h.state().changes.find((c) => c.kind === 'fix')).toMatchObject({
+      branch: 'fitts/run-run-1',
+      sha: 'c2',
+    });
+    await h.pipeline.finalize();
+    const pr = h.calls.find((c) => c.fn === 'prOpen');
+    expect(pr && 'title' in pr ? pr.title : '').toBe('Redesign: Quiet stone and 1 fix');
+  });
+
+  it('a failed pass gets another with the reason; out of passes, it goes back to the last good commit', async () => {
     const broken: VerifyPagesResult = {
       ok: true,
       pages: [page('/'), page('/about', [], { loaded: false })],
     };
     const retried = harness([broken]);
     expect(await retried.pipeline.redesign(retried.request)).toBe('verified');
-    expect(retried.redesigns[1]).toContain('it failed verification: /about didn’t render');
-    expect(retried.said[0]).toBe(
-      'The first pass broke something (/about didn’t render). Fixing that now.',
-    );
+    expect(retried.redesigns[1]).toContain('it failed verification:\n/about didn’t render');
+    expect(retried.said[0]).toBe('That didn’t pass yet: /about didn’t render. Fixing that now.');
 
-    const failed = harness([broken, broken]);
+    const failed = harness([broken, broken, broken, broken]);
     expect(await failed.pipeline.redesign(failed.request)).toBe('rolled-back');
-    expect(failed.calls.some((c) => c.fn === 'discard')).toBe(true);
+    expect(failed.redesigns).toHaveLength(4);
+    expect(failed.calls.some((c) => c.fn === 'discard')).toBe(false);
+    expect(failed.calls.filter((c) => c.fn === 'reset').at(-1)).toMatchObject({ to: 'base' });
     expect(failed.state().changes[0]).toMatchObject({
       kind: 'redesign',
       status: 'rolled-back',
       reason: '/about didn’t render',
     });
     expect(failed.calls.some((c) => c.fn === 'prOpen')).toBe(false);
-    // Fixes then start from the project's own HEAD.
+    // Fixes then carry on, on the same worktree.
     failed.pipeline.start(['f1']);
-    for (let i = 0; i < 100 && failed.pipeline.busy; i++)
-      await new Promise((r) => setTimeout(r, 2));
-    expect(failed.calls.filter((c) => c.fn === 'prepare').at(-1)).not.toHaveProperty('base');
+    await failed.wait();
+    expect(failed.jobs()).toBe(1);
+    expect(failed.state().changes.find((c) => c.kind === 'fix')?.status).toBe('verified');
   });
 
-  it('“Undo this” on a wording card puts just that line back and updates the PR', async () => {
+  it('“Undo this” on a wording card puts just that line back, as a commit on the branch', async () => {
     const h = harness([]);
     await h.pipeline.redesign(h.request);
     const card = h.state().chat.find((c) => c.type === 'wording');
@@ -401,17 +430,23 @@ describe('the redesign job (§8.3, §9.2)', () => {
       find: 'Welcome',
       replace: 'Party time',
     });
-    expect(h.calls.at(-1)).toMatchObject({ fn: 'push' });
+    // No PR yet, so nothing to push.
+    expect(h.calls.at(-1)).toMatchObject({ fn: 'commit' });
     expect(h.state().changes.find((c) => c.kind === 'wording')?.status).toBe('undone');
   });
 
-  it('“Adjust it” re-runs the redesigner; a failing adjustment is reset, a passing one pushed', async () => {
+  it('“Adjust it” re-runs the redesigner; a failing adjustment is reset, a passing one committed', async () => {
     const h = harness([]);
     await h.pipeline.redesign(h.request);
     expect(h.pipeline.canAdjust).toBe(true);
     await h.pipeline.adjust('For the redesign, instead use bigger headings');
     expect(h.redesigns.at(-1)).toContain('The user asked for an adjustment');
+    expect(h.calls.at(-1)).toMatchObject({ fn: 'commit' });
+    // With the PR open, an adjustment is pushed to it.
+    await h.pipeline.finalize();
+    await h.pipeline.adjust('For the redesign, make the buttons rounder');
     expect(h.calls.at(-1)).toMatchObject({ fn: 'push' });
+    expect(h.said.at(-1)).toContain('The pull request #1 is updated.');
 
     const bad = harness([
       { ok: true, pages: [page('/'), page('/about')] },
@@ -425,13 +460,17 @@ describe('the redesign job (§8.3, §9.2)', () => {
     );
   });
 
-  it('undoing the redesign means later fixes start from HEAD again', async () => {
+  it('undoing the redesign reverts its commit; later fixes carry on from there', async () => {
     const h = harness([]);
     await h.pipeline.redesign(h.request);
     await h.pipeline.undo('run-1-redesign');
+    expect(h.calls.filter((c) => c.fn === 'revertCommit').at(-1)).toMatchObject({ sha: 'c1' });
+    expect(h.state().changes.find((c) => c.kind === 'redesign')?.status).toBe('undone');
+    expect(h.said.at(-1)).toBe('Undone.');
     h.pipeline.start(['f2']);
-    for (let i = 0; i < 100 && h.pipeline.busy; i++) await new Promise((r) => setTimeout(r, 2));
-    expect(h.calls.filter((c) => c.fn === 'prepare').at(-1)).not.toHaveProperty('base');
+    await h.wait();
+    expect(h.jobs()).toBe(1);
+    expect(h.state().changes.find((c) => c.kind === 'fix')?.status).toBe('verified');
   });
 });
 
@@ -443,14 +482,16 @@ describe('the project’s own tests (§9.2)', () => {
     summary: 'FAIL theme contract: Sharp Slate > shows every logo',
   };
 
-  it('a redesign that breaks the project’s tests gets a second pass with what failed', async () => {
+  it('a redesign that breaks the project’s tests gets another pass with what failed', async () => {
     const h = harness([], [pass, fail, pass]);
     expect(await h.pipeline.redesign(h.request)).toBe('verified');
+    expect(h.redesigns[0]).toContain('The project’s tests pass today and must still');
     expect(h.redesigns[1]).toContain(
-      'your tests fail with this change: FAIL theme contract: Sharp Slate > shows every logo',
+      'your tests fail with this change:\nFAIL theme contract: Sharp Slate > shows every logo',
     );
+    await h.pipeline.finalize();
     const body = h.calls.find((c) => c.fn === 'prOpen');
-    expect(body?.fn === 'prOpen' && body.body).toContain('Your test suite still passes');
+    expect(body?.fn === 'prOpen' && body.body).toContain('Your test suite passes');
   });
 
   it('tests that already failed before the change don’t block it (nothing to compare)', async () => {

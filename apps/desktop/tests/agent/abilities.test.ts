@@ -10,6 +10,7 @@ const base = (over: Partial<Situation> = {}): Situation => ({
   stalled: 0,
   findings: { total: 0, bySeverity: {}, worst: [] },
   ran: {},
+  changes: [],
   recent: [],
   messages: [],
   earlier: [],

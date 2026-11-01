@@ -10,7 +10,7 @@ import type { CallContext, LlmCaller } from '../llm/call';
 import type { AssetsResult, VerifyPagesResult } from '../protocol';
 import { problems, type Check } from '../review/aggregate';
 import type { Direction } from '../review/themefit';
-import { ciLine, fileHandlers, runToolLoop, TOOLS, type FixTools } from './fixer';
+import { checksLine, fileHandlers, runToolLoop, TOOLS, type FixTools } from './fixer';
 
 export const MAX_REDESIGN_STEPS = 48;
 
@@ -66,8 +66,13 @@ export function redesignTask(input: {
   direction: Direction;
   routes: string[];
   assets?: AssetsResult;
+  /** A repair pass: the redesign is still in the worktree, and this is what it failed. */
   retryReason?: string;
   adjust?: string;
+  /** The project's CI checks, and whether each passed before any change. */
+  checks?: { name: string; passing: boolean }[];
+  /** The project's tests pass before any change. */
+  tests?: boolean;
 }): string {
   const d = input.direction;
   const b = input.brief;
@@ -105,10 +110,16 @@ export function redesignTask(input: {
     '',
     `Pages (every one must still work): ${input.routes.join(', ')}`,
     'Verification it must pass: every page renders on the dev server, the direction’s fonts and colors show on the pages, and no new problems at severity 2 or higher (contrast, tap targets, labels, focus, sideways scrolling at 360/768/1280px).',
+    ...(input.checks?.length
+      ? [
+          `Checks the project runs in CI (run each with run_check before done; they must pass): ${checksLine(input.checks)}.`,
+        ]
+      : []),
+    ...(input.tests ? ['The project’s tests pass today and must still: run_check("tests").'] : []),
     ...(input.retryReason
       ? [
           '',
-          `Your redesign is already in this worktree, but it failed verification: ${input.retryReason}. Fix that without undoing the new look.`,
+          `Your redesign is already in this worktree, but it failed verification:\n${input.retryReason}\nFix that without undoing the new look.`,
         ]
       : []),
     ...(input.adjust
@@ -255,27 +266,28 @@ export function fixedByRedesign(
     .map((f) => f.id);
 }
 
-/** The redesign PR's body (§9.3): why, the direction, what was checked, and what it fixed. */
-export function redesignPrBody(input: {
+/**
+ * The redesign's section of the run's PR (§9.3): why, the direction, what changed and what it
+ * fixed, and how it was checked.
+ */
+export function redesignSection(input: {
   why: string;
   direction: Direction;
   summary: string;
   routes: string[];
   wording: WordingChange[];
   fixed: Finding[];
-  /** The project's own test suite passed on the branch. */
-  tested?: boolean;
-  /** The project's CI checks that passed on the branch. */
-  ci?: string[];
 }): string {
   const d = input.direction;
   return [
+    `## Redesign: ${d.name}`,
+    '',
     `**Look and feel** · redesign: ${d.name}`,
     '',
-    '## Why',
+    '### Why',
     input.why,
     '',
-    '## Direction',
+    '### Direction',
     `${d.notes} Swatches ${d.swatches.join(', ')}; typeface ${d.typeface || 'system'}.`,
     `Built from Fitts's design library: ${[
       d.spec.parts.color,
@@ -288,16 +300,16 @@ export function redesignPrBody(input: {
       .join(', ')}.`,
     ...(d.spec.changes?.length ? d.spec.changes.map((c) => `- ${c}`) : []),
     '',
-    '## What changed',
+    '### What changed',
     input.summary || 'Restyled every page to the direction.',
     ...(input.wording.length
-      ? ['', '## Wording', ...input.wording.map((w) => `- "${w.from}" → "${w.to}"`)]
+      ? ['', '### Wording', ...input.wording.map((w) => `- "${w.from}" → "${w.to}"`)]
       : []),
     ...(input.fixed.length
-      ? ['', '## Also fixed', ...input.fixed.map((f) => `- ${f.title} (${f.route})`)]
+      ? ['', '### Also fixed', ...input.fixed.map((f) => `- ${f.title} (${f.route})`)]
       : []),
     '',
-    '## Verification',
-    `Loaded every page on this branch's dev server (${input.routes.join(', ')}): each one renders, and no new problems at severity 2 or higher appeared (all page probes, focus, and 360, 768 and 1280px).${input.tested ? ' Your test suite still passes on this branch.' : ''}${ciLine(input.ci)}`,
+    '### Checked',
+    `Loaded every page on this branch's dev server (${input.routes.join(', ')}): each one renders, and no new problems at severity 2 or higher appeared (all page probes, focus, and 360, 768 and 1280px).`,
   ].join('\n');
 }

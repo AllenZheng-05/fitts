@@ -1,8 +1,12 @@
-// The fix pipeline (SPEC-phase2 §9): at most 2 jobs at a time. Each job gets a worktree, runs the
-// fixer, then is verified on the worktree's own dev server: the finding's probe must stop
-// reporting the problem and no new severity ≥2 problems may appear on that route. Only then is
-// it committed (and its PR opened, per mode); otherwise it's rolled back with a reason. Undo
-// closes the PR (or opens a revert PR when it was merged); retry runs the job again.
+// The fix pipeline (SPEC-phase2 §9): one job at a time, every one on the run's one branch in
+// the run's one worktree. Each job runs the fixer, then is verified on the worktree's own dev
+// server: the finding's probe must stop reporting the problem, no new severity ≥2 problems may
+// appear on that route, and the project's own tests and CI checks must still pass. A change that
+// fails a check isn't thrown away: the fixer gets it back with the output, up to MAX_REPAIRS
+// times. Only a change that passes is committed; otherwise the worktree goes back to the last
+// good commit, with a reason. The run's one PR opens at the end (finalize). Undo reverts one
+// commit on the branch (or opens a revert PR once the run's PR is merged); retry runs the job
+// again.
 import type {
   Brief,
   Change,
@@ -17,6 +21,19 @@ import type {
 import { PAGE_PROBES } from '@fitts/probes';
 import { specFonts } from '@fitts/styles';
 import type { AssetsResult, CiRun, TestRun, VerifyPagesResult, VerifyResult } from '../protocol';
+import { problems, type Check } from '../review/aggregate';
+import type { Direction } from '../review/themefit';
+import type { Site } from '../site-client';
+import { ciLine, fixBudget, repairBudget, taskFile, type FixTools, type LoopEnd } from './fixer';
+import {
+  fixedByRedesign,
+  judgeRedesign,
+  judgeStyle,
+  redesignSection,
+  redesignTask,
+  type RedesignTools,
+  type WordingChange,
+} from './redesign';
 
 /** Before any change: the project's tests and its CI checks, to compare a fix against. */
 interface Baseline {
@@ -25,21 +42,20 @@ interface Baseline {
 }
 
 const NO_CI: CiRun = { ran: false, checks: [] };
-import { problems, type Check } from '../review/aggregate';
-import type { Direction } from '../review/themefit';
-import type { Site } from '../site-client';
-import { ciLine, fixBudget, taskFile, type FixTools } from './fixer';
-import {
-  fixedByRedesign,
-  judgeRedesign,
-  judgeStyle,
-  redesignPrBody,
-  redesignTask,
-  type RedesignTools,
-  type WordingChange,
-} from './redesign';
 
-export const MAX_FIX_JOBS = 2;
+/**
+ * Why a change failed: `reason` is the one line the owner sees; `detail` is what the fixer gets
+ * for its repair pass (every broken check with its output, the tests' output, the probe's items).
+ */
+export interface Verdict {
+  reason: string;
+  detail: string;
+}
+
+/** One job at a time (§9.2): fixes land on one branch, one after another. */
+export const MAX_FIX_JOBS = 1;
+/** A change that fails a check gets this many more passes before it's rolled back (§9.2). */
+export const MAX_REPAIRS = 3;
 
 /**
  * Probes a worktree's server can re-run on a page (§9.2). Findings from traces (network,
@@ -64,10 +80,13 @@ export interface PipelineHost {
   /** What the run is doing once a redesign adjustment ends (acting, or idle when it's done). */
   restingActivity(): RunState['activity'];
   /**
-   * The redesign's final review (SPEC-phase3 §2.4), before its PR opens. `adjust` changes the
-   * branch from the owner's words while the review is open. Without it, the PR just opens.
+   * The redesign's final review (SPEC-phase3 §2.4), before it joins the run's PR. `adjust`
+   * changes the branch from the owner's words while the review is open. Without it, it just
+   * stays.
    */
   review?(changeId: string, adjust: (text: string) => Promise<void>): Promise<'ok' | 'restart'>;
+  /** A change settled: verified, or rolled back with its reason (the decider hears about it). */
+  settled?(change: Change): void;
 }
 
 export type Fixer = (
@@ -78,10 +97,12 @@ export type Fixer = (
     onStep: (line: string) => void;
     /** The step budget (fixBudget). */
     budget?: number;
+    /** Never more steps than this (a repair pass gets no extension). */
+    hardMax?: number;
     /** At the budget while still making progress: keep going? */
     more?: (steps: number) => Promise<boolean>;
   },
-) => Promise<{ patched: number; summary: string; notes?: string }>;
+) => Promise<{ patched: number; summary: string; notes?: string; end?: LoopEnd }>;
 
 export type Redesigner = (
   task: string,
@@ -128,6 +149,8 @@ const slug = (s: string) =>
     .replace(/^-|-$/g, '')
     .slice(0, 40);
 
+const isAuto = (mode: Mode) => mode === 'autonomous' || mode === 'dangerous';
+
 /** §9.2: pass = the check's problem is gone and nothing new at severity ≥ 2. */
 export function judge(check: Check, after: VerifyResult, baseline: ProbeResult[]): string | null {
   if (!after.ok) return after.error ?? 'verification didn’t run';
@@ -148,33 +171,70 @@ export function judge(check: Check, after: VerifyResult, baseline: ProbeResult[]
   return fresh.length ? `it caused a new problem: ${fresh.join(', ')}` : null;
 }
 
-/** The PR body (§9.3): heuristic and severity, finding, fix, evidence, verification, repro. */
-export function prBody(
-  f: Finding,
-  check: Check | undefined,
-  summary: string,
-  tested = false,
-  ci: string[] = [],
-): string {
+/** A failed verification with what the probes still report, for the fixer's repair pass. */
+function probeVerdict(reason: string, after: VerifyResult): Verdict {
+  const lines: string[] = [];
+  for (const r of after.results)
+    if (!r.pass)
+      for (const i of r.items.slice(0, 6))
+        lines.push(
+          `- ${r.probe}: ${i.ref || i.selector}: ${i.measured}${i.expected ? ` (expected ${i.expected})` : ''}`,
+        );
+  for (const i of after.focus.slice(0, 4)) lines.push(`- focus-visible: ${i.ref}: ${i.measured}`);
+  for (const i of after.viewport.slice(0, 4))
+    lines.push(`- viewport-sweep: ${i.ref}: ${i.measured}`);
+  return { reason, detail: [reason, ...lines.slice(0, 12)].join('\n') };
+}
+
+/** A fix's section of the run's PR (§9.3): heuristic and severity, problem, fix, evidence, repro. */
+export function fixSection(f: Finding, check: Check | undefined, summary: string): string {
   return [
+    `## ${f.title}`,
+    '',
     `**${f.heuristic ?? f.lens}** · severity ${f.severity}`,
     '',
-    `## Problem`,
+    `### Problem`,
     f.finding,
     '',
-    `## Fix`,
+    `### Fix`,
     summary || f.fix,
     '',
-    `## Evidence`,
+    `### Evidence`,
     ...f.evidence.map((e) => `- ${e}`),
     '',
-    `## Verification`,
+    `### Checked`,
     check
-      ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).${tested ? ' Your test suite still passes on this branch.' : ''}${ciLine(ci)}`
+      ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).`
       : 'Re-checked by the reviewer panel.',
     '',
-    `## Repro`,
+    `### Repro`,
     `Open ${f.route}${f.elementRef ? ` and find the element \`${f.elementRef}\`` : ''}.`,
+  ].join('\n');
+}
+
+/** The run's PR title: "Fitts: 3 fixes", "Redesign: Quiet stone and 2 fixes". */
+export function runPrTitle(changes: Change[]): string {
+  const redesign = changes.find((c) => c.kind === 'redesign');
+  const fixes = changes.filter((c) => c.kind === 'fix').length;
+  const n = `${fixes} ${fixes === 1 ? 'fix' : 'fixes'}`;
+  if (redesign) return fixes ? `${redesign.title} and ${n}` : redesign.title;
+  return `Fitts: ${n}`;
+}
+
+/**
+ * The run's PR body (§9.3): one section per change, in order, then how the branch was checked.
+ * No AI attribution footer.
+ */
+export function runPrBody(
+  sections: string[],
+  verification: { tested: boolean; ci: string[]; redesigned: boolean },
+): string {
+  return [
+    ...sections.flatMap((s) => [s, '']),
+    '## Verification',
+    `Each change was checked on this branch's dev server before it was committed${
+      verification.redesigned ? ' (the redesign on every page)' : ''
+    }.${verification.tested ? ' Your test suite passes on this branch.' : ''}${ciLine(verification.ci)}`,
   ].join('\n');
 }
 
@@ -198,21 +258,29 @@ export function diffOf(text: string): NonNullable<Finding['diff']> {
 export class FixPipeline {
   private readonly queue: Pending[] = [];
   private running = 0;
-  /** Each change's worktree job (for redo, undo and revert). */
-  private readonly jobs = new Map<string, { job: string; branch: string; findingId: string }>();
+  /** The run's one worktree and branch (§9.2), made by the first job. */
+  private run: { job: string; branch: string } | undefined;
+  /** The branch's last commit every check passed on: a failed change resets to it. */
+  private lastGood = '';
+  /** The project's own tests and CI checks before any change, once per run. */
+  private baseline: Promise<Baseline> | undefined;
+  /** The run's one PR (§9.3), once finalize opened it. */
+  private runPr: { number: number; url: string } | undefined;
+  /** The project's tests passed on the branch after a change (the PR says so). */
+  private tested = false;
+  /** The CI checks that passed on the branch after a change, by name (the PR says so). */
+  private ciPassed: string[] = [];
+  /** Each change's section of the PR body, by change id. */
+  private readonly sections = new Map<string, string>();
+  /** How many fixer passes each finding has had this run (the first, plus repairs). */
+  private readonly attempts = new Map<string, number>();
+  /** The modes jobs were started in (a job started in Autonomous asks before the PR if that changed). */
+  private readonly startedIn = new Set<Mode>();
   /** A redesign runs alone and first (§9.2): fix jobs wait while it does. */
   private redesigning = false;
-  /** A verified redesign's branch: later fixes start from it, and their PRs stack on it. */
-  private base: string | undefined;
-  private redesignJob: { changeId: string; job: string; request: RedesignRequest } | undefined;
+  private redesignJob: { changeId: string; request: RedesignRequest } | undefined;
   /** Each wording card's change, so "Undo this" can revert just that line. */
   private readonly wording = new Map<string, WordingChange & { changeId: string }>();
-  /** The project's own tests on an untouched worktree, once per starting point (HEAD, redesign). */
-  private readonly testBaselines = new Map<string, Promise<Baseline>>();
-  /** Jobs whose CI checks passed, by check name (for the PR body). */
-  private readonly ciJobs = new Map<string, string[]>();
-  /** Jobs whose change kept the project's tests passing (the PR says so). */
-  private readonly testedJobs = new Set<string>();
   /** What each finding's last attempt read and changed, so Try again starts from there. */
   private readonly lastNotes = new Map<string, string>();
 
@@ -233,14 +301,32 @@ export class FixPipeline {
     });
   }
 
+  /** The run's branch, once a job has made it. */
+  get branch(): string | undefined {
+    return this.run?.branch;
+  }
+
+  /** The run's worktree on `fitts/run-<runId>`, made once; jobs are serial, so no race. */
+  private async ensureRun(): Promise<{ job: string; branch: string }> {
+    if (this.run) return this.run;
+    const runId = this.host.state().runId;
+    const prepared = (await this.site.fix({
+      fn: 'prepare',
+      runId,
+      findingId: 'run',
+      branch: `fitts/run-${slug(runId)}`,
+    })) as { job: string; branch: string; sha?: string };
+    this.run = { job: prepared.job, branch: prepared.branch };
+    this.lastGood = prepared.sha ?? '';
+    return this.run;
+  }
+
   /**
-   * The project's tests before any change, on this fresh worktree: once per starting point, so
-   * later jobs reuse it. Tests that can't run count as "nothing to compare against".
+   * The project's tests and CI checks before any change, on the fresh worktree: once per run.
+   * Tests that can't run count as "nothing to compare against".
    */
-  private baselineTests(job: string): Promise<Baseline> {
-    const key = this.base ?? 'HEAD';
-    let baseline = this.testBaselines.get(key);
-    if (!baseline) {
+  private baselineChecks(job: string): Promise<Baseline> {
+    if (!this.baseline) {
       const tests = (this.site.fix({ fn: 'tests', job }) as Promise<TestRun>).catch(() => ({
         ran: false,
         ok: true,
@@ -250,51 +336,89 @@ export class FixPipeline {
         ran: false,
         checks: [],
       }));
-      baseline = Promise.all([tests, ci]).then(([t, c]) => ({
-        tests: t ?? { ran: false, ok: true, summary: '' },
-        ci: c ?? NO_CI,
+      // A host that can't run them answers oddly or not at all: that's "nothing to compare".
+      this.baseline = Promise.all([tests, ci]).then(([t, c]) => ({
+        tests: t && typeof t === 'object' ? t : { ran: false, ok: true, summary: '' },
+        ci: c && typeof c === 'object' && Array.isArray(c.checks) ? c : NO_CI,
       }));
-      this.testBaselines.set(key, baseline);
     }
-    return baseline;
+    return this.baseline;
+  }
+
+  /** What the fixer is told about the project's checks: each one, and whether it passes today. */
+  private checksFor(baseline: Baseline) {
+    return {
+      checks: baseline.ci.checks.map((c) => ({ name: c.name, passing: c.ok })),
+      tests: baseline.tests.ran && baseline.tests.ok,
+    };
   }
 
   /**
-   * After a change that passed its checks: does the project's own test suite still pass, and
-   * do its CI checks (lint, formatting, types)? Only what passed before the change counts.
+   * After a change that passed its probe check: does the project's own test suite still pass,
+   * and do its CI checks (lint, formatting, types)? Only what passed before the change counts.
    */
-  private async testsAfter(job: string, baseline: Baseline): Promise<string | null> {
+  private async testsAfter(job: string, baseline: Baseline): Promise<Verdict | null> {
     // Tests that already failed (or never ran) before the change can't tell us anything.
     if (baseline.tests.ran && baseline.tests.ok) {
       this.host.emit([{ type: 'now.changed', nowText: 'Running your tests' }]);
       const after = (await this.site.fix({ fn: 'tests', job })) as TestRun;
-      if (!after.ok)
-        return `your tests fail with this change: ${after.summary.split('\n')[0] ?? 'see the test output'}`;
-      this.testedJobs.add(job);
+      if (!after.ok) {
+        const reason = `your tests fail with this change: ${after.summary.split('\n')[0] ?? 'see the test output'}`;
+        return { reason, detail: `your tests fail with this change:\n${after.summary}` };
+      }
+      this.tested = true;
     }
     return this.ciAfter(job, baseline.ci);
   }
 
   /**
    * The project's CI checks after the change: Fitts formats what it changed the project's way,
-   * then a check that passed before and fails now rolls the fix back (it would fail the PR).
+   * then a check that passed before and fails now fails the change (it would fail the PR). The
+   * fixer hears about every broken check, with its output.
    */
-  private async ciAfter(job: string, before: CiRun): Promise<string | null> {
+  private async ciAfter(job: string, before: CiRun): Promise<Verdict | null> {
     if (!before.ran) return null;
     this.host.emit([{ type: 'now.changed', nowText: 'Running your CI checks' }]);
     const after = ((await this.site.fix({ fn: 'ci', job }).catch(() => NO_CI)) ?? NO_CI) as CiRun;
     const passed = new Map(before.checks.map((c) => [c.name, c.ok]));
     const broke = after.checks.filter((c) => !c.ok && passed.get(c.name) !== false);
     if (!broke.length) {
-      if (after.checks.length)
-        this.ciJobs.set(
-          job,
-          after.checks.map((c) => c.name),
-        );
+      if (after.checks.length) this.ciPassed = after.checks.map((c) => c.name);
       return null;
     }
     const first = broke[0];
-    return `your CI check “${first?.name ?? ''}” fails with this change: ${first?.summary.split('\n')[0] ?? 'see its output'}`;
+    const names = broke.map((c) => `“${c.name}”`).join(', ');
+    return {
+      reason: `your CI ${broke.length === 1 ? 'check' : 'checks'} ${names} ${broke.length === 1 ? 'fails' : 'fail'} with this change: ${first?.summary.split('\n')[0] ?? 'see its output'}`,
+      detail: broke
+        .map(
+          (c) => `your CI check “${c.name}” fails with this change:\n${c.summary || '(no output)'}`,
+        )
+        .join('\n\n'),
+    };
+  }
+
+  /** The fixer's run_check: one CI check by name, the tests, or every CI check. */
+  private async runCheck(job: string, name: string): Promise<{ ok: boolean; output: string }> {
+    if (name === 'tests') {
+      const t = (await this.site.fix({ fn: 'tests', job })) as TestRun;
+      if (!t.ran) return { ok: true, output: 'the project has no test script' };
+      return { ok: t.ok, output: `${t.ok ? 'ok' : 'FAIL'}: tests\n${t.summary}`.trim() };
+    }
+    const ci = ((await this.site.fix({ fn: 'ci', job, ...(name ? { only: name } : {}) })) ??
+      NO_CI) as CiRun;
+    if (!ci.ran || !ci.checks.length)
+      return {
+        ok: true,
+        output: name ? `no CI check named "${name}"` : 'the project has no CI checks',
+      };
+    const ok = ci.checks.every((c) => c.ok);
+    return {
+      ok,
+      output: ci.checks
+        .map((c) => `${c.ok ? 'ok' : 'FAIL'}: ${c.name}${c.ok ? '' : `\n${c.summary}`}`)
+        .join('\n'),
+    };
   }
 
   get busy(): boolean {
@@ -316,14 +440,15 @@ export class FixPipeline {
    * Try again (a rolled-back fix) or Redo (an undone one). A retry says in the chat what's
    * different this time, starts from what the last attempt found, and takes the user's note.
    */
-  retry(changeId: string, hint?: string): void {
+  async retry(changeId: string, hint?: string): Promise<void> {
     const c = this.host.state().changes.find((x) => x.id === changeId);
     const f = c && this.host.state().findings.find((x) => c.findingIds.includes(x.id));
-    if (!c || !f || c.status === 'retrying') return;
-    if (c.status === 'undone' && c.prNumber !== undefined) {
-      void this.reopen(c);
+    if (!c || c.status === 'retrying') return;
+    if (c.status === 'undone') {
+      await this.redo(c);
       return;
     }
+    if (!f) return;
     const last = c.reason ? ` Last time ${lowerFirst(c.reason)}.` : '';
     const plan = hint
       ? ` I’ll go by your note: “${hint}”.`
@@ -371,71 +496,98 @@ export class FixPipeline {
     this.host.emit([{ type: created ? 'change.created' : 'change.updated', change: c }]);
   }
 
+  private fixTools(job: string): FixTools {
+    return {
+      read: async (path) => (await this.site.fix({ fn: 'read', job, path })) as string,
+      search: async (text) =>
+        (await this.site.fix({ fn: 'search', job, text })) as {
+          path: string;
+          line: number;
+          text: string;
+        }[],
+      patch: async (path, find, replace) =>
+        (await this.site.fix({ fn: 'patch', job, path, find, replace })) as {
+          ok: boolean;
+          error?: string;
+        },
+      check: (name) => this.runCheck(job, name),
+    };
+  }
+
+  /**
+   * One fix: the fixer, then verification. A change that fails a check stays in the worktree
+   * and the fixer gets it back with what failed, up to MAX_REPAIRS times (Allen's feedback:
+   * a redesign that worked was thrown away over one lint error). Then it passes or is reset.
+   */
   private async job(p: Pending): Promise<void> {
     const f = this.host.state().findings.find((x) => x.id === p.findingId);
     const check = this.checks.get(p.findingId);
     // The redesign may have fixed it while it waited in the queue.
     if (!f || !check || f.status !== 'fixing') return;
     this.host.emit([{ type: 'now.changed', nowText: `Fixing “${f.title}”` }]);
-    const branch = `fitts/${(f.heuristic ?? f.lens).toLowerCase()}-${slug(f.title)}`;
-    let job: string | undefined;
+    this.startedIn.add(p.mode);
     let reason: string | null = null;
     let summary = '';
+    let passed = false;
     try {
-      const prepared = (await this.site.fix({
-        fn: 'prepare',
-        runId: f.runId,
-        findingId: f.id,
-        branch,
-        ...(this.base ? { base: this.base } : {}),
-      })) as { job: string; branch: string };
-      job = prepared.job;
-      const baseline = await this.baselineTests(prepared.job);
-      const tools: FixTools = {
-        read: async (path) =>
-          (await this.site.fix({ fn: 'read', job: prepared.job, path })) as string,
-        search: async (text) =>
-          (await this.site.fix({ fn: 'search', job: prepared.job, text })) as {
-            path: string;
-            line: number;
-            text: string;
-          }[],
-        patch: async (path, find, replace) =>
-          (await this.site.fix({ fn: 'patch', job: prepared.job, path, find, replace })) as {
-            ok: boolean;
-            error?: string;
+      const run = await this.ensureRun();
+      const baseline = await this.baselineChecks(run.job);
+      const tools = this.fixTools(run.job);
+      const budget = fixBudget(f, check);
+      let failure: Verdict | null = null;
+      for (let pass = 0; pass <= MAX_REPAIRS; pass++) {
+        this.attempts.set(f.id, (this.attempts.get(f.id) ?? 0) + 1);
+        const out = await this.fixer(
+          taskFile(f, check, {
+            ...(p.retryReason ? { retryReason: p.retryReason } : {}),
+            ...(this.lastNotes.has(f.id) ? { lastAttempt: this.lastNotes.get(f.id) } : {}),
+            ...(p.hint ? { hint: p.hint } : {}),
+            ...this.checksFor(baseline),
+            ...(failure ? { failure: failure.detail } : {}),
+          }),
+          tools,
+          {
+            findingId: f.id,
+            onStep: (line) => this.host.emit([{ type: 'now.changed', nowText: line }]),
+            ...(pass === 0
+              ? { budget, more: (steps: number) => this.keepGoing(f, steps) }
+              : { budget: repairBudget(budget), hardMax: repairBudget(budget) }),
           },
-      };
-      const out = await this.fixer(
-        taskFile(f, check, p.retryReason, this.lastNotes.get(f.id), p.hint),
-        tools,
-        {
-          findingId: f.id,
-          onStep: (line) => this.host.emit([{ type: 'now.changed', nowText: line }]),
-          budget: fixBudget(f, check),
-          more: (steps) => this.keepGoing(f, steps),
-        },
-      );
-      summary = out.summary;
-      if (out.notes) this.lastNotes.set(f.id, out.notes);
-      if (out.patched === 0) reason = summary ? `no change made: ${summary}` : 'no change made';
-      else {
+        );
+        summary = out.summary || summary;
+        if (out.notes) this.lastNotes.set(f.id, out.notes);
+        if (out.patched === 0) {
+          // A repair that changed nothing leaves the last failure as the reason.
+          reason =
+            pass === 0 ? (summary ? `no change made: ${summary}` : 'no change made') : reason;
+          break;
+        }
         this.host.emit([{ type: 'now.changed', nowText: `Checking the fix for “${f.title}”` }]);
         const route = check.routes[0] ?? f.route;
         const after = (await this.site.fix({
           fn: 'verify',
-          job: prepared.job,
+          job: run.job,
           route,
           hrefs: check.hrefs,
         })) as VerifyResult;
-        reason = judge(check, after, this.host.baseline(route));
-        if (reason === null) reason = await this.testsAfter(prepared.job, baseline);
+        const probe = judge(check, after, this.host.baseline(route));
+        failure = probe ? probeVerdict(probe, after) : await this.testsAfter(run.job, baseline);
+        if (failure === null) {
+          await this.pass(p, f, check, run, summary);
+          passed = true;
+          break;
+        }
+        reason = failure.reason;
+        // The owner said stop: no repair pass behind their back.
+        if (pass >= MAX_REPAIRS || out.end === 'declined') break;
+        this.host.say(
+          `The fix for “${f.title}” didn’t pass yet: ${lowerFirst(reason)}. Fixing that now.`,
+        );
       }
-      if (reason === null) await this.pass(p, f, check, prepared.job, prepared.branch, summary);
     } catch (e) {
       reason = (e as Error).message;
     }
-    if (reason !== null) await this.fail(p, f, job, reason);
+    if (!passed) await this.fail(p, f, reason ?? 'no change made');
   }
 
   /**
@@ -444,30 +596,30 @@ export class FixPipeline {
    */
   private keepGoing(f: Finding, steps: number): Promise<boolean> {
     const mode = this.host.state().mode;
-    if (mode === 'autonomous' || mode === 'dangerous') return Promise.resolve(true);
+    if (isAuto(mode)) return Promise.resolve(true);
     const spent = this.host.costOf(f.id);
     return this.host.ask(
       `“${f.title}” is taking longer than usual: ${steps} steps so far${spent > 0 ? `, $${spent.toFixed(2)}` : ''}. I’m still finding new things. Can I keep going?`,
     );
   }
 
+  /** A verified fix: committed on the run's branch (and pushed, if the run's PR is open). */
   private async pass(
     p: Pending,
     f: Finding,
     check: Check,
-    job: string,
-    branch: string,
+    run: { job: string; branch: string },
     summary: string,
   ) {
-    const diff = diffOf((await this.site.fix({ fn: 'diff', job })) as string);
+    const diff = diffOf((await this.site.fix({ fn: 'diff', job: run.job })) as string);
     const commit = (await this.site.fix({
       fn: 'commit',
-      job,
+      job: run.job,
       message: `${f.title} (Fitts: ${f.heuristic ?? f.lens} sev ${f.severity})`,
-    })) as { ok: boolean; error?: string };
+    })) as { ok: boolean; sha?: string; error?: string };
     if (!commit.ok) throw new Error(`commit failed: ${commit.error ?? ''}`);
+    if (commit.sha) this.lastGood = commit.sha;
     const changeId = p.changeId ?? `${f.runId}-c${this.host.state().changes.length + 1}`;
-    this.jobs.set(changeId, { job, branch, findingId: f.id });
     const costUsd = this.host.costOf(f.id);
     const change: Change = {
       id: changeId,
@@ -477,59 +629,35 @@ export class FixPipeline {
       severity: f.severity,
       costUsd,
       status: 'verified',
-      branch,
+      branch: run.branch,
+      ...(commit.sha ? { sha: commit.sha } : {}),
+      attempts: this.attempts.get(f.id) ?? 1,
+      ...(this.runPr ? { prNumber: this.runPr.number, prUrl: this.runPr.url } : {}),
     };
+    this.sections.set(changeId, fixSection(f, check, summary));
     this.change(change, !p.changeId);
-    this.update(f.id, { status: 'verified', diff, costUsd });
+    this.update(f.id, {
+      status: this.runPr ? 'pr-opened' : 'verified',
+      diff,
+      costUsd,
+      ...(this.runPr ? { prNumber: this.runPr.number, prUrl: this.runPr.url } : {}),
+    });
     if (p.changeId) this.host.say(`That worked: “${f.title}” is fixed and checked.`);
     if (!p.changeId)
       this.host.emit([
         { type: 'chat.item', item: { id: this.host.id(), type: 'fix.result', changeId } },
       ]);
-    await this.openPr(p, change, f, check, job, summary);
+    // A retry after the run ended: the open PR gets the commit.
+    if (this.runPr) await this.site.fix({ fn: 'push', job: run.job }).catch(() => undefined);
+    this.host.settled?.(change);
   }
 
-  /** §9.3: Autonomous and Dangerous open it; an approved fix covers its PR; Plan never fixes. */
-  private async openPr(
-    p: Pending,
-    change: Change,
-    f: Finding,
-    check: Check,
-    job: string,
-    summary: string,
-  ) {
-    const mode = this.host.state().mode;
-    if (mode === 'plan') return;
-    const startedAuto = p.mode === 'autonomous' || p.mode === 'dangerous';
-    const nowAuto = mode === 'autonomous' || mode === 'dangerous';
-    // Ask every action asks before every push; a fix started in Autonomous asks if you've
-    // switched to an ask mode since.
-    if (
-      ((startedAuto && !nowAuto) || mode === 'ask-every') &&
-      !(await this.host.ask(
-        `Can I push ${change.branch ?? 'the fix'} to GitHub and open a pull request for “${f.title}”?`,
-      ))
-    )
-      return;
-    try {
-      const pr = (await this.site.fix({
-        fn: 'prOpen',
-        job,
-        title: f.title,
-        body: prBody(f, check, summary, this.testedJobs.has(job), this.ciJobs.get(job)),
-        ...(this.base ? { base: this.base } : {}),
-      })) as { number: number; url: string };
-      this.change({ ...change, prNumber: pr.number, prUrl: pr.url });
-      this.update(f.id, { status: 'pr-opened', prNumber: pr.number, prUrl: pr.url });
-    } catch (e) {
-      this.host.say(
-        `The fix for “${f.title}” is verified, but I couldn’t open its pull request: ${(e as Error).message}`,
-      );
-    }
-  }
-
-  private async fail(p: Pending, f: Finding, job: string | undefined, reason: string) {
-    if (job) await this.site.fix({ fn: 'discard', job }).catch(() => undefined);
+  /** A failed fix: the worktree goes back to the last good commit, and the change says why. */
+  private async fail(p: Pending, f: Finding, reason: string) {
+    if (this.run)
+      await this.site
+        .fix({ fn: 'reset', job: this.run.job, ...(this.lastGood ? { to: this.lastGood } : {}) })
+        .catch(() => undefined);
     const changeId = p.changeId ?? `${f.runId}-c${this.host.state().changes.length + 1}`;
     const prev = this.host.state().changes.find((c) => c.id === changeId);
     const change: Change = {
@@ -543,6 +671,7 @@ export class FixPipeline {
       costUsd: this.host.costOf(f.id),
       status: 'rolled-back',
       reason,
+      attempts: this.attempts.get(f.id) ?? 1,
     };
     this.change(change, !prev);
     this.update(f.id, { status: 'rolled-back' });
@@ -555,43 +684,163 @@ export class FixPipeline {
       this.host.say(
         `That didn’t work either: ${lowerFirst(reason)}. I put everything back. You can try again with a note for me (where the code lives, what you’d do), or leave it.`,
       );
+    this.host.settled?.(change);
   }
 
-  /** §9.4 undo: close an open PR (deleting its branch), or open a revert PR for a merged one. */
+  /** Waits for the running job: undo and redo need the worktree clean. */
+  private async whenIdle(): Promise<void> {
+    while (this.busy) await new Promise((res) => setTimeout(res, 300));
+  }
+
+  /**
+   * §9.4 undo: a revert commit on the run's branch (pushed if the PR is open), or a revert PR
+   * once the run's PR was merged. A change later ones build on can't go on its own.
+   */
   async undo(changeId: string): Promise<void> {
     const c = this.host.state().changes.find((x) => x.id === changeId);
-    const j = this.jobs.get(changeId);
     if (!c || c.status === 'undone') return;
-    if (c.prNumber !== undefined && j) {
-      const merged = (await this.site.fix({ fn: 'prMerged', pr: c.prNumber })) as boolean;
-      if (merged) {
-        const f = this.host.state().findings.find((x) => x.id === j.findingId);
+    if (c.sha && this.run) {
+      await this.whenIdle();
+      const merged = this.runPr
+        ? ((await this.site.fix({ fn: 'prMerged', pr: this.runPr.number })) as boolean)
+        : false;
+      if (merged && this.runPr) {
         const pr = (await this.site.fix({
           fn: 'revert',
           runId: this.host.state().runId,
-          pr: c.prNumber,
-          branch: j.branch,
+          pr: this.runPr.number,
+          branch: this.run.branch,
           title: `Revert “${c.title}”`,
-          body: `Reverts #${c.prNumber}${f ? ` (${f.title})` : ''}. Undone in Fitts.`,
+          body: `Reverts “${c.title}” from #${this.runPr.number}. Undone in Fitts.`,
+          sha: c.sha,
         })) as { number: number; url: string };
         this.host.say(`Revert PR #${pr.number} opened.`);
+        this.change({ ...c, status: 'undone', revertPrNumber: pr.number });
       } else {
-        await this.site.fix({ fn: 'prClose', pr: c.prNumber, branch: j.branch });
-        this.host.say(`Undone · PR #${c.prNumber} closed.`);
+        const r = (await this.site.fix({ fn: 'revertCommit', job: this.run.job, sha: c.sha })) as {
+          ok: boolean;
+          sha?: string;
+          error?: string;
+        };
+        if (!r.ok) {
+          const all = this.host.state().changes;
+          const later = all
+            .slice(all.indexOf(c) + 1)
+            .filter((x) => x.status === 'verified' && x.sha).length;
+          this.host.say(
+            later > 0
+              ? `I can’t undo “${c.title}” on its own: ${later} later ${later === 1 ? 'change builds' : 'changes build'} on it. Undo ${later === 1 ? 'that one' : 'those'} first.`
+              : `I couldn’t undo “${c.title}”: ${r.error ?? 'the revert didn’t apply'}.`,
+          );
+          return;
+        }
+        if (r.sha) this.lastGood = r.sha;
+        if (this.runPr) {
+          await this.site.fix({ fn: 'push', job: this.run.job });
+          this.host.say(`Undone · pushed to PR #${this.runPr.number}.`);
+        } else this.host.say('Undone.');
+        this.change({ ...c, status: 'undone', ...(r.sha ? { revertSha: r.sha } : {}) });
       }
-    }
-    this.change({ ...c, status: 'undone' });
+    } else this.change({ ...c, status: 'undone' });
     for (const id of c.findingIds) this.update(id, { status: 'undone' });
-    // Fixes from here on start from the project's own HEAD again.
-    if (c.kind === 'redesign') this.base = undefined;
+  }
+
+  /** Redo of an undone change: the revert is reverted, on the same branch. */
+  private async redo(c: Change): Promise<void> {
+    if (!this.run) return;
+    if (!c.revertSha) {
+      this.host.say(
+        c.revertPrNumber !== undefined
+          ? `“${c.title}” is in revert PR #${c.revertPrNumber} now; close that to keep the change.`
+          : `I can’t redo “${c.title}”: it isn’t on the branch.`,
+      );
+      return;
+    }
+    await this.whenIdle();
+    const r = (await this.site.fix({
+      fn: 'revertCommit',
+      job: this.run.job,
+      sha: c.revertSha,
+    })) as { ok: boolean; sha?: string; error?: string };
+    if (!r.ok) {
+      this.host.say(`I couldn’t redo “${c.title}”: ${r.error ?? 'the revert didn’t apply'}.`);
+      return;
+    }
+    if (r.sha) this.lastGood = r.sha;
+    if (this.runPr) await this.site.fix({ fn: 'push', job: this.run.job });
+    const back: Change = { ...c, status: 'verified', ...(r.sha ? { sha: r.sha } : {}) };
+    delete back.revertSha;
+    this.change(back);
+    for (const id of c.findingIds)
+      this.update(id, { status: this.runPr ? 'pr-opened' : 'verified' });
+    this.host.say(this.runPr ? `Redone · pushed to PR #${this.runPr.number}.` : 'Redone.');
+  }
+
+  /**
+   * FINALIZE (§9.3): the run's one PR, with every verified change, per the mode. Plan never;
+   * Ask every action asks, as does a run whose jobs started in Autonomous when the mode has
+   * since changed. Declined, the branch keeps everything and a later ask can still open it.
+   */
+  async finalize(): Promise<{ number: number; url: string } | undefined> {
+    if (this.runPr || !this.run) return this.runPr;
+    const s = this.host.state();
+    const verified = s.changes.filter((c) => c.status === 'verified' && c.kind !== 'wording');
+    if (!verified.length || s.mode === 'plan') return undefined;
+    const startedAuto = [...this.startedIn].some(isAuto);
+    const n = verified.length;
+    if (
+      (s.mode === 'ask-every' || (startedAuto && !isAuto(s.mode))) &&
+      !(await this.host.ask(
+        `Every change is checked on ${this.run.branch}. Can I push it to GitHub and open ${n === 1 ? 'a pull request for it' : `one pull request with all ${n} of them`}?`,
+      ))
+    ) {
+      this.host.say(
+        `${this.run.branch} has everything, checked. Ask me and I’ll open the pull request.`,
+      );
+      return undefined;
+    }
+    try {
+      const pr = (await this.site.fix({
+        fn: 'prOpen',
+        job: this.run.job,
+        title: runPrTitle(verified),
+        body: runPrBody(
+          verified.flatMap((c) => {
+            const section = this.sections.get(c.id);
+            return section ? [section] : [];
+          }),
+          {
+            tested: this.tested,
+            ci: this.ciPassed,
+            redesigned: verified.some((c) => c.kind === 'redesign'),
+          },
+        ),
+      })) as { number: number; url: string };
+      this.runPr = pr;
+      for (const c of s.changes.filter((x) => x.status === 'verified'))
+        this.change({ ...c, prNumber: pr.number, prUrl: pr.url });
+      for (const c of verified)
+        for (const id of c.findingIds) {
+          const f = s.findings.find((x) => x.id === id);
+          if (f?.status === 'verified')
+            this.update(id, { status: 'pr-opened', prNumber: pr.number, prUrl: pr.url });
+        }
+      return pr;
+    } catch (e) {
+      this.host.say(
+        `Every change is on ${this.run.branch}, but I couldn’t open the pull request: ${(e as Error).message}`,
+      );
+      return undefined;
+    }
   }
 
   // ── Redesign (§8.3) ─────────────────────────────────────────────────────────
 
   /**
-   * Applies a direction as one job: it waits for running fixes, then runs alone. Up to two
-   * passes (the second gets the first one's verification failure). On pass: the after shots,
-   * the findings it fixed, a wording card per wording change, and one PR.
+   * Applies a direction as one job on the run's branch: it waits for running fixes, then runs
+   * alone. A pass that fails verification gets back to the redesigner with what failed, up to
+   * MAX_REPAIRS times. On pass: the after shots, the findings it fixed, a wording card per
+   * wording change, the owner's review, and a commit for the run's PR.
    */
   async redesign(r: RedesignRequest): Promise<'verified' | 'rolled-back' | 'unavailable'> {
     const redesigner = this.redesigner;
@@ -599,11 +848,12 @@ export class FixPipeline {
     this.redesigning = true;
     this.emitCount();
     while (this.running > 0) await new Promise((res) => setTimeout(res, 300));
+    this.startedIn.add(this.host.state().mode);
     const name = r.direction.name;
     const steps = [
       `Restyle every page as ${name}`,
       `Check all ${r.routes.length} pages`,
-      'Open the pull request',
+      'Keep it on the branch',
     ];
     const progressId = this.host.id();
     const progress = (done: number): ChatItem => ({
@@ -621,35 +871,33 @@ export class FixPipeline {
       { type: 'now.changed', nowText: `Applying ${name} to every page` },
     ]);
     const changeId = `${this.host.state().runId}-redesign`;
-    let job: string | undefined;
     let reason: string | null = null;
     try {
-      const prepared = (await this.site.fix({
-        fn: 'prepare',
-        runId: this.host.state().runId,
-        findingId: 'redesign',
-        branch: `fitts/redesign-${slug(name)}`,
-      })) as { job: string; branch: string };
-      job = prepared.job;
-      const baseline = await this.baselineTests(prepared.job);
+      const run = await this.ensureRun();
+      const baseline = await this.baselineChecks(run.job);
       // The direction's fonts and three.js go in first, so the redesigner can use them.
       const spec = r.direction.spec;
       r = {
         ...r,
         assets: (await this.site.fix({
           fn: 'assets',
-          job: prepared.job,
+          job: run.job,
           fonts: specFonts(spec).map(({ family, id, weights }) => ({ family, id, weights })),
           three: spec.three,
         })) as AssetsResult,
       };
-      const tools = this.redesignTools(prepared.job);
+      const tools = this.redesignTools(run.job);
       let summary = '';
       const wording: WordingChange[] = [];
       let after: VerifyPagesResult | undefined;
-      for (let pass = 0; pass < 2; pass++) {
+      let failure: Verdict | null = null;
+      for (let pass = 0; pass <= MAX_REPAIRS; pass++) {
         const out = await redesigner(
-          redesignTask({ ...r, ...(reason ? { retryReason: reason } : {}) }),
+          redesignTask({
+            ...r,
+            ...this.checksFor(baseline),
+            ...(failure ? { retryReason: failure.detail } : {}),
+          }),
           tools,
           {
             images: r.images,
@@ -658,8 +906,8 @@ export class FixPipeline {
         );
         summary = out.summary || summary;
         wording.push(...out.wording);
-        if (out.patched === 0 && pass === 0) {
-          reason = summary ? `no change made: ${summary}` : 'no change made';
+        if (out.patched === 0) {
+          if (pass === 0) reason = summary ? `no change made: ${summary}` : 'no change made';
           break;
         }
         this.host.emit([
@@ -668,23 +916,25 @@ export class FixPipeline {
         ]);
         after = (await this.site.fix({
           fn: 'verifyPages',
-          job: prepared.job,
+          job: run.job,
           routes: r.routes,
           ...(r.size ? { size: r.size } : {}),
         })) as VerifyPagesResult;
-        reason =
-          judgeRedesign(after, (route) => this.host.baseline(route)) ??
-          judgeStyle(after, spec, r.assets);
-        // The second pass hears about failing tests too, with what failed.
-        if (reason === null) reason = await this.testsAfter(prepared.job, baseline);
-        if (reason === null) break;
-        if (pass === 0) {
-          this.host.say(`The first pass broke something (${reason}). Fixing that now.`);
+        const pages = judgeRedesign(after, (route) => this.host.baseline(route));
+        const style = pages ? null : judgeStyle(after, spec, r.assets);
+        const probe = pages ?? style;
+        failure = probe
+          ? { reason: probe, detail: probe }
+          : await this.testsAfter(run.job, baseline);
+        reason = failure?.reason ?? null;
+        if (failure === null) break;
+        if (pass < MAX_REPAIRS) {
+          this.host.say(`That didn’t pass yet: ${lowerFirst(reason ?? '')}. Fixing that now.`);
           this.host.emit([{ type: 'chat.item.updated', item: progress(0) }]);
         }
       }
       if (reason === null && after) {
-        await this.redesignPassed(r, changeId, prepared, after, summary, wording, () =>
+        await this.redesignPassed(r, changeId, run, after, summary, wording, () =>
           this.host.emit([{ type: 'chat.item.updated', item: progress(2) }]),
         );
         this.host.emit([{ type: 'chat.item.updated', item: progress(3) }]);
@@ -693,22 +943,24 @@ export class FixPipeline {
       reason = (e as Error).message;
     }
     if (reason !== null) {
-      if (job) await this.site.fix({ fn: 'discard', job }).catch(() => undefined);
-      this.change(
-        {
-          id: changeId,
-          findingIds: [],
-          kind: 'redesign',
-          title: `Redesign: ${name}`,
-          costUsd: this.host.costOf('redesign'),
-          status: 'rolled-back',
-          reason,
-        },
-        true,
-      );
+      if (this.run)
+        await this.site
+          .fix({ fn: 'reset', job: this.run.job, ...(this.lastGood ? { to: this.lastGood } : {}) })
+          .catch(() => undefined);
+      const change: Change = {
+        id: changeId,
+        findingIds: [],
+        kind: 'redesign',
+        title: `Redesign: ${name}`,
+        costUsd: this.host.costOf('redesign'),
+        status: 'rolled-back',
+        reason,
+      };
+      this.change(change, true);
       this.host.say(
         `I rolled the redesign back: ${reason}. Your site is unchanged; I’ll carry on with the other fixes.`,
       );
+      this.host.settled?.(change);
     }
     this.redesigning = false;
     this.emitCount();
@@ -719,19 +971,8 @@ export class FixPipeline {
 
   private redesignTools(job: string): RedesignTools {
     return {
-      read: async (path) => (await this.site.fix({ fn: 'read', job, path })) as string,
+      ...this.fixTools(job),
       list: async (dir) => (await this.site.fix({ fn: 'list', job, dir })) as string[],
-      search: async (text) =>
-        (await this.site.fix({ fn: 'search', job, text })) as {
-          path: string;
-          line: number;
-          text: string;
-        }[],
-      patch: async (path, find, replace) =>
-        (await this.site.fix({ fn: 'patch', job, path, find, replace })) as {
-          ok: boolean;
-          error?: string;
-        },
       write: async (path, content) =>
         (await this.site.fix({ fn: 'write', job, path, content })) as {
           ok: boolean;
@@ -754,7 +995,7 @@ export class FixPipeline {
   private async redesignPassed(
     r: RedesignRequest,
     changeId: string,
-    prepared: { job: string; branch: string },
+    run: { job: string; branch: string },
     after: VerifyPagesResult,
     summary: string,
     wording: WordingChange[],
@@ -765,13 +1006,14 @@ export class FixPipeline {
     const pages = await this.afterShots(after, r);
     const commit = (await this.site.fix({
       fn: 'commit',
-      job: prepared.job,
+      job: run.job,
       message: `Redesign: ${r.direction.name} (Fitts: look and feel)`,
-    })) as { ok: boolean; error?: string };
+    })) as { ok: boolean; sha?: string; error?: string };
     if (!commit.ok) throw new Error(`commit failed: ${commit.error ?? ''}`);
-    this.redesignJob = { changeId, job: prepared.job, request: r };
-    this.jobs.set(changeId, { job: prepared.job, branch: prepared.branch, findingId: 'redesign' });
-    this.base = prepared.branch;
+    // "Start over" in the review goes back to before the redesign.
+    const before = this.lastGood;
+    if (commit.sha) this.lastGood = commit.sha;
+    this.redesignJob = { changeId, request: r };
     // Findings it fixed leave the queue and count as verified by the redesign.
     for (let i = this.queue.length - 1; i >= 0; i--)
       if (fixedIds.includes(this.queue[i]?.findingId ?? '')) this.queue.splice(i, 1);
@@ -783,7 +1025,8 @@ export class FixPipeline {
       title: `Redesign: ${r.direction.name}`,
       costUsd: this.host.costOf('redesign'),
       status: 'verified',
-      branch: prepared.branch,
+      branch: run.branch,
+      ...(commit.sha ? { sha: commit.sha } : {}),
       pages,
     };
     this.change(change, true);
@@ -802,7 +1045,7 @@ export class FixPipeline {
             title: `“${w.from}” → “${w.to}”`,
             costUsd: 0,
             status: 'verified',
-            branch: prepared.branch,
+            branch: run.branch,
           },
         },
         { type: 'chat.item', item: { id: itemId, type: 'wording', from: w.from, to: w.to } },
@@ -810,7 +1053,7 @@ export class FixPipeline {
     });
     if (events.length) this.host.emit(events);
     onCommitted();
-    // The owner reviews it before the PR opens (§2.4); "Start over" rolls it back.
+    // The owner reviews it before it joins the run's PR (§2.4); "Start over" rolls it back.
     const verdict = (await this.host.review?.(changeId, (text) => this.adjust(text, true))) ?? 'ok';
     if (verdict === 'restart') {
       for (const id of fixedIds) this.update(id, { status: 'open' });
@@ -820,47 +1063,43 @@ export class FixPipeline {
       }
       this.wording.clear();
       this.redesignJob = undefined;
+      this.lastGood = before;
       throw new Error('you asked to start over');
     }
     const fixed = s.findings.filter((f) => fixedIds.includes(f.id));
-    let prNote = '';
-    try {
-      const pr = (await this.site.fix({
-        fn: 'prOpen',
-        job: prepared.job,
-        title: `Redesign: ${r.direction.name}`,
-        body: redesignPrBody({
-          ...r,
-          summary,
-          wording,
-          fixed,
-          tested: this.testedJobs.has(prepared.job),
-          ci: this.ciJobs.get(prepared.job) ?? [],
-        }),
-      })) as { number: number; url: string };
-      this.change({ ...change, prNumber: pr.number, prUrl: pr.url });
-      for (const id of fixedIds)
-        this.update(id, { status: 'pr-opened', prNumber: pr.number, prUrl: pr.url });
-      prNote = ` Pull request #${pr.number} is open.`;
-    } catch (e) {
-      prNote = ` I couldn’t open its pull request: ${(e as Error).message}`;
-    }
+    this.sections.set(
+      changeId,
+      redesignSection({
+        ...r,
+        summary,
+        wording: wording.filter((w) => this.stillWorded(w)),
+        fixed,
+      }),
+    );
     this.host.say(
       `Your site now uses ${r.direction.name}, and every page still works.` +
         (fixed.length ? ` The new look also fixed ${fixed.length} of the problems I found.` : '') +
-        prNote,
+        ' It goes in the pull request when I’m done.',
     );
+    this.host.settled?.(this.host.state().changes.find((c) => c.id === changeId) ?? change);
   }
 
-  /** "Undo this" on one wording card: just that line goes back, on the redesign's branch. */
+  /** A wording change the owner hasn't undone. */
+  private stillWorded(w: WordingChange): boolean {
+    const entry = [...this.wording.values()].find((x) => x.from === w.from && x.to === w.to);
+    const c = entry && this.host.state().changes.find((x) => x.id === entry.changeId);
+    return c?.status !== 'undone';
+  }
+
+  /** "Undo this" on one wording card: just that line goes back, on the run's branch. */
   async decideWording(itemId: string, decision: 'keep' | 'undo'): Promise<boolean> {
     const w = this.wording.get(itemId);
     const rj = this.redesignJob;
-    if (!w || !rj) return false;
+    if (!w || !rj || !this.run) return false;
     if (decision === 'keep') return true;
     const back = (await this.site.fix({
       fn: 'patch',
-      job: rj.job,
+      job: this.run.job,
       path: w.path,
       find: w.to,
       replace: w.from,
@@ -868,12 +1107,12 @@ export class FixPipeline {
     if (!back.ok) throw new Error(back.error ?? 'the text changed since');
     const commit = (await this.site.fix({
       fn: 'commit',
-      job: rj.job,
+      job: this.run.job,
       message: `Keep the original wording “${w.from}” (Fitts)`,
-    })) as { ok: boolean; error?: string };
+    })) as { ok: boolean; sha?: string; error?: string };
     if (!commit.ok) throw new Error(`commit failed: ${commit.error ?? ''}`);
-    if (this.host.state().changes.find((c) => c.id === rj.changeId)?.prNumber !== undefined)
-      await this.site.fix({ fn: 'push', job: rj.job });
+    if (commit.sha) this.lastGood = commit.sha;
+    if (this.runPr) await this.site.fix({ fn: 'push', job: this.run.job });
     const c = this.host.state().changes.find((x) => x.id === w.changeId);
     if (c) this.change({ ...c, status: 'undone' });
     return true;
@@ -892,7 +1131,8 @@ export class FixPipeline {
   async adjust(text: string, inReview = false): Promise<void> {
     const rj = this.redesignJob;
     const redesigner = this.redesigner;
-    if (!rj || !redesigner || (!inReview && !this.canAdjust)) return;
+    const run = this.run;
+    if (!rj || !redesigner || !run || (!inReview && !this.canAdjust)) return;
     this.redesigning = true;
     this.emitCount();
     this.host.emit([
@@ -903,7 +1143,7 @@ export class FixPipeline {
     try {
       const out = await redesigner(
         redesignTask({ ...r, adjust: text }),
-        this.redesignTools(rj.job),
+        this.redesignTools(run.job),
         {
           images: r.images,
           onStep: (line) => this.host.emit([{ type: 'now.changed', nowText: line }]),
@@ -915,34 +1155,35 @@ export class FixPipeline {
       }
       const after = (await this.site.fix({
         fn: 'verifyPages',
-        job: rj.job,
+        job: run.job,
         routes: r.routes,
         ...(r.size ? { size: r.size } : {}),
       })) as VerifyPagesResult;
       let reason = judgeRedesign(after, (route) => this.host.baseline(route));
-      const baseline: Baseline = await (this.testBaselines.get('HEAD') ??
+      const baseline: Baseline = await (this.baseline ??
         Promise.resolve({ tests: { ran: false, ok: true, summary: '' }, ci: NO_CI }));
-      if (reason === null) reason = await this.testsAfter(rj.job, baseline);
+      if (reason === null) reason = (await this.testsAfter(run.job, baseline))?.reason ?? null;
       if (reason !== null) {
-        await this.site.fix({ fn: 'reset', job: rj.job });
+        await this.site.fix({ fn: 'reset', job: run.job });
         this.host.say(`I undid that adjustment: ${reason}. The redesign is as it was.`);
         return;
       }
       const commit = (await this.site.fix({
         fn: 'commit',
-        job: rj.job,
+        job: run.job,
         message: `Adjust the redesign: ${text.slice(0, 60)} (Fitts)`,
-      })) as { ok: boolean; error?: string };
+      })) as { ok: boolean; sha?: string; error?: string };
       if (!commit.ok) throw new Error(`commit failed: ${commit.error ?? ''}`);
-      const c = this.host.state().changes.find((x) => x.id === rj.changeId);
-      if (c?.prNumber !== undefined) await this.site.fix({ fn: 'push', job: rj.job });
+      if (commit.sha) this.lastGood = commit.sha;
+      if (this.runPr) await this.site.fix({ fn: 'push', job: run.job });
       const pages = await this.afterShots(after, r);
+      const c = this.host.state().changes.find((x) => x.id === rj.changeId);
       if (c) this.change({ ...c, pages, costUsd: this.host.costOf('redesign') });
       this.host.say(
-        `Done: ${out.summary || 'adjusted'}${c?.prNumber !== undefined ? ` The pull request #${c.prNumber} is updated.` : ''}`,
+        `Done: ${out.summary || 'adjusted'}${this.runPr ? ` The pull request #${this.runPr.number} is updated.` : ''}`,
       );
     } catch (e) {
-      await this.site.fix({ fn: 'reset', job: rj.job }).catch(() => undefined);
+      await this.site.fix({ fn: 'reset', job: run.job }).catch(() => undefined);
       this.host.say(`I couldn’t adjust it: ${(e as Error).message}`);
     } finally {
       // In review the redesign is still running; it ends (and resets these) when it's done.
@@ -954,42 +1195,5 @@ export class FixPipeline {
         if (!this.busy) this.host.idle();
       }
     }
-  }
-
-  /** Redo of an undone change: its branch is still here, so it gets a new PR. */
-  private async reopen(c: Change): Promise<void> {
-    const j = this.jobs.get(c.id);
-    const f = this.host.state().findings.find((x) => x.id === j?.findingId);
-    if (!j || !f) return;
-    const check = this.checks.get(f.id);
-    try {
-      const pr = (await this.site.fix({
-        fn: 'prOpen',
-        job: j.job,
-        title: f.title,
-        body: prBody(f, check, ''),
-      })) as { number: number; url: string };
-      this.change({ ...c, status: 'verified', prNumber: pr.number, prUrl: pr.url });
-      this.update(f.id, { status: 'pr-opened', prNumber: pr.number, prUrl: pr.url });
-    } catch (e) {
-      this.host.say(`I couldn’t reopen that pull request: ${(e as Error).message}`);
-    }
-  }
-
-  /** FINALIZE: verified branches merged into `fitts/preview-<runId>` (§9.4). */
-  async preview(): Promise<string | undefined> {
-    const branches = this.host
-      .state()
-      .changes.filter((c) => c.status === 'verified' && c.branch)
-      .map((c) => c.branch ?? '');
-    if (branches.length === 0) return undefined;
-    const res = (await this.site.fix({
-      fn: 'preview',
-      runId: this.host.state().runId,
-      branches,
-    })) as {
-      branch: string;
-    };
-    return res.branch;
   }
 }

@@ -44,6 +44,10 @@ const TOOLS = [
   tool('dismiss', 'The owner says what they point at is not a problem.', {
     ref: { type: 'string' },
   }),
+  tool('retry_fix', 'Try a rolled-back fix again, once, with a hint for the fixer.', {
+    findingId: { type: 'string', description: 'The finding, from `changes`.' },
+    hint: { type: 'string', description: 'What to do differently this time, or empty.' },
+  }),
 ];
 
 const NAMES = new Set<string>(TOOLS.map((t) => t.name));
@@ -57,6 +61,8 @@ export function parseDecision(name: string, args: string): Decision {
     paths?: string[];
     wish?: string;
     ref?: string;
+    findingId?: string;
+    hint?: string;
   };
   return {
     ability: name as AbilityName,
@@ -65,6 +71,8 @@ export function parseDecision(name: string, args: string): Decision {
     ...(a.paths?.length ? { paths: a.paths.slice(0, 20) } : {}),
     ...(a.wish?.trim() ? { wish: a.wish.trim().slice(0, 300) } : {}),
     ...(a.ref?.trim() ? { ref: a.ref.trim() } : {}),
+    ...(a.findingId?.trim() ? { findingId: a.findingId.trim() } : {}),
+    ...(a.hint?.trim() ? { hint: a.hint.trim().slice(0, 300) } : {}),
   };
 }
 

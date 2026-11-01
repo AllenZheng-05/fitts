@@ -16,7 +16,9 @@ export type AbilityName =
   | 'stop_exploring'
   | 'new_look'
   | 'revise_looks'
-  | 'dismiss';
+  | 'dismiss'
+  // A rolled-back fix, tried again with a hint (once per finding, §1.6).
+  | 'retry_fix';
 
 export interface Decision {
   ability: AbilityName;
@@ -28,6 +30,9 @@ export interface Decision {
   wish?: string;
   /** `dismiss`: the element the owner pointed at. */
   ref?: string;
+  /** `retry_fix`: the finding whose fix was rolled back, and what to do differently. */
+  findingId?: string;
+  hint?: string;
   /** A line Fitts says as it starts (§1.3): why it chose this, when that's worth saying. */
   say?: string;
 }
@@ -58,6 +63,16 @@ export interface Situation {
   findings: { total: number; bySeverity: Record<number, number>; worst: string[] };
   /** Which abilities have already run to the end (each of these runs once). */
   ran: Partial<Record<AbilityName, boolean>>;
+  /** The last changes (newest last): verified, rolled back with why, undone. */
+  changes: {
+    id: string;
+    findingId?: string;
+    title: string;
+    status: 'verified' | 'rolled-back' | 'undone' | 'retrying';
+    reason?: string;
+    /** Fixer passes so far: the first, plus repairs after a failed check. */
+    attempts?: number;
+  }[];
   /** The last abilities and their outcomes, newest last. */
   recent: Outcome[];
   /** The owner's messages since the last decision, oldest first. */

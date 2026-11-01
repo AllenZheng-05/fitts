@@ -426,7 +426,9 @@ const redesignable = () => {
     fix: (call) => {
       calls.push(call.fn);
       if (call.fn === 'available') return Promise.resolve({ ok: true });
-      if (call.fn === 'prepare') return Promise.resolve({ job: 'j', branch: call.branch });
+      if (call.fn === 'prepare')
+        return Promise.resolve({ job: 'j', branch: call.branch, sha: 'base' });
+      if (call.fn === 'commit') return Promise.resolve({ ok: true, sha: 'c1' });
       if (call.fn === 'verifyPages')
         return Promise.resolve({
           ok: true,
@@ -1187,12 +1189,12 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
       () => Boolean(state()?.chat.find((c) => c.type === 'directions' && c.round === 2)),
       10_000,
     );
-    expect(r.calls).toContain('discard');
+    expect(r.calls).toContain('reset');
     expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBeUndefined();
     run.dispose();
   });
 
-  it('Autonomous opens the PR and leaves the review open with “Send it back”', async () => {
+  it('Autonomous keeps going, leaves the review open with “Send it back”, and opens the PR at the end', async () => {
     const r = redesignable();
     const { run, state } = setup({
       site: r.site,
@@ -1204,7 +1206,8 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
     });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.changes.find((c) => c.kind === 'redesign')?.prNumber === 7, 10_000);
+    await until(() => state()?.phase === 'done', 10_000);
+    expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBe(7);
     expect(review(state())).toMatchObject({ autonomous: true });
     run.answer(review(state())?.id ?? '', 'back');
     expect(review(state())?.answer).toBe('back');
@@ -1279,6 +1282,75 @@ describe('fixing what was asked (Allen’s feedback, round 5)', () => {
     expect(last?.type === 'fitts.message' && last.text).toContain(
       'I switched the view to iPhone · 390×844',
     );
+    run.dispose();
+  });
+});
+
+describe('a rolled-back fix wakes the decider (Allen’s feedback, run 1)', () => {
+  it('the decider sees the rollback, retries once with a hint, and a second try is refused', async () => {
+    const r = redesignable();
+    r.site.probes = () =>
+      Promise.resolve([
+        {
+          probe: 'target-size' as const,
+          pass: false,
+          items: [{ ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' }],
+        },
+      ]);
+    const tasks: string[] = [];
+    const fixer: RunDeps['fixer'] = (task) => {
+      tasks.push(task);
+      return Promise.resolve({ patched: 0, summary: 'no safe fix in CSS' });
+    };
+    const situations: Situation[] = [];
+    let retries = 0;
+    const { run, state } = setup({
+      site: r.site,
+      fixer,
+      redesigner: r.redesigner,
+      mode: 'autonomous',
+      decider: {
+        next: (s: Situation) => {
+          situations.push(s);
+          const rolled = s.changes.find((c) => c.status === 'rolled-back');
+          if (rolled && retries < 2) {
+            retries += 1;
+            return Promise.resolve<Decision>({
+              ability: 'retry_fix',
+              findingId: rolled.findingId ?? '',
+              hint: 'pad the link, not the icon',
+            });
+          }
+          return Promise.resolve<Decision>({ ability: scriptedNext(s) });
+        },
+      },
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => state()?.phase === 'done', 10_000);
+    // The decider saw the rollback, with its reason and how many passes the fixer took.
+    expect(
+      situations.some((s) =>
+        s.changes.some(
+          (c) =>
+            c.status === 'rolled-back' &&
+            c.reason === 'no change made: no safe fix in CSS' &&
+            c.attempts === 1,
+        ),
+      ),
+    ).toBe(true);
+    // One retry, with the hint; the second was refused, so the fixer ran twice, not three times.
+    expect(retries).toBe(2);
+    expect(tasks).toHaveLength(2);
+    expect(tasks[1]).toContain('pad the link, not the icon');
+    expect(
+      state()?.chat.some((c) => c.type === 'fitts.message' && c.text.startsWith('Trying “')),
+    ).toBe(true);
+    expect(state()?.changes.filter((c) => c.kind === 'fix')).toHaveLength(1);
+    expect(state()?.changes.find((c) => c.kind === 'fix')).toMatchObject({
+      status: 'rolled-back',
+      attempts: 2,
+    });
     run.dispose();
   });
 });

@@ -30,6 +30,12 @@ describe('the decision step (SPEC-phase3 §1.2)', () => {
     expect(parseDecision('explore', JSON.stringify({ route: '', say: '' }))).toEqual({
       ability: 'explore',
     });
+    expect(
+      parseDecision(
+        'retry_fix',
+        JSON.stringify({ findingId: 'run-1-f1', hint: ' pad the link instead ', say: '' }),
+      ),
+    ).toEqual({ ability: 'retry_fix', findingId: 'run-1-f1', hint: 'pad the link instead' });
   });
 
   it('an unknown tool, or no tool call, throws (the run falls back)', async () => {
@@ -52,7 +58,7 @@ describe('the decision step (SPEC-phase3 §1.2)', () => {
     expect(d).toEqual({ ability: 'explore', route: '/checkout', say: 'Opening checkout.' });
     expect(JSON.stringify(c.requests[0]?.input)).toContain('skip the blog');
     expect(c.requests[0]?.instructions).toContain('The owner steers');
-    expect(c.requests[0]?.tools).toHaveLength(13);
+    expect(c.requests[0]?.tools).toHaveLength(14);
   });
 });
 

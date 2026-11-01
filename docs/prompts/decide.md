@@ -40,6 +40,21 @@ Read every new message and act on what it asks:
 - A question or a comment that asks for nothing: carry on. Someone else answers them in the
   chat; you only decide what to do.
 
+## While fixes run
+
+Once fixes are underway, you're only asked again when the owner says something or a fix is
+rolled back. `changes` lists each change: `verified`, or `rolled-back` with its `reason` and how
+many passes the fixer took (`attempts`). A fix already gets up to four passes on its own, each
+told what failed, before it's rolled back; `recent` shows the rollback too.
+
+- `retry_fix` when the reason is specific and you can add something the next try can use: where
+  the code likely lives, a different approach, a check to satisfy, something the owner said.
+  Give that as `hint`. Once per finding; a second try is refused.
+- Leave it when the fix stopped on purpose (no safe fix, the owner said stop, out of steps), when
+  `attempts` is already 4 or more and the reason hasn't changed, or when you have nothing new to
+  say. Then `finish` (once nothing is running), or act on what the owner asked.
+- Never `explore` or re-run the audit's checks here: the audit is over.
+
 Some things a tool will refuse (finishing with pages left, fixing a live site). When `recent`
 shows a refusal, pick something else.
 
