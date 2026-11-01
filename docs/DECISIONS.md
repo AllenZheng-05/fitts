@@ -2454,3 +2454,12 @@ Allen's update (NEEDS-ALLEN).
   device.
 - Checked by e2e (24 specs open the panel) and a screenshot of Done; the zoom itself only gets
   real shots in a real run, so that part is unit-tested on the data, not looked at.
+
+## Phase 3 — closing the window quits Fitts
+
+- Fitts quit on `window-all-closed`, but the site mirror (and its tabs) are hidden offscreen
+  windows, so closing the app window left Fitts running unseen with its dev servers, and the
+  packaged app's folder locked. Now the app window is the app: when it closes, the site
+  windows and dev servers close and the app quits (on macOS it stays in the Dock, and
+  `activate` reopens the window when it's gone rather than when no window at all is left).
+  An e2e test closes the app window with demo/chat's mirror open and checks the app exits.
