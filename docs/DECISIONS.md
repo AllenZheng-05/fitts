@@ -2380,3 +2380,17 @@ Allen's update (NEEDS-ALLEN).
 - **The health check waits 4s, not 1.5s,** before a local dev server's answer counts as a
   miss. Under load Vite answers slowly without being down, and three slow answers in a row
   were what put a false site-down card in the coverage-gate e2e test.
+
+## Phase 3 — the Q1 benchmark
+
+- **`bench:chat` with the Spark decider: 21 of 25 planted issues (84%), $0.06.** Phase 2's
+  last run found 80%. Missed: the form that clears on a validation error, the instant delete,
+  three date formats, the Contacts empty state. Four false positives at severity 2 or higher
+  (Phase 2's P6 target was at most 2): worth tuning.
+- **The bench waited forever since P9.** In test builds demo/chat is fixed in its mirror repo,
+  so after the review the run asks to fix what it found and waits; the bench only waited for
+  the run to end. It now also stops at that approval card. Scored from the run's own event log,
+  not a second paid run.
+- **`pnpm bench:chat` runs every bench file**, and only `audit.bench.ts` skips itself, so after
+  chat failed Playwright went on to p10 (real SAM calls, about $0.06) until I stopped it. Run
+  one bench with `playwright test -c playwright.bench.config.ts tests/bench/chat.bench.ts`.

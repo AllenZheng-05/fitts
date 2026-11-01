@@ -70,8 +70,14 @@ test('bench:chat', async () => {
             }
           ).fitts.engine;
           return (await engine.states())['demo-chat'];
-        })) as { phase: string; chat: { stateKind?: string }[] } | undefined;
-        return s?.phase === 'done' || Boolean(s?.chat.some((c) => c.stateKind === 'nothing-found'));
+        })) as { phase: string; waitingFor?: string; chat: { stateKind?: string }[] } | undefined;
+        // Findings are in once the run ends, finds nothing, or asks to fix what it found (the
+        // test build fixes demo/chat in its mirror repo, so the approval card comes first).
+        return (
+          s?.phase === 'done' ||
+          s?.waitingFor === 'approval' ||
+          Boolean(s?.chat.some((c) => c.stateKind === 'nothing-found'))
+        );
       },
       { timeout: 25 * 60_000, intervals: [5000] },
     )
