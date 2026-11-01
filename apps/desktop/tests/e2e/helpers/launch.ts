@@ -47,6 +47,9 @@ export async function launchApp({
     args: [resolve(__dirname, '../../../out/main/index.js'), ...args],
     env,
   });
+  // A test may quit the app itself (closing its window); then there's nothing to close.
+  let exited = false;
+  app.on('close', () => (exited = true));
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
 
@@ -55,7 +58,7 @@ export async function launchApp({
     page,
     userData: dir,
     close: async ({ keepUserData = false } = {}) => {
-      await app.close();
+      if (!exited) await app.close();
       if (!keepUserData) rmSync(dir, { recursive: true, force: true });
     },
   };

@@ -1,5 +1,5 @@
 import { IPC } from '@fitts/schema';
-import { app, BrowserWindow, ipcMain, session } from 'electron';
+import { app, ipcMain, session } from 'electron';
 import { join } from 'node:path';
 import { handleAssets, registerAssetScheme } from './asset-protocol';
 import { registerBridge } from './bridge';
@@ -110,10 +110,20 @@ void app.whenReady().then(() => {
   app.on('will-quit', () => sites.closeAll());
   process.on('exit', () => sites.closeAll());
   buildAppMenu();
-  createMainWindow();
-
+  // The app window is the app: closing it ends Fitts (Windows, Linux) or leaves it in the Dock
+  // (macOS), with its site windows and dev servers gone either way. Those are hidden windows,
+  // so waiting for "every window closed" kept Fitts running unseen after its window closed.
+  const open = () => {
+    const win = createMainWindow();
+    win.on('closed', () => {
+      sites.closeAll();
+      if (process.platform !== 'darwin') app.quit();
+    });
+    return win;
+  };
+  let main = open();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (main.isDestroyed()) main = open();
   });
 });
 

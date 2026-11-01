@@ -105,3 +105,21 @@ test('a link off the site opens in a tab beside it; the site’s tab stays and c
     { timeout: 20_000 },
   );
 });
+
+test('closing the app window quits Fitts, even with the site mirror running', async () => {
+  test.setTimeout(120_000);
+  const { page, app } = launched;
+  await page.getByLabel('Meta Model API key').fill('meta-key-12345');
+  await expect(page.getByRole('status').filter({ hasText: 'Works' })).toBeVisible();
+  await page.getByRole('button', { name: 'Browse' }).click();
+  await page.getByRole('button', { name: 'Open my project' }).click();
+  await expect(address(page)).toHaveValue(`localhost:${PORT}/compose`, { timeout: 60_000 });
+  const quit = new Promise<void>((r) => app.process().once('exit', () => r()));
+  // The site's window is open (hidden); closing the app window must still end the app.
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()
+      .find((w) => !w.webContents.isOffscreen())
+      ?.close();
+  });
+  await expect(quit).resolves.toBeUndefined();
+});
