@@ -554,7 +554,7 @@ export interface Finding {
 export interface Change {
   id: string;
   findingIds: string[];
-  kind: 'fix' | 'batch' | 'redesign' | 'wording';
+  kind: 'fix' | 'redesign' | 'wording';
   title: string;
   severity?: Severity;
   prNumber?: number;
@@ -565,6 +565,13 @@ export interface Change {
   /** SPEC-phase2 §12.2: the `fitts/…` branch and the PR's URL. */
   branch?: string;
   prUrl?: string;
+  /** Its commit on the run's branch, and the commit that undid it (§9.4). */
+  sha?: string;
+  revertSha?: string;
+  /** Undone after the run's PR was merged: the revert PR. */
+  revertPrNumber?: number;
+  /** How many passes the fixer took: the first, plus repairs after a failed check (§9.2). */
+  attempts?: number;
   /** A redesign's pages (§8.3): each route's shot before, and the verifier's shot after. */
   pages?: { route: string; before?: string; after: string }[];
 }

@@ -84,7 +84,10 @@ export type SiteOp =
 /** Calls to main's FixHost (§9): worktrees, files inside them, verification, git and PRs. */
 export type FixCall =
   | { fn: 'available' }
-  /** `base`: the branch to start from (later fixes build on a verified redesign, §9.2). */
+  /**
+   * A worktree on a new `fitts/` branch; `base`: the branch to start from. Returns its job id,
+   * the branch's final name and the commit it starts from (`sha`).
+   */
   | { fn: 'prepare'; runId: string; findingId: string; branch: string; base?: string }
   | { fn: 'read'; job: string; path: string }
   | { fn: 'list'; job: string; dir: string }
@@ -103,12 +106,17 @@ export type FixCall =
   /** A redesign's fonts and three.js, copied into the job's static folder (AssetsResult). */
   | { fn: 'assets'; job: string; fonts: FontAsk[]; three: boolean }
   | { fn: 'commit'; job: string; message: string }
-  /** Drops a job's uncommitted edits, back to its last commit (a failed adjustment). */
-  | { fn: 'reset'; job: string }
+  /** Drops a job's uncommitted edits, back to its last commit or to `to` (a failed fix). */
+  | { fn: 'reset'; job: string; to?: string }
   /** Runs the project's own test script in the job's worktree (TestRun). */
   | { fn: 'tests'; job: string }
-  /** Formats the job's changed files the project's way, then runs its CI checks (CiRun). */
-  | { fn: 'ci'; job: string }
+  /**
+   * Formats the job's changed files the project's way, then runs its CI checks (CiRun); `only`
+   * runs the one check with that name (the fixer's run_check).
+   */
+  | { fn: 'ci'; job: string; only?: string }
+  /** `git revert` of one commit on the job's branch (undo on a shared branch); never forced. */
+  | { fn: 'revertCommit'; job: string; sha: string }
   | { fn: 'discard'; job: string }
   /** `base`: open it against that branch instead of the default (a stacked PR). */
   | { fn: 'prOpen'; job: string; title: string; body: string; base?: string }
@@ -116,7 +124,16 @@ export type FixCall =
   | { fn: 'push'; job: string }
   | { fn: 'prClose'; pr: number; branch: string }
   | { fn: 'prMerged'; pr: number }
-  | { fn: 'revert'; runId: string; pr: number; branch: string; title: string; body: string }
+  /** A revert branch and PR for a merged PR: reverts `sha` (the branch's tip if absent). */
+  | {
+      fn: 'revert';
+      runId: string;
+      pr: number;
+      branch: string;
+      title: string;
+      body: string;
+      sha?: string;
+    }
   | { fn: 'preview'; runId: string; branches: string[] };
 
 /** A font a redesign needs, by family (and its Fontsource id when the library knows it). */

@@ -75,11 +75,12 @@ describe('FixHost', () => {
       runId: 'run-1',
       findingId: 'f1',
       branch: 'fitts/h7-tap-target',
-    })) as { job: string; branch: string };
+    })) as { job: string; branch: string; sha: string };
     job = r.job;
     branch = r.branch;
     expect(job).toBe('run-1/f1');
     expect(branch).toBe('fitts/h7-tap-target');
+    expect(r.sha).toBe(git(root, 'rev-parse', 'HEAD'));
     expect(existsSync(join(root, '.fitts-worktrees', 'run-1', 'f1', 'src', 'styles.css'))).toBe(
       true,
     );
@@ -166,6 +167,7 @@ describe('FixHost', () => {
       branch,
       title: 'Revert',
       body: 'b',
+      sha: git(join(root, '.fitts-worktrees', 'run-1', 'f1'), 'rev-parse', 'HEAD'),
     });
     expect(revert).toEqual({ number: 2, url: 'dry-run://pr/2' });
     const reverted = readFileSync(
@@ -217,12 +219,65 @@ describe('FixHost', () => {
     expect(
       await host.call('app', { fn: 'write', job: r.job, path: 'run.exe', content: 'x' }),
     ).toEqual({ ok: false, error: "run.exe isn't a source file" });
-    await host.call('app', { fn: 'commit', job: r.job, message: 'Redesign: Quiet stone' });
+    const redesign = (await host.call('app', {
+      fn: 'commit',
+      job: r.job,
+      message: 'Redesign: Quiet stone',
+    })) as { sha: string };
     // An adjustment that fails its check is dropped, back to the redesign's commit.
     await host.call('app', { fn: 'write', job: r.job, path: 'src/extra.css', content: 'x' });
     await host.call('app', { fn: 'reset', job: r.job });
     expect(existsSync(join(dir, 'src', 'extra.css'))).toBe(false);
     expect(existsSync(join(dir, 'src', 'themes', 'quiet', 'theme.css'))).toBe(true);
+    // A failed fix on a shared branch goes back to the last good commit, commits and all.
+    await host.call('app', { fn: 'write', job: r.job, path: 'src/bad.css', content: 'x' });
+    await host.call('app', { fn: 'commit', job: r.job, message: 'bad' });
+    await host.call('app', { fn: 'reset', job: r.job, to: redesign.sha });
+    expect(existsSync(join(dir, 'src', 'bad.css'))).toBe(false);
+    expect(git(dir, 'rev-parse', 'HEAD')).toBe(redesign.sha);
+  });
+
+  it('undo on a shared branch reverts one commit; a revert that conflicts changes nothing', async () => {
+    const r = (await host.call('app', {
+      fn: 'prepare',
+      runId: 'run-1',
+      findingId: 'run',
+      branch: 'fitts/run-run-1',
+    })) as { job: string };
+    const dir = join(root, '.fitts-worktrees', 'run-1', 'run');
+    await host.call('app', { fn: 'write', job: r.job, path: 'src/a.css', content: 'a\n' });
+    const a = (await host.call('app', { fn: 'commit', job: r.job, message: 'A' })) as {
+      sha: string;
+    };
+    await host.call('app', { fn: 'write', job: r.job, path: 'src/b.css', content: 'b\n' });
+    const b = (await host.call('app', { fn: 'commit', job: r.job, message: 'B' })) as {
+      sha: string;
+    };
+    // The middle commit goes; the later one stays.
+    const undone = (await host.call('app', { fn: 'revertCommit', job: r.job, sha: a.sha })) as {
+      ok: boolean;
+      sha?: string;
+    };
+    expect(undone.ok).toBe(true);
+    expect(existsSync(join(dir, 'src', 'a.css'))).toBe(false);
+    expect(existsSync(join(dir, 'src', 'b.css'))).toBe(true);
+    expect(git(dir, 'log', '-1', '--format=%s')).toBe('Revert "A"');
+    // Redo: revert the revert.
+    const redone = (await host.call('app', {
+      fn: 'revertCommit',
+      job: r.job,
+      sha: undone.sha ?? '',
+    })) as { ok: boolean };
+    expect(redone.ok).toBe(true);
+    expect(existsSync(join(dir, 'src', 'a.css'))).toBe(true);
+    // A commit a later one built on can't be reverted cleanly: nothing changes.
+    await host.call('app', { fn: 'write', job: r.job, path: 'src/b.css', content: 'b2\n' });
+    await host.call('app', { fn: 'commit', job: r.job, message: 'B2' });
+    expect(await host.call('app', { fn: 'revertCommit', job: r.job, sha: b.sha })).toMatchObject({
+      ok: false,
+    });
+    expect(git(dir, 'status', '--porcelain')).toBe('');
+    expect(git(dir, 'log', '-1', '--format=%s')).toBe('B2');
   });
 
   it('a fix can start from the redesign; its PR stacks on it, and push updates an open PR', async () => {
@@ -285,6 +340,51 @@ describe('FixHost', () => {
       ran: true,
       ok: false,
       summary: expect.stringContaining('FAIL contract') as string,
+    });
+  });
+
+  it('runs the CI checks its workflows name, or just one of them', async () => {
+    const r = (await host.call('app', {
+      fn: 'prepare',
+      runId: 'run-1',
+      findingId: 'ci',
+      branch: 'fitts/ci',
+    })) as { job: string };
+    const dir = join(root, '.fitts-worktrees', 'run-1', 'ci');
+    expect(await host.call('app', { fn: 'ci', job: r.job })).toEqual({ ran: false, checks: [] });
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(dir, '.github', 'workflows', 'ci.yml'),
+      'jobs:\n  test:\n    steps:\n      - run: npm run lint\n      - run: npm run typecheck\n',
+    );
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        scripts: {
+          lint: 'node -e "process.exit(0)"',
+          typecheck: 'node -e "console.log(\'src/a.ts(1,1): error TS2322\');process.exit(1)"',
+        },
+      }),
+    );
+    expect(await host.call('app', { fn: 'ci', job: r.job })).toEqual({
+      ran: true,
+      checks: [
+        { name: 'npm lint', ok: true, summary: expect.any(String) as string },
+        {
+          name: 'npm typecheck',
+          ok: false,
+          summary: expect.stringContaining('error TS2322') as string,
+        },
+      ],
+    });
+    expect(await host.call('app', { fn: 'ci', job: r.job, only: 'npm lint' })).toEqual({
+      ran: true,
+      checks: [{ name: 'npm lint', ok: true, summary: expect.any(String) as string }],
+    });
+    expect(await host.call('app', { fn: 'ci', job: r.job, only: 'nope' })).toEqual({
+      ran: false,
+      checks: [],
     });
   });
 

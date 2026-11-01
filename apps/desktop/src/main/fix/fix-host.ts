@@ -107,14 +107,16 @@ export class FixHost {
       case 'tests':
         return this.tests(call.job);
       case 'ci':
-        return this.ci(call.job);
+        return this.ci(call.job, call.only);
       case 'reset': {
         // Ignored files (node_modules) stay: `clean` without -x only removes untracked ones.
         const job = this.job(call.job);
-        await git(job.dir, 'reset', '-q', '--hard', 'HEAD');
+        await git(job.dir, 'reset', '-q', '--hard', call.to ?? 'HEAD');
         await git(job.dir, 'clean', '-fdq');
         return true;
       }
+      case 'revertCommit':
+        return this.revertCommit(call.job, call.sha);
       case 'discard':
         return this.discard(call.job);
       case 'prOpen':
@@ -128,7 +130,15 @@ export class FixHost {
       case 'prMerged':
         return this.prs().merged(this.root(projectId), call.pr);
       case 'revert':
-        return this.revert(projectId, call.runId, call.pr, call.branch, call.title, call.body);
+        return this.revert(
+          projectId,
+          call.runId,
+          call.pr,
+          call.branch,
+          call.title,
+          call.body,
+          call.sha,
+        );
       case 'preview':
         return this.preview(projectId, call.runId, call.branches);
     }
@@ -193,7 +203,8 @@ export class FixHost {
     await this.dependencies(root, dir);
     const id = relative(join(root, '.fitts-worktrees'), dir).split(sep).join('/');
     this.jobs.set(id, { projectId, root, dir, branch: name, runId });
-    return { job: id, branch: name };
+    const sha = await git(dir, 'rev-parse', 'HEAD');
+    return { job: id, branch: name, sha: sha.stdout.trim() };
   }
 
   /** `.fitts-worktrees/` goes in .git/info/exclude, never the user's .gitignore (§9.2). */
@@ -455,12 +466,13 @@ export class FixHost {
   /**
    * The project's CI checks in the worktree (ci.ts): first the files Fitts changed are
    * formatted the project's way (Prettier, ESLint's fixes) when its CI checks them, then each
-   * check runs. The pipeline compares against the same checks before the change.
+   * check runs (`only` that one). The pipeline compares against the same checks before the change.
    */
-  async ci(id: string): Promise<CiRun> {
+  async ci(id: string, only?: string): Promise<CiRun> {
     const job = this.job(id);
     const pm = packageManager(job.root);
-    const checks = ciChecks(job.dir, pm);
+    const all = ciChecks(job.dir, pm);
+    const checks = only === undefined ? all : all.filter((c) => c.name === only);
     if (!checks.length) return { ran: false, checks: [] };
     const changed = await this.changedFiles(job);
     const exec = (tool: string, args: string[]) =>
@@ -511,8 +523,9 @@ export class FixHost {
 
   /**
    * A version of the site to look at (the Before/After switch, a fix's live preview), as a
-   * folder with its dependencies: the worktree that already has the branch, or a detached one
-   * made for viewing. `preview` merges the run's verified branches into its preview branch.
+   * folder with its dependencies: a detached worktree at the branch's committed tip, never the
+   * branch's own worktree (a fix may be half-done there). `preview` merges the run's verified
+   * branches into its preview branch.
    */
   async viewDir(projectId: string, runId: string, version: SiteVersion): Promise<string> {
     const root = this.root(projectId);
@@ -522,12 +535,6 @@ export class FixHost {
       const dir = join(root, '.fitts-worktrees', runId, 'preview');
       await this.dependencies(root, dir);
       return dir;
-    }
-    const list = await git(root, 'worktree', 'list', '--porcelain');
-    for (const block of list.stdout.split(/\r?\n\r?\n/)) {
-      const path = /^worktree (.+)$/m.exec(block)?.[1];
-      const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1];
-      if (path && branch === version.branch && existsSync(path)) return resolve(path);
     }
     const dir = join(
       root,
@@ -637,7 +644,28 @@ export class FixHost {
     return this.prs().open(job.root, job.dir, job.branch, title, bodyFile, base);
   }
 
-  /** Undo of a merged PR: a `fitts/revert-<n>` branch reverting the fix, as its own PR. */
+  /**
+   * Undo on a shared branch (§9.4): `git revert` of one commit, as a new commit on the job's
+   * branch. A revert that conflicts (a later commit built on it) is abandoned, nothing changed.
+   */
+  async revertCommit(
+    id: string,
+    sha: string,
+  ): Promise<{ ok: boolean; sha?: string; error?: string }> {
+    const job = this.job(id);
+    const rev = await git(job.dir, 'revert', '--no-edit', sha);
+    if (rev.code !== 0) {
+      await git(job.dir, 'revert', '--abort');
+      return { ok: false, error: (rev.stderr || rev.stdout).trim().slice(0, 200) };
+    }
+    const head = await git(job.dir, 'rev-parse', 'HEAD');
+    return { ok: true, sha: head.stdout.trim() };
+  }
+
+  /**
+   * Undo of a merged PR: a `fitts/revert-<n>` branch reverting the fix (`sha`, or the branch's
+   * tip), as its own PR. One revert branch per PR; a second undo reverts on the same branch.
+   */
   async revert(
     projectId: string,
     runId: string,
@@ -645,17 +673,23 @@ export class FixHost {
     branch: string,
     title: string,
     body: string,
+    sha?: string,
   ) {
     const root = this.root(projectId);
     const dir = join(root, '.fitts-worktrees', runId, `revert-${pr}`);
     const name = `fitts/revert-${pr}`;
-    const add = await git(root, 'worktree', 'add', '-q', dir, '-b', name, branch);
-    if (add.code !== 0)
-      throw new Error(`git worktree add failed: ${add.stderr.trim().slice(0, 200)}`);
-    const rev = await git(dir, 'revert', '--no-edit', 'HEAD');
-    if (rev.code !== 0) throw new Error(`git revert failed: ${rev.stderr.trim().slice(0, 200)}`);
     const id = relative(join(root, '.fitts-worktrees'), dir).split(sep).join('/');
-    this.jobs.set(id, { projectId, root, dir, branch: name, runId });
+    if (!this.jobs.has(id)) {
+      const add = await git(root, 'worktree', 'add', '-q', dir, '-b', name, branch);
+      if (add.code !== 0)
+        throw new Error(`git worktree add failed: ${add.stderr.trim().slice(0, 200)}`);
+      this.jobs.set(id, { projectId, root, dir, branch: name, runId });
+    }
+    const rev = await git(dir, 'revert', '--no-edit', sha ?? 'HEAD');
+    if (rev.code !== 0) {
+      await git(dir, 'revert', '--abort');
+      throw new Error(`git revert failed: ${rev.stderr.trim().slice(0, 200)}`);
+    }
     return this.prOpen(id, title, body);
   }
 
@@ -705,13 +739,27 @@ function packageManager(root: string): PackageManager {
   return 'npm';
 }
 
-/** The useful end of a command's output: its failing lines, or its last lines. Plain text. */
-function outputSummary(stdout: string, stderr: string): string {
+/**
+ * The useful end of a command's output: its failing lines (with the line before each, where a
+ * linter names the file), or its last lines. Plain text. Enough for the fixer to act on, not a
+ * whole log.
+ */
+export function outputSummary(stdout: string, stderr: string): string {
   // eslint-disable-next-line no-control-regex
   const plain = `${stdout}\n${stderr}`.replace(/\u001b\[[0-9;]*m/g, '');
   const lines = plain.split(/\r?\n/).filter((l) => l.trim());
-  const failing = lines.filter((l) => /\b(FAIL|✗|×|failed|Error|error)\b/.test(l)).slice(0, 6);
-  return (failing.length ? failing : lines.slice(-6)).join('\n').slice(0, 1200);
+  const keep = new Set<number>();
+  lines.forEach((l, i) => {
+    if (/\b(FAIL|✗|×|failed|Error|error)\b/.test(l)) {
+      if (i > 0) keep.add(i - 1);
+      keep.add(i);
+    }
+  });
+  const failing = [...keep]
+    .sort((a, b) => a - b)
+    .slice(0, 40)
+    .map((i) => lines[i] ?? '');
+  return (failing.length ? failing : lines.slice(-12)).join('\n').slice(0, 4000);
 }
 
 /** The worktree's dev command on its own port, with the Fitts plugin (see devCommandOnPort). */
