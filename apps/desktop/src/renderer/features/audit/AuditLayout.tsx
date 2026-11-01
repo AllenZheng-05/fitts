@@ -14,7 +14,7 @@ import { useSite } from '../../state/site';
 import { fixedBranches, useSiteVersion } from '../../state/site-versions';
 import { useUi } from '../../state/ui';
 import { ChatPanel } from '../chat/ChatPanel';
-import { FindingPanel } from '../finding-panel/FindingPanel';
+import { FINDING_HOST, FindingPanel } from '../finding-panel/FindingPanel';
 import { Overlays } from '../site-view/Overlays';
 import { SiteView } from '../site-view/SiteView';
 import { FindingsTray } from './FindingsTray';
@@ -30,13 +30,16 @@ export function AuditLayout({ run }: { run: RunState }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5">
       <div className="flex min-h-0 flex-1 gap-3.5">
-        {panels.siteMap.collapsed ? (
-          <CollapsedPanel panel="siteMap" side="left" label={l.siteMap} />
-        ) : (
-          <SiteMap run={run} width={panelSize(panels.siteMap, 'siteMap')} />
-        )}
-        <ResizeHandle panel="siteMap" side="left" label={l.resizeSiteMap} />
-        <AuditSiteView run={run} />
+        {/* The Finding panel opens over the site map and site together (FINDING_HOST). */}
+        <div id={FINDING_HOST} className="relative flex min-h-0 min-w-0 flex-1 gap-3.5">
+          {panels.siteMap.collapsed ? (
+            <CollapsedPanel panel="siteMap" side="left" label={l.siteMap} />
+          ) : (
+            <SiteMap run={run} width={panelSize(panels.siteMap, 'siteMap')} />
+          )}
+          <ResizeHandle panel="siteMap" side="left" label={l.resizeSiteMap} />
+          <AuditSiteView run={run} />
+        </div>
         <ResizeHandle panel="chat" side="right" label={l.resizeChat} />
         {panels.chat.collapsed ? (
           <CollapsedPanel panel="chat" side="right" label={l.chat} />

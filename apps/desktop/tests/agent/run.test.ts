@@ -1282,3 +1282,37 @@ describe('fixing what was asked (Allen’s feedback, round 5)', () => {
     run.dispose();
   });
 });
+
+describe('the Finding panel’s evidence (Allen’s feedback, round 5)', () => {
+  it('a shown finding gets its page’s shot, the element’s box on it, and the shot’s size', async () => {
+    const site = fakeSite({
+      screenshot: () => Promise.resolve({ jpegBase64: 'SHOT', width: 1024, height: 700 }),
+      probes: () =>
+        Promise.resolve([
+          {
+            probe: 'target-size' as const,
+            pass: false,
+            items: [
+              { ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' },
+            ],
+          },
+        ]),
+      rects: () => Promise.resolve({ 'go-b': { left: 10, top: 20, width: 28, height: 20 } }),
+    });
+    const { run, state } = setup({
+      site,
+      themeFit: () => Promise.resolve({ fits: true, why: 'Fits.', directions: [] }),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(
+      () => Boolean(state()?.findings.find((f) => f.title === 'Tap target is too small')?.box),
+      10_000,
+    );
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    expect(f?.box).toEqual({ left: 10, top: 20, width: 28, height: 20 });
+    expect(f?.shotSize).toEqual({ width: 1024, height: 700 });
+    expect(f?.assets?.shot).toBe('fitts-asset://demo-chat/run-1/assets/shot-_.jpg');
+    run.dispose();
+  });
+});

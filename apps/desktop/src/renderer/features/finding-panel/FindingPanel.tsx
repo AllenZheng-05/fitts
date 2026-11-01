@@ -1,6 +1,7 @@
 import type { Finding, RunState } from '@fitts/schema';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../../components/Button';
 import { Chip, SeverityBadge } from '../../components/Chip';
 import { IconButton } from '../../components/IconButton';
@@ -9,6 +10,7 @@ import { Tabs } from '../../components/Tabs';
 import { useOverlay } from '../../components/overlay/useOverlay';
 import { copy } from '../../copy';
 import { openPr } from '../../lib/links';
+import { cx } from '../../lib/cx';
 import { format } from '../../lib/format';
 import { TEST_BUILD } from '../../dev';
 import { LIVE_FINDINGS } from '../../mock/fixtures/demo-chat';
@@ -23,6 +25,21 @@ import { MESSAGE_BOX_ID, SiteView } from '../site-view/SiteView';
 import type { Decision } from '../../state/ui';
 import { decide, finishReview, pendingBatchFor, type Batch } from './review';
 import { Replay } from './Replay';
+import { Evidence } from './Evidence';
+
+/**
+ * Where the Finding panel opens (Allen's feedback, round 5): a layout puts this id on the large
+ * area it should cover (the site map and site in the audit, the summary on Done), so the panel
+ * isn't squeezed into the site view. Without one, it opens over the site view as before.
+ */
+export const FINDING_HOST = 'finding-host';
+
+const noSubscribe = () => () => undefined;
+
+/** The host element, read when the panel renders (the layout around it is already mounted). */
+function useHost(): HTMLElement | null {
+  return useSyncExternalStore(noSubscribe, () => document.getElementById(FINDING_HOST));
+}
 
 /** The check a verified fix passed, shown in the mint footer. */
 function checkFor(f: Finding): string {
@@ -40,12 +57,14 @@ function checkFor(f: Finding): string {
  */
 export function FindingPanel({ run }: { run: RunState }) {
   const findingId = useUi((s) => s.openFindingId);
+  const host = useHost();
   const finding = run.findings.find((f) => f.id === findingId);
   if (!finding) return null;
-  return <Panel key={finding.id} run={run} finding={finding} />;
+  const panel = <Panel key={finding.id} run={run} finding={finding} wide={Boolean(host)} />;
+  return host ? createPortal(panel, host) : panel;
 }
 
-function Panel({ run, finding }: { run: RunState; finding: Finding }) {
+function Panel({ run, finding, wide }: { run: RunState; finding: Finding; wide: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState('live');
   const close = () => useUi.getState().set({ openFindingId: null });
@@ -60,9 +79,12 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
       role="dialog"
       aria-labelledby={titleId}
       tabIndex={-1}
-      className="absolute top-16 right-3 bottom-3 z-30 flex w-[56%] min-w-[440px] animate-panel-in flex-col overflow-hidden rounded-sheet border-[1.5px] border-ink bg-card shadow-hero motion-reduce:animate-none"
+      className={cx(
+        'z-30 flex animate-panel-in flex-col overflow-hidden rounded-sheet border-[1.5px] border-ink bg-card shadow-hero motion-reduce:animate-none',
+        wide ? 'absolute inset-0' : 'absolute top-16 right-3 bottom-3 w-[56%] min-w-[440px]',
+      )}
     >
-      <div className="flex flex-none items-start gap-2.5 border-b border-ink px-4 pt-3.5 pb-3">
+      <div className="flex flex-none items-start gap-2.5 border-b border-ink px-4 pt-2.5 pb-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap gap-1.5">
             <SeverityBadge severity={finding.severity} form="detail" />
@@ -98,7 +120,7 @@ function Panel({ run, finding }: { run: RunState; finding: Finding }) {
 
       {batch && <ReviewBar run={run} batch={batch} finding={finding} />}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-2.5">
         <p className="text-[14px] leading-normal">
           <strong>{copy.finding.findingPrefix}</strong> {finding.finding}
         </p>
@@ -203,21 +225,8 @@ function LivePreview({ run, finding }: { run: RunState; finding: Finding }) {
           className="h-[380px]"
         />
       ) : (
-        // The page when Fitts found it, with SAM's outline (§10).
-        <div className="relative h-[260px] overflow-hidden rounded-control border border-ink bg-paper">
-          <img
-            src={shot}
-            alt={copy.finding.shotAlt}
-            className="absolute inset-0 size-full object-contain"
-          />
-          {finding.assets?.mask && (
-            <img
-              src={finding.assets.mask}
-              alt=""
-              className="pointer-events-none absolute inset-0 size-full object-contain"
-            />
-          )}
-        </div>
+        // The page when Fitts found it: zoomed to the problem, outlined, and where it sits.
+        <Evidence finding={finding} shot={shot} />
       )}
       {!branch && <p className="text-[13px] text-muted">{copy.finding.previewPending}</p>}
     </div>
@@ -344,7 +353,7 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
   const toast = useToasts((s) => s.show);
   const change = run.changes.find((c) => c.findingIds.includes(finding.id));
   const auditOnly = useAuditOnly(run.projectId);
-  const bar = 'flex flex-none flex-wrap items-center gap-2 border-t border-ink px-4 py-3';
+  const bar = 'flex flex-none flex-wrap items-center gap-2 border-t border-ink px-4 py-2';
 
   if (finding.status === 'fixing') {
     return (

@@ -526,6 +526,12 @@ export interface Finding {
   assets?: { shot?: string; after?: string; mask?: string; mockup?: string };
   prUrl?: string;
   /**
+   * Where the problem is on `assets.shot` (CSS px of the shot), and the shot's size, so the
+   * Finding panel can zoom to it and outline it (Allen's feedback, round 5).
+   */
+  box?: { left: number; top: number; width: number; height: number };
+  shotSize?: { width: number; height: number };
+  /**
    * The device it shows up on (a DEVICES id), when it only happens at that size: "Show me on the
    * site" switches to it first (Allen's feedback, round 5).
    */

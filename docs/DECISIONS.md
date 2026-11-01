@@ -2435,3 +2435,22 @@ Allen's update (NEEDS-ALLEN).
   dynamic import kept as the fallback for projects that list the plugin themselves. Checked by
   hand on demo/chat (its config without its own plugin) under both config loaders, `bundle` and
   `runner`: App.tsx came back stamped both ways.
+
+## Phase 3 — the Finding panel, bigger, pointing at the problem
+
+- **Where it opens.** SPEC §6.5 put the panel over the site view, never over the chat, and on
+  Done that's a narrow column. A layout now marks the large area the panel covers
+  (`FINDING_HOST`): in the audit, the site map and site together (the chat stays visible, so
+  "Change the fix" still reaches the message box); on Done, the summary (the site stays
+  beside it for "Show me"). The redesign layout keeps it over the site view, which is already
+  wide. Less padding in its header, body and footer.
+- **Pointing at the problem.** Each shown finding now gets its page's shot, the element's box on
+  that shot and the shot's size, whether or not SAM ran (element boxes are recorded with every
+  page screenshot now, not only with media). "When I found it" shows the shot zoomed to the
+  box with a coral outline that pulses twice (still under reduced motion), beside the whole page
+  with the same box marked. It's one SVG per view (a `viewBox` crop of the image), so the
+  outline and the image can't drift apart. A problem with no element shows the whole shot, and
+  one that happens only on a phone shows the phone pass's shot of that page, labeled with the
+  device.
+- Checked by e2e (24 specs open the panel) and a screenshot of Done; the zoom itself only gets
+  real shots in a real run, so that part is unit-tested on the data, not looked at.

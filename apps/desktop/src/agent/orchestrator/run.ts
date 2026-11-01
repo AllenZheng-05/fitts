@@ -823,7 +823,8 @@ export class RealRun {
         const s = await this.deps.site.screenshot();
         shot = { jpegBase64: s.jpegBase64 };
         size = { width: s.width, height: s.height };
-        if (this.deps.media) {
+        // Element boxes on this shot: SAM's prompts, and where the Finding panel zooms to.
+        {
           const refs = new Set([
             ...snap.nodes.map((n) => n.ref),
             ...this.probes.results
@@ -1518,7 +1519,8 @@ export class RealRun {
     this.checks = checks;
     const withReplay = findings.map((f) => this.withReplay(f));
     this.post(withReplay);
-    void this.media(withReplay.filter((f) => f.lane !== 'suggestion'));
+    const shown = withReplay.filter((f) => f.lane !== 'suggestion');
+    void this.evidence(shown).then(() => this.media(shown));
   }
 
   /**
@@ -1611,6 +1613,54 @@ export class RealRun {
       } catch {
         // Keep the DOM box.
       }
+    }
+  }
+
+  /**
+   * What the Finding panel shows for each shown finding (Allen's feedback, round 5): the page's
+   * shot with the element's box on it, so it can zoom in and outline it; for a problem that only
+   * happens on a phone, the phone pass's shot of that page instead.
+   */
+  private async evidence(shown: Finding[]): Promise<void> {
+    for (const f of shown) {
+      if (this.finished) return;
+      const page = this.pages.get(f.route);
+      if (!page) continue;
+      let next: Finding | undefined;
+      const phone = f.seenOn ? page.evidence.phoneShot : undefined;
+      if (phone) {
+        const url = await this.deps.site
+          .saveAsset(
+            this.state.runId,
+            `phone-${f.route.replace(/[^\w]+/g, '_') || 'root'}.jpg`,
+            phone.jpegBase64,
+          )
+          .catch(() => null);
+        if (url) next = { ...f, assets: { ...f.assets, shot: url } };
+      } else {
+        const shot = await this.routeShot(f.route);
+        if (!shot) continue;
+        const box = f.elementRef ? page.rects?.[f.elementRef] : undefined;
+        next = {
+          ...f,
+          assets: { ...f.assets, shot: shot.url },
+          ...(box && box.width > 0 && box.height > 0 ? { box } : {}),
+          ...(page.size ? { shotSize: page.size } : {}),
+        };
+      }
+      const now = this.state.findings.find((x) => x.id === f.id);
+      if (next && now)
+        this.emit([
+          {
+            type: 'finding.updated',
+            finding: {
+              ...now,
+              assets: { ...now.assets, ...next.assets },
+              ...(next.box ? { box: next.box } : {}),
+              ...(next.shotSize ? { shotSize: next.shotSize } : {}),
+            },
+          },
+        ]);
     }
   }
 

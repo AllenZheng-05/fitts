@@ -28,7 +28,7 @@ import { RetryControls } from '../chat/RetryControls';
 import { ResizeHandle } from '../../components/ResizeHandle';
 import { panelSize, useLayout } from '../../state/layout';
 import { SiteView } from '../site-view/SiteView';
-import { FindingPanel } from '../finding-panel/FindingPanel';
+import { FINDING_HOST, FindingPanel } from '../finding-panel/FindingPanel';
 
 /** How many verified changes show before "See all N changes". */
 const COLLAPSED = 4;
@@ -146,9 +146,11 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
     : stats;
 
   return (
+    // The Finding panel opens over the summary (FINDING_HOST), with the site beside it.
     <section
+      id={FINDING_HOST}
       aria-labelledby={titleId}
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-panel border-[1.5px] border-ink bg-card shadow-panel"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-panel border-[1.5px] border-ink bg-card shadow-panel"
     >
       <h2 id={titleId} className="sr-only">
         {copy.done.summary}
