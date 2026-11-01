@@ -67,6 +67,8 @@ export interface InterviewInput {
   path: string[];
   /** A live site with no code: Fitts audits and reports, and offers no new look or fixes. */
   auditOnly?: boolean;
+  /** What the user wants to be called (Settings › General). */
+  name?: string;
 }
 
 /** Checks the model's turn; throws when it isn't usable (the caller falls back to the script). */
@@ -162,7 +164,14 @@ function withPointing(c: { text: string; pointingAt?: string; pointingLabel?: st
 }
 
 /** The conversation so far as Responses input, then this turn's context and screen. */
-export function interviewInput({ state, shot, page, path, auditOnly }: InterviewInput): unknown[] {
+export function interviewInput({
+  state,
+  shot,
+  page,
+  path,
+  auditOnly,
+  name,
+}: InterviewInput): unknown[] {
   const history = state.chat.flatMap((c) =>
     c.type === 'fitts.message'
       ? [{ role: 'assistant', content: c.text }]
@@ -178,6 +187,7 @@ export function interviewInput({ state, shot, page, path, auditOnly }: Interview
       ? `On screen now: <untrusted_page_content>${JSON.stringify(page)}</untrusted_page_content>`
       : 'The site isn’t on screen.',
     `Path the user clicked: ${path.join(' → ') || 'none yet'}`,
+    ...(name ? [`The owner's name: ${name}`] : []),
     ...(auditOnly
       ? [
           'This is a live site with no code: you can audit it and report, but not fix or redesign it.',

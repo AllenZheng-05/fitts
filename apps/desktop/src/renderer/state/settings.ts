@@ -10,6 +10,8 @@ export type VoiceName = 'elevenlabs' | 'system';
 export type UserMode = Exclude<Mode, 'dangerous'>;
 
 interface SettingsState {
+  /** What Fitts calls you (Settings › General); empty until you say. */
+  name: string;
   /** Mode for new runs, picked on Welcome and in Settings (SPEC §6.1, §6.13). */
   defaultMode: UserMode;
   /**
@@ -40,6 +42,7 @@ interface SettingsState {
 }
 
 export const DEFAULT_SETTINGS = {
+  name: '',
   defaultMode: 'ask-unsure' as UserMode,
   keys: { meta: false, elevenlabs: false, baseten: false },
   micAllowed: false,

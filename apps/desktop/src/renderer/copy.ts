@@ -796,12 +796,24 @@ export const copy = {
     backToWelcome: 'Back',
     nav: 'Settings sections',
     tabs: {
+      general: 'General',
       run: 'Run & permissions',
       voice: 'Voice & appearance',
       keys: 'API keys',
       projects: 'Projects',
     },
     permissions: 'Permissions',
+    generalTitle: 'You',
+    nameLabel: 'Your name',
+    nameHint: 'What I call you. It stays on this computer.',
+    dataTitle: 'Your data',
+    dataBody:
+      'Your projects, past runs, API keys and settings are saved on this computer. Deleting them starts Fitts over as if it were just installed. Your code, its branches and your pull requests on GitHub stay as they are.',
+    deleteData: 'Delete all my data',
+    deleteDataTitle: 'Delete all your data?',
+    deleteDataBody:
+      'Every project, run, screenshot, API key and setting Fitts saved goes, and Fitts restarts. This can’t be undone.',
+    deleteDataConfirm: 'Delete and restart',
     permissionsLegend: 'How much should Fitts ask you?',
     permissionRows: {
       plan: 'looks, never clicks or edits',
@@ -892,6 +904,8 @@ export const copy = {
   fitts: {
     interviewOpener:
       "Hi {name}! Before I touch anything, I'd love to hear about this site. What's it for?",
+    interviewOpenerNoName:
+      "Before I touch anything, I'd love to hear about this site. What's it for?",
     interviewFollowUp: 'Got it. I can see the {screen} screen right now. Where do they get stuck?',
     interviewTieBack:
       'That gives me two things to test first: whether sending shows any feedback, and whether the buttons agree on their names. **How should the app feel when they open it?**',

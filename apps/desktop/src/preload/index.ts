@@ -113,6 +113,7 @@ const bridge: FittsBridge = {
       return () => ipcRenderer.removeListener(IPC.githubEvent, listener);
     },
   },
+  deleteAllData: () => ipcRenderer.send(IPC.dataDelete),
   finishRun: (projectId, runId) =>
     ipcRenderer.invoke(IPC.runFinish, projectId, runId) as Promise<void>,
   tools: () => ipcRenderer.invoke(IPC.toolsCheck) as ReturnType<NonNullable<FittsBridge['tools']>>,

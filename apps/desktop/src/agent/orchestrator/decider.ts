@@ -117,6 +117,8 @@ export interface ConverseInput {
   recent: string[];
   message: string;
   pointingAt?: string;
+  /** What the owner wants to be called. */
+  name?: string;
 }
 
 export type Converse = (input: ConverseInput, signal?: AbortSignal) => Promise<string>;

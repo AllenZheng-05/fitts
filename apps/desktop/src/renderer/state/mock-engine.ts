@@ -187,7 +187,9 @@ export class MockRunEngine implements RunEngine {
       ctx.say(
         returning
           ? copy.fitts.interviewAgain
-          : format(copy.fitts.interviewOpener, { name: ctrl.profile.userFirstName }),
+          : ctrl.profile.userFirstName
+            ? format(copy.fitts.interviewOpener, { name: ctrl.profile.userFirstName })
+            : copy.fitts.interviewOpenerNoName,
       );
       ctx.post({ type: 'brief' });
     });

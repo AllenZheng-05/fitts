@@ -11,6 +11,7 @@ import { speak } from '../../lib/speech';
 import { RichText } from '../../components/RichText';
 import { checkKey, storeKey, useKeyInfo } from '../../lib/keys';
 import { GitHubSection } from './GitHubSection';
+import { bridge } from '../../lib/bridge';
 import { removeProject, setDangerous, setPermissionMode } from '../../state/actions';
 import { useProjects } from '../../state/projects';
 import {
@@ -23,10 +24,10 @@ import {
 } from '../../state/settings';
 import { useUi, type SettingsTab } from '../../state/ui';
 
-const TABS: SettingsTab[] = ['run', 'voice', 'keys', 'projects'];
+const TABS: SettingsTab[] = ['general', 'run', 'voice', 'keys', 'projects'];
 const MODES: UserMode[] = ['plan', 'ask-every', 'ask-unsure', 'autonomous'];
 
-/** Full-window Settings with four tabs (SPEC §6.13). Esc or "Back" returns. */
+/** Full-window Settings with five tabs (SPEC §6.13, plus General). Esc or "Back" returns. */
 export function Settings() {
   const tab = useUi((s) => s.settingsTab);
   const returnTo = useUi((s) => s.settingsReturnTo);
@@ -64,6 +65,7 @@ export function Settings() {
             </button>
           ))}
         </nav>
+        {tab === 'general' && <GeneralTab />}
         {tab === 'run' && <RunTab />}
         {tab === 'voice' && <VoiceTab />}
         {tab === 'keys' && <KeysTab />}
@@ -96,6 +98,65 @@ function Section({
       </h2>
       {children}
     </section>
+  );
+}
+
+/** You, and your data (Allen's feedback, round 5): your name, and deleting everything saved. */
+function GeneralTab() {
+  const name = useSettings((s) => s.name);
+  const [confirming, setConfirming] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const del = bridge().deleteAllData;
+  return (
+    <>
+      <Section title={copy.settings.generalTitle}>
+        <TextField
+          label={copy.settings.nameLabel}
+          hint={copy.settings.nameHint}
+          value={name}
+          autoComplete="given-name"
+          maxLength={60}
+          onChange={(e) => useSettings.getState().set({ name: e.target.value })}
+        />
+      </Section>
+      <Section title={copy.settings.dataTitle}>
+        <p className="text-[14px] leading-normal text-ink-2">{copy.settings.dataBody}</p>
+        <Button
+          variant="danger"
+          size="md"
+          className="self-start"
+          disabled={!del}
+          onClick={() => setConfirming(true)}
+        >
+          {copy.settings.deleteData}
+        </Button>
+        <Modal
+          open={confirming}
+          onClose={() => setConfirming(false)}
+          labelledBy="delete-data-title"
+          describedBy="delete-data-body"
+          width={480}
+          initialFocusRef={cancelRef}
+        >
+          <div className="flex flex-col gap-3 p-6">
+            <h2 id="delete-data-title" className="font-display text-[22px] font-bold">
+              {copy.settings.deleteDataTitle}
+            </h2>
+            <p id="delete-data-body" className="text-[14px] leading-normal text-ink-2">
+              {copy.settings.deleteDataBody}
+            </p>
+            <div className="mt-1 flex justify-end gap-2">
+              <Button ref={cancelRef} size="md" onClick={() => setConfirming(false)}>
+                {copy.overlay.cancel}
+              </Button>
+              <Button variant="danger" size="md" onClick={() => del?.()}>
+                {copy.settings.deleteDataConfirm}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      </Section>
+    </>
   );
 }
 

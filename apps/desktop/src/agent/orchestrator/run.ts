@@ -74,6 +74,8 @@ export interface RunDeps {
   decider?: Decider;
   /** Answers the owner while the work goes on (§1.3). Without one, a short acknowledgement. */
   converse?: Converse;
+  /** What the owner wants to be called (Settings › General). */
+  ownerName?: string;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
   /** SAM outlines and Muse Image mockups (§10). Without it, the UI keeps DOM boxes. */
@@ -2129,6 +2131,7 @@ export class RealRun {
           recent,
           message,
           ...(pointingAt ? { pointingAt } : {}),
+          ...(this.deps.ownerName ? { name: this.deps.ownerName } : {}),
         },
         this.finished ? undefined : this.abort.signal,
       );

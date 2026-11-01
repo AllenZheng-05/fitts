@@ -2463,3 +2463,17 @@ Allen's update (NEEDS-ALLEN).
   windows and dev servers close and the app quits (on macOS it stays in the Dock, and
   `activate` reopens the window when it's gone rather than when no window at all is left).
   An e2e test closes the app window with demo/chat's mirror open and checks the app exits.
+
+## Phase 3 — Settings › General: your name, and deleting all your data
+
+- **A first tab, General**, which Settings now opens on: "Your name" (kept with the other
+  settings on this computer) and "Delete all my data".
+- **The name reaches Fitts.** It travels with each engine call's settings. The interview's
+  opener uses it ("Hi Allen!"), and the interview and `converse` prompts get it with a note to
+  use it now and then. Before this, the real engine borrowed the test fixtures' profile and
+  greeted every user as "Allen"; with no name set the opener now has no greeting name.
+- **Deleting is a restart.** Chromium holds files in the data folder while it runs, so the
+  button closes the sites and dev servers and relaunches Fitts with a flag; the new instance
+  empties the folder before anything opens a file there (retrying while the old one lets go),
+  and starts like a fresh install. The user's code, branches and PRs are untouched.
+- Lint ignores `release/` (packaged builds), which a fresh `dist:dir` had put in its way.

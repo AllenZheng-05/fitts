@@ -32,6 +32,7 @@ test.afterEach(async () => {
 test('Fitts’s own Settings screen passes its accessibility probes', async () => {
   const { page } = launched;
   await page.keyboard.press('ControlOrMeta+,');
+  await page.getByRole('button', { name: 'Run & permissions' }).click();
   await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
   // The way Fitts probes any site: main injects the bundle into an isolated world (1001), where
   // the page's CSP (which blocks inline scripts here) doesn't apply.

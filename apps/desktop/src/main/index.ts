@@ -9,6 +9,7 @@ import { RunHost } from './run-host';
 import { Secrets } from './secrets';
 import { FixHost } from './fix/fix-host';
 import { FontStore } from './fonts/fonts';
+import { wipeUserData, WIPE_FLAG } from './wipe';
 import { saveBoard } from './site/board';
 import { VoiceHost } from './voice';
 import { registerTools } from './tools';
@@ -22,6 +23,9 @@ import { APP_ID, createMainWindow, ICON_PATH } from './window';
 // E2E runs point user data at a throwaway folder so they never touch real settings.
 const userDataOverride = process.env['FITTS_USER_DATA'];
 if (userDataOverride) app.setPath('userData', userDataOverride);
+// "Delete all my data" restarts the app with this flag: the folder is emptied before anything
+// opens a file in it, so the app starts as if just installed.
+if (process.argv.includes(WIPE_FLAG)) wipeUserData(app.getPath('userData'));
 
 app.setName('Fitts');
 registerAssetScheme();
@@ -73,6 +77,11 @@ void app.whenReady().then(() => {
         : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.versions = fixes;
+  ipcMain.on(IPC.dataDelete, () => {
+    sites.closeAll();
+    app.relaunch({ args: [...process.argv.slice(1).filter((a) => a !== WIPE_FLAG), WIPE_FLAG] });
+    app.exit(0);
+  });
   sites.pluginFile = app.isPackaged
     ? join(process.resourcesPath, 'plugin', 'fitts.vite.mjs')
     : join(__dirname, '../../resources/plugin/fitts.vite.mjs');

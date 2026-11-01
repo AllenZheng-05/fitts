@@ -19,6 +19,7 @@ test('with a $0.10 cap, the 80% card warns and the 100% card pauses the run', as
   const { page } = launched;
   await completeSetup(page);
   await page.keyboard.press('ControlOrMeta+,');
+  await page.getByRole('button', { name: 'Run & permissions' }).click();
   const cap = page.getByLabel('Spending limit per run (optional)');
   await cap.fill('0.10');
   await cap.blur();

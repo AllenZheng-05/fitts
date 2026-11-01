@@ -35,6 +35,11 @@ export interface FittsBridge {
    * them out), then the run is over.
    */
   finishRun?: (projectId: string, runId: string) => Promise<void>;
+  /**
+   * Settings › General › "Delete all my data": every project, run, key and setting goes, and
+   * Fitts restarts as if just installed. The user's code and GitHub are untouched.
+   */
+  deleteAllData?: () => void;
   /** Opens a pull request (or another GitHub page) in the user's browser. https only. */
   openLink?: (url: string) => void;
   /** What's installed on this computer, for Welcome's chips (each null when missing). */
@@ -327,6 +332,8 @@ export interface EngineCall {
     capUsd: number;
     modelProfile: 'quality' | 'economy' | 'open';
     contributorMode: boolean;
+    /** What Fitts calls the user (Settings › General); empty when they haven't said. */
+    name?: string;
   };
 }
 
@@ -403,6 +410,7 @@ export const IPC = {
   siteDevice: 'fitts:site-device',
   siteInput: 'fitts:site-input',
   siteNav: 'fitts:site-nav',
+  dataDelete: 'fitts:data-delete',
   siteTab: 'fitts:site-tab',
   siteRects: 'fitts:site-rects',
   siteRefAt: 'fitts:site-ref-at',

@@ -13,6 +13,9 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/out/**',
       '**/dist/**',
+      // Packaged builds (pnpm dist:dir): the app as shipped, not source.
+      '**/release/**',
+      '**/release-next/**',
       '**/test-results/**',
       '**/playwright-report/**',
       'docs/**',

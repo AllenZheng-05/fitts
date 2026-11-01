@@ -36,8 +36,13 @@ export function getIpcEngine(): IpcRunEngine | undefined {
     engineBridge,
     briefFor,
     () => {
-      const { capUsd, modelProfile, contributorMode } = useSettings.getState();
-      return { capUsd, modelProfile, contributorMode };
+      const { capUsd, modelProfile, contributorMode, name } = useSettings.getState();
+      return {
+        capUsd,
+        modelProfile,
+        contributorMode,
+        ...(name.trim() ? { name: name.trim() } : {}),
+      };
     },
     (id) => useProjects.getState().projects.find((p) => p.id === id)?.lastRunId,
   );

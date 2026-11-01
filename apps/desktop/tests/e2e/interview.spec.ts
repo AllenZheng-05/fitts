@@ -18,6 +18,16 @@ async function say(page: Page, text: string) {
 test.beforeEach(async () => {
   launched = await launchApp();
   await launched.page.setViewportSize({ width: 1440, height: 900 });
+  // The name from Settings › General, as saved, so the real engine greets the user by it.
+  await launched.page.evaluate(() => {
+    const raw = localStorage.getItem('fitts.settings');
+    const saved = raw
+      ? (JSON.parse(raw) as { state: Record<string, unknown>; version: number })
+      : { state: {}, version: 1 };
+    saved.state = { ...saved.state, name: 'Allen' };
+    localStorage.setItem('fitts.settings', JSON.stringify(saved));
+  });
+  await launched.page.reload();
   await completeSetup(launched.page);
 });
 

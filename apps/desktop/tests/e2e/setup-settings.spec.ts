@@ -185,6 +185,7 @@ test('Settings: dangerous mode needs the typed sentence', async () => {
   const { page } = launched;
   await completeSetup(page);
   await page.keyboard.press('ControlOrMeta+,');
+  await page.getByRole('button', { name: 'Run & permissions' }).click();
   const toggle = page.getByRole('switch', { name: 'Dangerous mode' });
   await expect(toggle).toBeDisabled();
   await page
@@ -206,6 +207,7 @@ test('Settings: Open weights stays disabled until a Baseten key exists', async (
   const { page } = launched;
   await completeSetup(page);
   await page.keyboard.press('ControlOrMeta+,');
+  await page.getByRole('button', { name: 'Run & permissions' }).click();
   const openWeights = page.getByRole('button', { name: 'Open weights' });
   await expect(openWeights).toBeDisabled();
 
@@ -281,4 +283,27 @@ test('Welcome back lists projects', async () => {
   await expect(
     page.getByRole('button', { name: 'Switch project, current: hartwell-site' }),
   ).toBeVisible();
+});
+
+test('Settings › General: your name, and deleting all your data asks first', async () => {
+  const { page } = launched;
+  await completeSetup(page);
+  await page.keyboard.press('ControlOrMeta+,');
+  await expect(page.getByRole('button', { name: 'General' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  const name = page.getByLabel('Your name');
+  await name.fill('Allen');
+  await page.getByRole('button', { name: 'Run & permissions' }).click();
+  await page.getByRole('button', { name: 'General' }).click();
+  await expect(name).toHaveValue('Allen');
+
+  await page.getByRole('button', { name: 'Delete all my data' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete all your data?' });
+  await expect(dialog).toBeVisible();
+  await expectNoSeriousA11yViolations(page);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(name).toHaveValue('Allen');
 });

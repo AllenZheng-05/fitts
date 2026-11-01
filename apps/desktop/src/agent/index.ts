@@ -53,7 +53,8 @@ const profiles = new Map<string, Profile>();
 export const keys: Partial<Record<KeyName, string>> = {};
 
 const engine = new MockRunEngine({
-  profileFor,
+  // The user's own name (Settings › General), never the fixtures' "Allen".
+  profileFor: (id) => ({ ...profileFor(id), userFirstName: settings.get(id)?.name ?? '' }),
   briefFor: (id) => briefs.get(id) ?? {},
   lastRunFor: (id) => lastRuns.get(id),
 });
@@ -227,6 +228,7 @@ async function realInterviewTurn(
         ...(shot ? { shot: shot.jpegBase64 } : {}),
         ...(snap ? { page: { path: snap.path, title: snap.title, headings: snap.headings } } : {}),
         path: visited.get(projectId) ?? [],
+        ...(set?.name ? { name: set.name } : {}),
         auditOnly: liveSites.get(projectId)?.url
           ? isLiveOrigin(new URL(liveSites.get(projectId)?.url ?? '').origin)
           : false,
@@ -315,6 +317,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       ...(panel ? { panel } : {}),
       ...(decider ? { decider } : {}),
       ...(converse ? { converse } : {}),
+      ...(set?.name ? { ownerName: set.name } : {}),
       ...(online() && keys.meta && process.env['FITTS_NO_MEDIA'] !== '1'
         ? { media: new Media(keys.meta, ledger) }
         : {}),

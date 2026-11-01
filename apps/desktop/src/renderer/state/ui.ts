@@ -5,7 +5,7 @@ import { useRunStore } from './run-store';
 import { useSettings } from './settings';
 
 export type Screen = 'welcome' | 'workspace' | 'settings';
-export type SettingsTab = 'run' | 'voice' | 'keys' | 'projects';
+export type SettingsTab = 'general' | 'run' | 'voice' | 'keys' | 'projects';
 
 interface UiState {
   screen: Screen;
@@ -97,7 +97,7 @@ function initialScreen(): Screen {
 
 export const useUi = create<UiState>((set, get) => ({
   screen: initialScreen(),
-  settingsTab: 'run',
+  settingsTab: 'general',
   settingsReturnTo: 'workspace',
   projectMenuOpen: false,
   addProjectOpen: false,
