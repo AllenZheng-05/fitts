@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "pnpm --filter @fitts/desktop dev",
     "build": "pnpm --filter @fitts/desktop build",
+    "release": "pnpm --filter @fitts/desktop dist:dir",
+    "release:win": "pnpm --filter @fitts/desktop dist:win",
     "typecheck": "pnpm -r typecheck && tsc --noEmit -p scripts",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
