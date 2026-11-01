@@ -355,10 +355,10 @@ function FixResult({ item, run }: { item: Item<'fix.result'>; run: RunState }) {
         )}
       >
         {undone
-          ? format(change.merged ? copy.items.reverted : copy.items.undone, {
-              // A merged PR is undone with a new revert PR (§7.6); the mock numbers it +9.
-              n: (change.prNumber ?? 0) + (change.merged ? 9 : 0),
-            })
+          ? change.revertPrNumber !== undefined
+            ? // Undone after the run's PR was merged: a revert PR (§9.4).
+              format(copy.items.reverted, { n: change.revertPrNumber })
+            : copy.items.undone
           : format(copy.items.fixed, { title: change.title })}
       </span>
       {!undone && change.prNumber && (

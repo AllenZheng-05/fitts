@@ -478,6 +478,9 @@ export class MockRunEngine implements RunEngine {
       const change = s.changes.find((c) => c.id === changeId);
       if (!change) return;
       change.status = 'undone';
+      // Undone after the run's PR was merged: a revert PR (§9.4); the mock numbers it +9.
+      if (change.merged && change.prNumber !== undefined)
+        change.revertPrNumber = change.prNumber + 9;
       for (const f of s.findings) if (change.findingIds.includes(f.id)) f.status = 'undone';
     });
   }
@@ -493,8 +496,8 @@ export class MockRunEngine implements RunEngine {
         if (c?.status !== 'retrying') return;
         c.status = 'verified';
         c.reason = undefined;
-        // A rolled-back change never had a PR; the retry opens one.
-        c.prNumber ??= Math.max(0, ...s2.changes.map((x) => x.prNumber ?? 0)) + 1;
+        // A rolled-back change never had a PR; the retry joins the run's one.
+        c.prNumber ??= s2.changes.find((x) => x.prNumber !== undefined)?.prNumber ?? 1;
         for (const f of s2.findings) {
           if (c.findingIds.includes(f.id))
             f.status = previous === 'undone' ? 'pr-opened' : 'verified';
@@ -1081,9 +1084,10 @@ export class MockRunEngine implements RunEngine {
     function publishFix(s2: RunState, c: BeatContext, findingId: string) {
       const finding = s2.findings.find((f) => f.id === findingId);
       if (!finding) return;
+      // One PR per run (§9.3): every fix shares the profile's number.
       const fix = ctrl.profile.fixes[findingId] ?? {
         title: finding.title,
-        prNumber: 40 + ctrl.seq,
+        prNumber: Object.values(ctrl.profile.fixes)[0]?.prNumber ?? 12,
         costUsd: 0.4,
       };
       const changeId = ctrl.nextId('change');

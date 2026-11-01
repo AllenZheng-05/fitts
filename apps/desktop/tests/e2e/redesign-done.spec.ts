@@ -122,7 +122,7 @@ test('Done: stats, undo and redo, try again, all changes', async () => {
 
   const sent = summary(page).getByRole('listitem').filter({ hasText: "Show 'Sent' confirmation" });
   await sent.getByRole('button', { name: 'Undo' }).click();
-  await expect(sent).toContainText('Undone · PR #13 closed');
+  await expect(sent).toContainText('Undone');
   await expect(stat(page, 'Fixed & verified')).toContainText('23');
   await sent.getByRole('button', { name: 'Redo' }).click();
   await expect(stat(page, 'Fixed & verified')).toContainText('24', { timeout: 6_000 });

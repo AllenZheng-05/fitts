@@ -18,7 +18,7 @@ import { startRoute } from '../../mock/sites';
 import { getEngine } from '../../state/engine';
 import { useAuditOnly, useProject } from '../../state/projects';
 import { useSite } from '../../state/site';
-import { fixedBranches, useSiteVersion } from '../../state/site-versions';
+import { fixedBranch, useSiteVersion } from '../../state/site-versions';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
@@ -50,14 +50,14 @@ export function DoneLayout({ run }: { run: RunState }) {
   const previewUrl = TEST_BUILD && run.projectId === DEMO_CHAT ? 'localhost:5180' : project?.url;
   const redesign = appliedRedesign(run);
   const doneSite = useLayout((s) => s.panels.doneSite);
-  const branches = fixedBranches(run);
+  const branch = fixedBranch(run);
   const [view, setView] = useState<'before' | 'after'>('after');
-  const showAfter = view === 'after' && branches.length > 0;
+  const showAfter = view === 'after' && branch !== undefined;
   const afterId = useSiteVersion(
     run.projectId,
     run.runId,
     'after',
-    showAfter ? { kind: 'preview', branches } : null,
+    showAfter && branch ? { kind: 'branch', branch } : null,
   );
   return (
     <>
@@ -75,7 +75,7 @@ export function DoneLayout({ run }: { run: RunState }) {
         addressHost={TEST_BUILD ? previewUrl : undefined}
         toolbarEnd={
           <>
-            {branches.length > 0 && (
+            {branch !== undefined && (
               <SegmentedControl
                 label={copy.site.beforeAfter}
                 selected={showAfter ? 'after' : 'before'}
@@ -105,12 +105,12 @@ export function DoneLayout({ run }: { run: RunState }) {
                 })}
               />
             ) : stats.fixed === 0 ? (
-              // No fixes (or an audit-only live site): there is no preview branch to show.
+              // No fixes (or an audit-only live site): there is no branch to show.
               copy.done.previewAsIs
             ) : (
               <RichText
                 text={format(TEST_BUILD ? copy.done.previewCaption : copy.done.previewLiveCaption, {
-                  branch: `**fitts/preview-run-${runNumber}**`,
+                  branch: `**${branch ?? `fitts/run-run-${runNumber}`}**`,
                   n: stats.fixed,
                 })}
               />
@@ -335,9 +335,9 @@ function ChangeRow({ run, change }: { run: RunState; change: Change }) {
         )}
         {undone && (
           <span className="block text-[12px] font-normal">
-            {change.merged
-              ? format(copy.done.reverted, { n: (change.prNumber ?? 0) + 9 })
-              : format(copy.done.undone, { n: change.prNumber ?? 0 })}
+            {change.revertPrNumber !== undefined
+              ? format(copy.done.reverted, { n: change.revertPrNumber })
+              : copy.done.undone}
           </span>
         )}
       </span>

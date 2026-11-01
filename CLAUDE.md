@@ -13,7 +13,8 @@ Oct 31). Where it's silent, SPEC-phase2, then docs/DECISIONS.md, then SPEC-phase
 
 - Built: Q0 abilities and the scripted decider · Q1 the Spark decider, `converse` and the
   owner's pivots · Q2 style boards · Q3 rounds of looks and the final review · Q4 tabs in the
-  mirror.
+  mirror · after Allen's run 1: one run branch and one PR per run, fixes that run the project's
+  CI checks and repair themselves, and a decider that hears about rollbacks (`retry_fix`).
 - Left: Q5, real runs on Allen's portfolio and openteamsheets.com with Allen (a redesign PR
   touches GitHub, and judging boards needs his eyes).
 - The guarantees in SPEC-phase3 §1.6 live in the abilities (`orchestrator/run.ts` `use()`),

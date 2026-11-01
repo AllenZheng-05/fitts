@@ -133,8 +133,7 @@ export type FixCall =
       title: string;
       body: string;
       sha?: string;
-    }
-  | { fn: 'preview'; runId: string; branches: string[] };
+    };
 
 /** A font a redesign needs, by family (and its Fontsource id when the library knows it). */
 export interface FontAsk {

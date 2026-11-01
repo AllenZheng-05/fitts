@@ -2542,3 +2542,50 @@ Allen's update (NEEDS-ALLEN).
   lived there, which looked like a fresh install with the real data untouched. The name is now
   set first. Checked with a throwaway Electron app: path asked first gives `@fitts\desktop`,
   name set first gives `Fitts`. Dev and release share `%APPDATA%\Fitts`.
+
+## Phase 3 — Allen's run 1 on his portfolio: one branch, one PR, and fixes that repair themselves
+
+Run #1 on the real portfolio: the redesign worked (Allen checked it out) and was rolled back
+over one lint error (`@ts-ignore`); three more fixes were rolled back on their first failed
+re-check; five PRs opened, one per fix. Allen's two asks: don't give up so easily, and
+understand the project's CI before coding; and one PR for the whole run.
+
+- **One worktree, one branch, one PR.** Every job of a run uses `.fitts-worktrees/<runId>/run`
+  on `fitts/run-<runId>`, one after another (`MAX_FIX_JOBS = 1`); the redesign is the branch's
+  first commit and later fixes commit on top. The run's one PR opens at FINALIZE
+  (`FixPipeline.finalize`, from `finish()`, whichever path ends the run), with a section per
+  change and one verification footer; title "Fitts: N fixes" or "Redesign: X and N fixes".
+  Allen chose "once, when the run ends" over "on the first fix, then grows". A stopped run pushes
+  nothing. Ask every action asks once at the end; a run whose jobs started in Autonomous asks
+  once if the mode changed. The parallel worktrees and the merged preview branch
+  (`fitts/preview-<runId>`, port 5180) are gone: the run's branch is the preview, served from a
+  detached worktree at its committed tip so a half-done fix never shows.
+- **The fixer knows the checks and runs them.** The baseline CI run was already in hand before
+  the fixer started and was never shown to it. The task now lists each check by name (and
+  which already fail, so they aren't its job) and whether the tests pass, and a `run_check`
+  tool (SPEC-phase2 §9.2 step 7 named it) runs one check, the tests, or all of them in the
+  worktree. The redesigner gets the same, and its prompt forbids silencing a check
+  (`@ts-ignore`, `eslint-disable`).
+- **Repair passes instead of a rollback.** A change that fails its probe check, the tests or a
+  CI check stays in the worktree; the fixer gets it back with everything that failed (every
+  broken check with its output, not the first line of the first one), up to `MAX_REPAIRS = 3`
+  times, each a fresh loop with half the budget and no extension (the `Fixer` is an injected
+  function, so a repair must be a task, not a resumed loop). The redesign's two passes became
+  the same loop. `outputSummary` keeps up to 40 failing lines (with the line before each, where
+  linters name the file) and 4000 chars. Only after that is the worktree reset to the last good
+  commit (`lastGood`, the branch's HEAD after each commit; "Start over" in the review goes back
+  to before the redesign). `Change.attempts` says how many passes it took.
+- **The decider hears about rollbacks.** `situation.changes` lists the last eight changes with
+  status, reason and attempts; `recent` gets a `fix` outcome per settled change; a rollback
+  wakes the loop (`nudged`) before `fixesSettled` can end the run, and a new `retry_fix`
+  ability (once per finding, refused after that; the ask modes ask first) feeds
+  `FixPipeline.retry` with the decider's hint. During the fix phase the audit's abilities
+  (`explore`, the checks) are refused: the audit is over. `decide.md` says when to retry and
+  when to leave it.
+- **Undo on a shared branch** is `git revert` of the change's commit (`revertCommit`), pushed
+  when the PR is open; a commit later ones build on refuses with "undo those first" rather
+  than reverting work the owner didn't ask to lose. After the run's PR is merged, the existing
+  revert-branch PR applies, for that commit (`revert` takes `sha`). Redo reverts the revert.
+  The mock engine's "+9" revert number became `revertPrNumber`.
+- **Not done:** the per-fix "Can I push…?" question is gone from the ask modes (approval
+  covers the branch; the push is asked once at the end). Fix jobs no longer run two at a time.

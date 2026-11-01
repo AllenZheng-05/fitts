@@ -166,7 +166,9 @@ The decider chooses *which* ability; it never gets to skip what an ability does 
 
 | Guarantee | Where it's enforced |
 |---|---|
-| A fix is verified before its PR opens | `fix` (the pipeline, §9.2), unchanged |
+| A fix is verified before it lands on the run's branch; the run's PR holds only verified changes | `fix` (the pipeline, §9.2) and `finalize` (§9.3) |
+| A fix that fails a check is repaired, not thrown away: up to three more passes with the output, then a rollback the decider hears about | the pipeline (§9.2) and `settled` → the run loop |
+| The decider retries a rolled-back fix at most once per finding, and asks first in the ask modes | `retry_fix` in `use()` |
 | Destructive actions ask first; writes are held | the gate (§13), unchanged, inside `explore` |
 | Every page and control is tried, or skipped with a reason, before `finish` | `finish` refuses while coverage is incomplete unless the owner said to stop; it says what's left |
 | A run never ends unreviewed | `finish` refuses until the phone pass, the link check and the review have run (built in Q0) |
@@ -239,17 +241,18 @@ from the answer.
 
 ### 2.4 The final review
 
-`apply_look` runs the redesign (one fix job, as now) and verifies it (page probes and the
-style check). Then, before the PR opens, it posts a `review` item: the redesigned pages as
-before/after shots (the versions mechanism serves the branch, so the owner can use it), and
-the question "What works, and what doesn't?". The owner's answer goes to one more fix job on
-the same branch; "It's good" (or "Open the PR") opens the PR. "Start over" goes back to the
-boards with the answer as feedback.
+`apply_look` runs the redesign (one fix job, as now, the first commit on the run's branch) and
+verifies it (page probes and the style check). Then, before it joins the run's PR, it posts a
+`review` item: the redesigned pages as before/after shots (the versions mechanism serves the
+branch, so the owner can use it), and the question "What works, and what doesn't?". The
+owner's answer goes to one more fix job on the same branch; "It's good" keeps it, and the run's
+PR (opened when the run ends, §9.3) carries it. "Start over" resets the branch to before the
+redesign and goes back to the boards with the answer as feedback.
 
 In Autonomous mode, Fitts reviews the redesign itself against the chosen board's parts and
-the brief (the style check, extended with the parts' rules) and opens the PR when it passes
-(Allen's answer: Autonomous may open the PR); the review item still posts, with "Send it
-back" on it, which reopens the branch for one more job.
+the brief (the style check, extended with the parts' rules) and keeps it when it passes
+(Allen's answer: Autonomous may open the PR, at the end of the run); the review item still
+posts, with "Send it back" on it, which reopens the branch for one more job.
 
 ### 2.5 What goes away
 

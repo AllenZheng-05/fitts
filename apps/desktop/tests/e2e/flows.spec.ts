@@ -67,7 +67,7 @@ test('§12.1 first launch → interview → audit → Fix it → gate → deny �
   const summary = page.getByRole('region', { name: 'Run summary' });
   const row = summary.getByRole('listitem').filter({ hasText: "Show 'Sent' confirmation" });
   await row.getByRole('button', { name: 'Undo' }).click();
-  await expect(row).toContainText('Undone · PR #13 closed');
+  await expect(row).toContainText('Undone');
 });
 
 test('§12.3 switching projects keeps the background run going', async () => {

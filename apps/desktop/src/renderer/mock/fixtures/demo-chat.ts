@@ -164,9 +164,9 @@ export const LIVE_FINDINGS: Record<
 
 /** Change titles and PRs for fixes that finish during the run. */
 export const LIVE_FIXES = {
-  [LIVE_FINDINGS.confirm.id]: { title: "Show 'Sent' confirmation", prNumber: 13, costUsd: 0.62 },
+  [LIVE_FINDINGS.confirm.id]: { title: "Show 'Sent' confirmation", prNumber: 12, costUsd: 0.62 },
   [LIVE_FINDINGS.names.id]: { title: 'One name per action', prNumber: 12, costUsd: 0.48 },
-  [LIVE_FINDINGS.nullName.id]: { title: "Show the recipient's name", prNumber: 14, costUsd: 0.41 },
+  [LIVE_FINDINGS.nullName.id]: { title: "Show the recipient's name", prNumber: 12, costUsd: 0.41 },
 };
 
 type Row = [Severity, Lens, Heuristic | undefined, string, string, string];
@@ -297,7 +297,8 @@ function rowFinding(row: Row, i: number, status: Finding['status']): Finding {
   };
 }
 
-const PRS = [12, 13, 14, 15, 16, 17, 18, 19, 20];
+/** The run's one PR (§9.3): every fix is in it. */
+const PR = 12;
 const FIXES_TOTAL = 7.02;
 
 /** The complete Scenario A run as it stands on the Done screen. */
@@ -315,9 +316,9 @@ export function demoChatDoneState(): Pick<RunState, 'findings' | 'changes' | 'co
     ...FIXED_ROWS.map((row, i): [Finding, string] => [rowFinding(row, i, 'pr-opened'), row[4]]),
   ];
 
-  fixed.forEach(([finding, title], i) => {
+  fixed.forEach(([finding, title]) => {
     const known = LIVE_FIXES[finding.id];
-    const prNumber = known?.prNumber ?? PRS[i % PRS.length] ?? 12;
+    const prNumber = known?.prNumber ?? PR;
     findings.push({ ...finding, status: 'pr-opened', prNumber });
     changes.push({
       id: `change-${finding.id}`,

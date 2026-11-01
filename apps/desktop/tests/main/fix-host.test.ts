@@ -179,9 +179,7 @@ describe('FixHost', () => {
     expect(git(join(tmp, 'origin.git'), 'branch', '--list', 'fitts/revert-1')).toBe('');
   });
 
-  it('merges verified branches into the preview branch, and discards a failed job', async () => {
-    const preview = await host.call('app', { fn: 'preview', runId: 'run-1', branches: [branch] });
-    expect(preview).toEqual({ branch: 'fitts/preview-run-1', merged: [branch] });
+  it('a second branch with the same name gets a suffix; discard drops a job and its branch', async () => {
     const second = (await host.call('app', {
       fn: 'prepare',
       runId: 'run-1',

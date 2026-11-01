@@ -64,6 +64,7 @@ function statusText(change: Change): string {
 export function buildReport(project: Project | undefined, run: RunState, now = new Date()): string {
   const r = copy.done.report;
   const stats = runStats(run);
+  const pr = run.changes.find((c) => c.prNumber !== undefined)?.prNumber;
   const lines = [
     `# ${format(r.title, { project: project?.name ?? run.projectId, run: run.runId.replace('run-', '') })}`,
     '',
@@ -80,10 +81,12 @@ export function buildReport(project: Project | undefined, run: RunState, now = n
     '',
     `## ${r.changes}`,
     '',
+    // One PR for the run (§9.3): named once above, not on every line.
+    ...(pr !== undefined ? [`${r.pullRequest} #${pr}`, ''] : []),
     ...run.changes.map(
       (c) =>
         `- ${c.severity !== undefined ? `[${severityLabel(c.severity, 'short')}] ` : ''}${c.title}` +
-        `${c.prNumber ? ` · PR #${c.prNumber}` : ''} · ${formatUsd(c.costUsd)} · ${statusText(c)}`,
+        ` · ${formatUsd(c.costUsd)} · ${statusText(c)}`,
     ),
     '',
     `## ${r.findings}`,
@@ -95,13 +98,12 @@ export function buildReport(project: Project | undefined, run: RunState, now = n
         // Where it stands, in words, with the PR that fixed it (the redesign's, if it did).
         const change = run.changes.find((c) => c.findingIds.includes(f.id));
         const status = r.findingStatus[f.status];
-        const pr = f.prNumber ? ` · PR #${f.prNumber}` : '';
         const by = change?.kind === 'redesign' ? ` ${r.byRedesign}` : '';
         const lane = f.lane === 'suggestion' ? ` · ${r.suggestion}` : '';
         return [
           `### [${severityLabel(f.severity, 'short')}] ${f.title}`,
           '',
-          `${f.heuristic ?? copy.audit.lens[f.lens]} · ${f.route} · ${status}${by}${pr}${lane}`,
+          `${f.heuristic ?? copy.audit.lens[f.lens]} · ${f.route} · ${status}${by}${lane}`,
           '',
           ...(f.finding ? [`**${copy.finding.findingPrefix}** ${f.finding}`, ''] : []),
           ...(f.fix ? [`**${copy.finding.fixPrefix}** ${f.fix}`, ''] : []),

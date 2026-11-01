@@ -235,12 +235,12 @@ export const DEVICES: SiteDevice[] = [
 ];
 
 /**
- * Another version of the site to look at beside the live one: one fix's branch, or the run's
- * preview (its verified branches merged). Main serves it from a worktree on its own port.
+ * Another version of the site to look at beside the live one: a branch (the run's, with every
+ * verified change). Main serves it from a worktree on its own port.
  */
-export type SiteVersion = (
-  { kind: 'branch'; branch: string } | { kind: 'preview'; branches: string[] }
-) & {
+export type SiteVersion = {
+  kind: 'branch';
+  branch: string;
   /** The page it opens on (the project's start page if absent). */
   path?: string;
 };

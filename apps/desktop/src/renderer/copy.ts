@@ -270,7 +270,7 @@ export const copy = {
     viewPr: 'View PR #{n}',
     prDryRun: 'That was a practice run, so there’s no pull request on GitHub to open.',
     undo: 'Undo',
-    undone: 'Undone · PR #{n} closed',
+    undone: 'Undone',
     reverted: 'Revert PR #{n} opened',
     lookfeelTag: "Look & feel · doesn't fit the purpose",
     directionsLabel: 'Design directions',
@@ -278,12 +278,12 @@ export const copy = {
       title: 'Review the new look',
       before: 'Before',
       after: 'After',
-      ok: 'It’s good, open the PR',
+      ok: 'It’s good, keep it',
       restart: 'Start over',
       hint: 'Or tell me what to change in the message box, and I’ll change it first.',
       back: 'Send it back',
       autonomousHint:
-        'The pull request is open. Not right? Send it back and tell me what to change.',
+        'The new look is on the branch. Not right? Send it back and tell me what to change.',
       answered: {
         ok: 'You said it’s good',
         restart: 'You started over',
@@ -489,7 +489,7 @@ export const copy = {
     dismissed: 'You marked this not a problem.',
     rolledBack: 'Rolled back · {reason}',
     tryAgain: 'Try again',
-    undone: 'Undone · PR #{n} closed',
+    undone: 'Undone',
     redo: 'Redo',
     checks: {
       H1: 'feedback check',
@@ -533,8 +533,8 @@ export const copy = {
   done: {
     preview: 'Preview of your site with every fix',
     previewAsIs: 'Your site as it is now · nothing was changed',
-    previewCaption: 'Preview branch {branch} · all {n} fixes combined',
-    previewLiveCaption: 'Your site as it is now · all {n} fixes are combined on {branch}',
+    previewCaption: 'Branch {branch} · all {n} fixes, each one checked',
+    previewLiveCaption: 'Your site as it is now · all {n} fixes are on {branch}',
     summary: 'Run summary',
     runPicker: 'Run',
     currentRun: 'Run #{n} · today',
@@ -568,7 +568,7 @@ export const copy = {
     seeAll: 'See all {n} changes',
     showFewer: 'Show fewer',
     undo: 'Undo',
-    undone: 'Undone · PR #{n} closed',
+    undone: 'Undone',
     reverted: 'Revert PR #{n} opened',
     redo: 'Redo',
     retrying: 'Retrying…',
@@ -606,6 +606,7 @@ export const copy = {
       statusVerified: 'fixed and verified',
       statusRolledBack: 'rolled back',
       statusUndone: 'undone',
+      pullRequest: 'Pull request',
       statusRetrying: 'retrying',
     },
   },
@@ -922,7 +923,7 @@ export const copy = {
       'Here’s “{title}” on {route}, outlined. I’ve paused so you can look; press Resume when you’re done.',
     showFindingDone: 'Here’s “{title}” on {route}, outlined.',
     reviewAsk:
-      'The new look is on every page and they all still work. Have a look before I open the pull request: **what works, and what doesn’t?**',
+      'The new look is on every page and they all still work. Have a look before it goes in the pull request: **what works, and what doesn’t?**',
     reviewAgain: 'Changed and checked. **How about now?**',
     cantFix:
       'I can’t fix “{title}” on my own: I have no check that would prove the fix worked. Here’s what to change: {fix}',
@@ -944,7 +945,7 @@ export const copy = {
     blockingLabel: 'I need you · paused',
     doneNothing:
       'Nothing to change this time. I checked every page and control, and your site holds up.',
-    done: "All done. I verified 24 fixes and opened 9 pull requests. Two changes didn't pass my checks, so I rolled them back. Want me to try those again with a different approach?",
+    done: "All done. I verified 24 fixes and opened one pull request with all of them. Two changes didn't pass my checks, so I rolled them back. Want me to try those again with a different approach?",
     redesign:
       'You told me this site is for families who just lost someone. Hot pink, confetti shapes and a bouncy font read as celebratory, which can feel hurtful at a hard moment.',
     handBack: 'Thanks. You went through {path}. Want me to test that path properly?',

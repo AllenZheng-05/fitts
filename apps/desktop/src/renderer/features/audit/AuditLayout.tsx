@@ -11,7 +11,7 @@ import { getEngine, recordUserClick } from '../../state/engine';
 import { useLiveSite } from '../../state/live-site';
 import { useAuditOnly } from '../../state/projects';
 import { useSite } from '../../state/site';
-import { fixedBranches, useSiteVersion } from '../../state/site-versions';
+import { fixedBranch, useSiteVersion } from '../../state/site-versions';
 import { useUi } from '../../state/ui';
 import { ChatPanel } from '../chat/ChatPanel';
 import { FINDING_HOST, FindingPanel } from '../finding-panel/FindingPanel';
@@ -114,14 +114,14 @@ function AuditSiteView({ run }: { run: RunState }) {
   const problems = rewindFinding
     ? run.overlays.problems.filter((p) => p.ref === rewindFinding.elementRef)
     : run.overlays.problems;
-  // Before/After: the run's verified fixes, merged, served beside the live site.
-  const branches = auditOnly ? [] : fixedBranches(run);
-  const showAfter = beforeAfter && branches.length > 0;
+  // Before/After: the run's branch, with every verified fix, served beside the live site.
+  const branch = auditOnly ? undefined : fixedBranch(run);
+  const showAfter = beforeAfter && branch !== undefined;
   const afterId = useSiteVersion(
     run.projectId,
     run.runId,
     'after',
-    showAfter ? { kind: 'preview', branches } : null,
+    showAfter && branch ? { kind: 'branch', branch } : null,
   );
   const showOverlays = highlightsOn && !driving && !showAfter;
 
@@ -167,7 +167,7 @@ function AuditSiteView({ run }: { run: RunState }) {
               >
                 {copy.site.highlights}
               </Button>
-              {branches.length > 0 && (
+              {branch !== undefined && (
                 <SegmentedControl
                   label={copy.site.beforeAfter}
                   selected={showAfter ? 'after' : 'before'}

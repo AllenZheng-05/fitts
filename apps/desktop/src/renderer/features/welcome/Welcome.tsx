@@ -325,7 +325,7 @@ function WelcomeBack() {
       <ul className="flex max-h-[420px] flex-wrap gap-3 overflow-y-auto">
         {projects.map((project) => {
           const run = runs[project.id];
-          const prs = run?.changes.filter((c) => c.prNumber !== undefined).length ?? 0;
+          const prs = new Set(run?.changes.flatMap((c) => (c.prNumber ? [c.prNumber] : []))).size;
           const fixes = run?.changes.filter((c) => c.status === 'verified').length ?? 0;
           const caption =
             run?.phase === 'audit'

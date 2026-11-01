@@ -136,10 +136,12 @@ test('real fixes: ≥5 verified PRs, a rollback then retry, undo and a revert PR
     `\nChanges:\n${s.changes.map((c) => `  [${c.status}] ${c.title}${c.prNumber ? ` · PR #${c.prNumber}` : ''}${c.reason ? ` · ${c.reason}` : ''}`).join('\n')}\n`,
   );
   expect(verified.length).toBeGreaterThanOrEqual(5);
+  // One PR for the run (§9.3): every verified change is in it.
+  expect(new Set(verified.map((c) => c.prNumber)).size).toBe(1);
   const sabotaged = rolled.find((c) => c.reason?.includes('deliberately skipped'));
   expect(sabotaged).toBeTruthy();
 
-  // Retry the rolled-back one: it verifies with a new PR.
+  // Retry the rolled-back one: it verifies on the run's branch and joins the run's PR.
   await call(page, 'retryChange', [sabotaged?.id]);
   await expect
     .poll(async () => (await state(page)).changes.find((c) => c.id === sabotaged?.id)?.status, {
@@ -153,9 +155,9 @@ test('real fixes: ≥5 verified PRs, a rollback then retry, undo and a revert PR
     `Retried: [${retried?.status}] ${retried?.title}${retried?.prNumber ? ` · PR #${retried.prNumber}` : ''}${retried?.reason ? ` · ${retried.reason}` : ''}`,
   );
   expect(retried?.status).toBe('verified');
-  expect(retried?.prNumber).toBeDefined();
+  expect(retried?.prNumber).toBe(verified[0]?.prNumber);
 
-  // Undo of an open PR closes it.
+  // Undo reverts that commit on the branch; the run's PR stays open.
   const first = verified[0];
   await call(page, 'undoChange', [first?.id]);
   await expect
@@ -166,9 +168,9 @@ test('real fixes: ≥5 verified PRs, a rollback then retry, undo and a revert PR
     JSON.parse(readFileSync(registry, 'utf8')) as {
       prs: { number: number; state: string; branch: string }[];
     };
-  expect(prs().prs.find((p) => p.number === first?.prNumber)?.state).toBe('closed');
+  expect(prs().prs.find((p) => p.number === first?.prNumber)?.state).toBe('open');
 
-  // A merged PR's undo opens a revert PR.
+  // Once the run's PR is merged, an undo opens a revert PR for that commit.
   const second = verified[1];
   const data = prs();
   const merged = data.prs.find((p) => p.number === second?.prNumber);

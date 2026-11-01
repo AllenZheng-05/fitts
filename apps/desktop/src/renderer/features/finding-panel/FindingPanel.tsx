@@ -394,9 +394,9 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
     return (
       <div className={`${bar} bg-neutral-tint`}>
         <span className="flex-[1_1_180px] font-bold text-neutral-ink">
-          {change.merged
-            ? format(copy.items.reverted, { n: (change.prNumber ?? 0) + 9 })
-            : format(copy.finding.undone, { n: change.prNumber ?? 0 })}
+          {change.revertPrNumber !== undefined
+            ? format(copy.items.reverted, { n: change.revertPrNumber })
+            : copy.finding.undone}
         </span>
         <Button size="md" onClick={() => engine.retryChange(run.projectId, change.id)}>
           {copy.finding.redo}

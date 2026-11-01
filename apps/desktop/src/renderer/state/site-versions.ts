@@ -24,7 +24,7 @@ export function useSiteVersion(
   return siteId;
 }
 
-/** The branches of every change that's verified and still in (the run's "with fixes"). */
-export function fixedBranches(run: RunState): string[] {
-  return run.changes.filter((c) => c.status === 'verified' && c.branch).map((c) => c.branch ?? '');
+/** The run's branch, once a verified change is on it (every fix lands on the same one). */
+export function fixedBranch(run: RunState): string | undefined {
+  return run.changes.find((c) => c.status === 'verified' && c.branch)?.branch;
 }

@@ -1,5 +1,5 @@
 // The fix pipeline's privileged half (SPEC-phase2 §9): git worktrees, file access confined to a
-// worktree, verification on the worktree's own dev server, commits, PRs and the preview branch.
+// worktree, verification on the worktree's own dev server, commits, reverts and PRs.
 // The agent drives it over RPC (the fixer's model calls stay in the agent). Fitts only touches
 // the project's `.fitts-worktrees/` and its own `fitts/` branches.
 import type { Project, SiteVersion } from '@fitts/schema';
@@ -47,7 +47,7 @@ interface Job {
 
 const TEXT = /\.(tsx?|jsx?|css|scss|html|json|md|vue|svelte)$/;
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.fitts-worktrees', '.vite']);
-/** Verification servers: 5181 and up (the preview branch uses 5180, §9.2). */
+/** Verification and version servers: 5181 and up (§9.2). */
 const FIRST_PORT = 5181;
 /** A redesign's after shots when the before shots' size isn't known. */
 const SHOT_SIZE = { width: 1280, height: 800 };
@@ -139,8 +139,6 @@ export class FixHost {
           call.body,
           call.sha,
         );
-      case 'preview':
-        return this.preview(projectId, call.runId, call.branches);
     }
   }
 
@@ -522,20 +520,12 @@ export class FixHost {
   }
 
   /**
-   * A version of the site to look at (the Before/After switch, a fix's live preview), as a
-   * folder with its dependencies: a detached worktree at the branch's committed tip, never the
-   * branch's own worktree (a fix may be half-done there). `preview` merges the run's verified
-   * branches into its preview branch.
+   * A version of the site to look at (the Before/After switch, the run's branch), as a folder
+   * with its dependencies: a detached worktree at the branch's committed tip, never the
+   * branch's own worktree (a fix may be half-done there).
    */
   async viewDir(projectId: string, runId: string, version: SiteVersion): Promise<string> {
     const root = this.root(projectId);
-    if (version.kind === 'preview') {
-      const { merged } = await this.preview(projectId, runId, version.branches);
-      if (version.branches.length && !merged.length) throw new Error('no fix merged cleanly');
-      const dir = join(root, '.fitts-worktrees', runId, 'preview');
-      await this.dependencies(root, dir);
-      return dir;
-    }
     const dir = join(
       root,
       '.fitts-worktrees',
@@ -710,25 +700,6 @@ export class FixHost {
     }
     await git(root, 'worktree', 'prune');
     rmSync(runDir, { recursive: true, force: true });
-  }
-
-  /** FINALIZE: every verified branch merged into `fitts/preview-<runId>` (§9.4). */
-  async preview(projectId: string, runId: string, branches: string[]) {
-    const root = this.root(projectId);
-    const dir = join(root, '.fitts-worktrees', runId, 'preview');
-    const name = `fitts/preview-${runId}`;
-    if (!existsSync(dir)) {
-      const add = await git(root, 'worktree', 'add', '-q', dir, '-b', name, 'HEAD');
-      if (add.code !== 0)
-        throw new Error(`git worktree add failed: ${add.stderr.trim().slice(0, 200)}`);
-    }
-    const merged: string[] = [];
-    for (const b of branches) {
-      const res = await git(dir, 'merge', '--no-edit', '-q', b);
-      if (res.code === 0) merged.push(b);
-      else await git(dir, 'merge', '--abort');
-    }
-    return { branch: name, merged };
   }
 }
 

@@ -41,10 +41,10 @@ It does this with live voice, a real permission gate and real cost tracking.
 **Phase 2 is done when:**
 
 1. **The demo works end to end.** On `demo/chat` (§3), one full run in "Ask when unsure"
-   finds at least 20 of the 25 planted issues, opens at least 5 verified PRs, and every
-   PR's check flips from fail to pass.
+   finds at least 20 of the 25 planted issues, opens one PR with at least 5 verified fixes,
+   and every fix's check flips from fail to pass.
 2. **The redesign works.** On `demo/hartwell`, an Autonomous run detects the theme
-   mismatch, applies a redesign, re-checks it, and opens one redesign PR without asking.
+   mismatch, applies a redesign, re-checks it, and opens the run's PR without asking.
 3. **The safety controls work.** The destructive gate intercepts a real `DELETE` request
    in every mode except Dangerous. Stop, pause, take the wheel, point, rewind and undo
    all work against the real engine.
@@ -669,8 +669,8 @@ finishes them, with at most 2 routes in flight.
   - Otherwise it becomes a **suggestion**: `lane: 'suggestion'`, status `open`. Suggestions
     aren't posted to chat or the tray. The Done math line counts them ("{open} suggestions
     without enough evidence"), and the exported report lists them.
-- **Batching:** severity 3–4 get their own PR; severity 1–2 are batched per heuristic or
-  lens.
+- **One PR per run (Phase 3):** every verified change lands on the run's branch and goes in
+  its one pull request, opened when the run ends (§9.3).
 - **Approval cards** list only findings that are still open. A finding the user already
   pressed "Fix it" on is left out, as in Phase 1.
 
@@ -711,16 +711,20 @@ Finding panel shows "High · Fitts plugin" or "Medium · code search".
 
 ### 9.2 Job execution
 
-1. **Create a worktree:**
-   `git worktree add <project>/.fitts-worktrees/<runId>/<findingId> -b fitts/<heuristic>-<slug> <base>`,
-   where `<base>` is HEAD or `fitts/base-<runId>`. Add `.fitts-worktrees/` to
-   `.git/info/exclude` (not `.gitignore`, which would be a change to the user's repo).
-   Then install dependencies in the worktree (`pnpm install --offline --frozen-lockfile`,
-   falling back to a normal install).
+1. **The run's worktree (Phase 3: one branch per run):** the first job runs
+   `git worktree add <project>/.fitts-worktrees/<runId>/run -b fitts/run-<runId> HEAD`; every
+   later job of the run uses the same worktree and branch, one after another. Add
+   `.fitts-worktrees/` to `.git/info/exclude` (not `.gitignore`, which would be a change to
+   the user's repo). Then install dependencies in the worktree
+   (`pnpm install --offline --frozen-lockfile`, falling back to a normal install). The
+   project's own tests and CI checks (from its workflows) run once on the untouched worktree:
+   the baseline a change is compared against.
 2. **Write a task file:**
    - the finding JSON, evidence and source hints
    - constraints: "minimal diff; don't change copy except what the finding names"
    - the verification it must pass
+   - the project's CI checks by name (and which already fail), and whether its tests pass:
+     the fixer runs them itself with `run_check` before it says it's done
    - for "Change the fix", the user's instruction
 3. **Run Muse Code:**
    `muse exec --json --model <model> --approval-mode never --sandbox-network restricted --max-model-steps 40 --prompt-file task.md`
@@ -740,31 +744,39 @@ Finding panel shows "High · Fitts plugin" or "Medium · code search".
    - The commit has no AI co-author or session trailers.
    - Capture after screenshots, plus the diff for `finding.diff`.
    - Create a `Change` with status `verified`, and a `fix.result` item.
-6. **On fail:** discard the worktree. The `Change` gets status `rolled-back` with a
-   `reason`.
+6. **On fail (Phase 3):** the change stays in the worktree and the fixer gets it back with
+   everything that failed (every broken CI check with its output, the failing tests, what the
+   probe still reports), up to 3 repair passes, each with half the step budget and no
+   extension. A pass that changes nothing, a fixer that was told to stop, or the spending cap
+   ends it sooner. Only then is the worktree reset to the branch's last good commit
+   (`git reset --hard <sha>`), and the `Change` gets status `rolled-back` with the `reason`
+   and how many passes it took (`attempts`). The decider hears about it (SPEC-phase3 §1.6).
 7. **Fallback:** if Muse Code is unavailable or V6 fails, use an in-process
    `muse-wonder-1.0` tool loop (`read_file`, `search`, `apply_patch`, `run_check`)
    restricted to the worktree path. On Windows, if `muse` has no native build, this
    fallback is the default.
 
 **Concurrency** (`fixingCount`):
-- At most 2 fix jobs at a time.
-- A redesign job runs alone and first. Later fixes are rebuilt on top of it.
-- If two jobs touch the same lines, the later one is redone on the updated base.
+- One job at a time: fixes land on the run's branch one after another.
+- A redesign job runs first, as the branch's first commit; later fixes commit on top of it.
 
 ### 9.3 Pull requests
 
-**When a PR opens:**
+**One PR per run (Phase 3):** every verified change is a commit on `fitts/run-<runId>`, and
+the run's one pull request opens at FINALIZE with all of them, one section per change.
 
 | Mode | Behavior |
 |---|---|
-| Autonomous | Opens the PR as soon as the fix verifies, without asking |
-| Ask when unsure, Ask every action | Approving the fix (`approveFixes`, Fix it, Approve fix) covers opening its PR |
+| Autonomous | Opens the run's PR when the run ends, without asking |
+| Ask when unsure | Approving a fix (`approveFixes`, Fix it, Approve fix) covers it landing on the branch; the PR opens at the end without another question |
+| Ask every action | Approving a fix covers the branch; one question at the end before the push and the PR |
 | Plan only | Never fixes, so never opens a PR |
-| Dangerous | Opens PRs freely, like Autonomous |
+| Dangerous | Like Autonomous |
 
-- **Mode changed mid-fix:** if a fix was started in Autonomous and the mode has since
-  changed, Fitts asks before opening its PR (a blocking question).
+- **Mode changed mid-run:** if any job started in Autonomous and the mode has since changed
+  to an ask mode, Fitts asks once before opening the PR (a blocking question). Declined, the
+  branch keeps everything, checked, and a later ask can open it.
+- **A run the owner stopped** pushes nothing.
 - **Only `fitts/` branches:** Fitts never pushes to the user's own branches and never merges.
 - **Command:** push the branch, then run
   `gh pr create --title … --body-file pr.md --attach before.png --attach after.png`.
@@ -775,20 +787,25 @@ Finding panel shows "High · Fitts plugin" or "Medium · code search".
   - no AI attribution footer
 - **Version check:** `gh --version` must be ≥ 2.99. Otherwise, commit the images under
   `.fitts/pr-assets/` on the branch and link them.
-- **What's stored:** `prNumber` and `prUrl` on the change and the finding (status
-  `pr-opened`). View PR opens `prUrl` with `shell.openExternal`.
+- **What's stored:** `prNumber` and `prUrl` on every verified change and its findings (status
+  `pr-opened`), the same number for all; each change's commit as `sha`. View PR opens `prUrl`
+  with `shell.openExternal`.
 
 ### 9.4 Preview branch, undo, try again
 
-- **Preview branch:** at FINALIZE, merge all verified branches into `fitts/preview-<runId>`
-  in a worktree, then serve it on `localhost:5180` for the Done view's preview pane.
-- **Undo** (`undoChange`):
-  - If the PR is open: `gh pr close --delete-branch` (Done shows "Undone · PR #13 closed").
-  - If it's merged (`gh pr view --json mergedAt`): open a revert PR, without asking
-    ("Revert PR #21 opened").
-  - The change gets status `undone`. Redo re-opens the change from its branch.
-- **Try again** (`retryChange`): status becomes `retrying`. Re-run the job with the
-  rollback reason added to the task file. On pass, it gets a new PR number.
+- **The run's branch is the preview:** the Done view's After pane (and the audit's
+  Before/After) serve `fitts/run-<runId>` from a detached worktree at its committed tip, on
+  its own port. There is no merge step.
+- **Undo** (`undoChange`), one change on the shared branch:
+  - `git revert` of its commit, as a new commit on the branch, pushed if the run's PR is open
+    (Done shows "Undone"). A change that later commits build on can't be undone on its own;
+    Fitts says which to undo first.
+  - If the run's PR is merged (`gh pr view --json mergedAt`): a revert PR for that commit,
+    without asking ("Revert PR #21 opened"), stored as `revertPrNumber`.
+  - The change gets status `undone`, with `revertSha`. Redo reverts the revert.
+- **Try again** (`retryChange`): status becomes `retrying`. Re-run the job in the same
+  worktree with the rollback reason added to the task file. On pass, it commits on the branch
+  (and is pushed to the run's PR when that's already open).
 
 ---
 
@@ -1128,7 +1145,7 @@ Each milestone ends with typecheck, lint, unit and e2e tests green, and a commit
 | P6 | Reviewers + aggregator + evidence check + suggestions lane | `pnpm bench:chat` reports recall ≥ 80% and at most 2 false positives at severity ≥ 2 |
 | P7 | Interview + theme-fit | The real interview fills the brief (For and Who from the first answer on demo/chat); on `demo/hartwell`, theme-fit returns `fits: false` with 3 directions |
 | P8 | Permission gate + Fetch interception + per-mode behavior | `DELETE /api/conversations/12` is held until the user answers; Ask every action asks before each click; Plan only never clicks |
-| P9 | Fix pipeline + verification + PRs + preview branch + undo/redo/retry | At least 5 verified PRs on the demo/chat mirror; Autonomous opens a PR without asking; one deliberately failing fix is rolled back, then retried; undo closes a PR; a merged PR's undo opens a revert PR |
+| P9 | Fix pipeline + verification + the run's PR + undo/redo/retry | One PR with at least 5 verified fixes on the demo/chat mirror; Autonomous opens it without asking; one deliberately failing fix is rolled back, then retried; undo reverts its commit; a merged PR's undo opens a revert PR |
 | P10 | SAM + Muse Image | The Finding panel shows the SAM outline and a real mockup; hartwell redesign directions use Muse Image |
 | P11 | Voice | Tap-to-talk round trip; always-listening "Fitts, stop" stops; Fitts speaks via ElevenLabs with cut-off and highlight; barge-in works; system-voice fallback |
 | P12 | Live-site verification, replay, packaging, README, self-audit | A GitHub Pages site verifies through the host, and DNS and file verification work; judge replay works without keys; a fresh Windows install from Releases works; CI builds the macOS app; Fitts audits its own Settings screen |

@@ -177,7 +177,7 @@ describe('gating', () => {
     const change = s.changes.find((c) => c.id === result?.changeId);
     expect(change).toMatchObject({
       title: "Show 'Sent' confirmation",
-      prNumber: 13,
+      prNumber: 12,
       status: 'verified',
     });
     expect(s.findings.find((f) => f.id === LIVE_FINDINGS.confirm.id)?.status).toBe('pr-opened');
@@ -514,7 +514,8 @@ describe('scenarios end to end', () => {
     expect(statuses.filter((x) => x === 'dismissed')).toHaveLength(3);
     expect(statuses.filter((x) => x === 'open')).toHaveLength(2);
     expect(s.changes).toHaveLength(26);
-    expect(new Set(s.changes.flatMap((c) => (c.prNumber ? [c.prNumber] : []))).size).toBe(9);
+    // One PR for the run (§9.3).
+    expect(new Set(s.changes.flatMap((c) => (c.prNumber ? [c.prNumber] : []))).size).toBe(1);
     expect(s.cost.spentUsd).toBe(13.92);
     const fixes = s.changes.reduce((sum, c) => sum + c.costUsd, 0);
     expect(Math.round(fixes * 100) / 100).toBe(s.cost.byPhase.fixes);

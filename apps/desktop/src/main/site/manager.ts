@@ -111,8 +111,7 @@ export class SiteManager {
   ): Promise<void> {
     if (!SAFE_ID.test(runId) || !siteId.startsWith(`${projectId}.v.`) || !SAFE_ID.test(siteId))
       return;
-    const branches = version.kind === 'branch' ? [version.branch] : version.branches;
-    if (!branches.every((b) => BRANCH.test(b))) return;
+    if (!BRANCH.test(version.branch)) return;
     if (this.live.has(siteId)) this.close(siteId);
     const project = this.projectFor(projectId);
     const source = this.versions;
@@ -536,10 +535,8 @@ export class SiteManager {
           typeof runId === 'string' &&
           v !== null &&
           typeof v === 'object' &&
-          ((v.kind === 'branch' && typeof v.branch === 'string') ||
-            (v.kind === 'preview' &&
-              Array.isArray(v.branches) &&
-              v.branches.every((b) => typeof b === 'string')));
+          v.kind === 'branch' &&
+          typeof v.branch === 'string';
         if (ok) void this.openVersion(siteId, projectId, runId, v);
       },
     );

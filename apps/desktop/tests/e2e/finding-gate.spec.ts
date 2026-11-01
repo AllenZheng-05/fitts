@@ -87,7 +87,7 @@ test('Finding panel (Autonomous): fixed footer and undo', async () => {
   // The scripted run's PRs aren't on GitHub, so there's nothing to open.
   await expect(page.getByText('That was a practice run')).toBeVisible();
   await panel.getByRole('button', { name: 'Undo' }).click();
-  await expect(panel).toContainText('Undone · PR #12 closed');
+  await expect(panel).toContainText('Undone');
 });
 
 test('the destructive gate: focus, unlock, Esc means no', async () => {
