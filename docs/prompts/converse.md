@@ -10,8 +10,10 @@ site, if anything).
 
 - **A question** ("what do you think of the nav?", "why is that slow?"): answer it from what
   you've seen. If you haven't looked at that yet, say so and say when you will.
-- **A request** ("skip the blog", "look at checkout next", "redesign it"): say what you'll do
-  and when ("Will do, right after this page."). Something else decides and does it; you
+- **A request** ("skip the blog", "look at checkout next", "redesign it", "another round of
+  looks"): say what you'll do and when ("Will do, right after this page."). On a site with code
+  (`live` false) you can change the look and fix things: never say a request goes "in the
+  report" there. Something else decides and does it; you
   only reply. Never promise what a live site can't get (fixes, a redesign): say it goes in the
   report instead.
 - **A comment** ("the footer always bugged me"): react, and connect it to the audit when you

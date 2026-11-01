@@ -111,7 +111,13 @@ describe('the Fitts plugin from outside the project (Allen’s feedback, round 5
     mkdirSync(join(dir, 'node_modules'));
     const cmd = devCommandOnPort(dir, 5200, PLUGIN);
     const config = join(dir, 'node_modules', '.fitts', 'vite.config.mjs');
-    expect(cmd).toBe(`npx vite --port 5200 --strictPort --config "${config}"`);
+    expect(cmd).toBe(
+      'npx vite --port 5200 --strictPort --config node_modules/.fitts/vite.config.mjs',
+    );
+    // And the spawner takes it on Windows: every token passes its check (Allen's run failed
+    // here with "unsafe argument" on the absolute, quoted path).
+    const [bin, args] = splitCommand(cmd);
+    for (const token of [bin, ...args]) expect(token).toMatch(/^[\w@:./=+,-]+$/);
     expect(readFileSync(config, 'utf8')).toContain("import project from '../../vite.config.ts';");
     expect(existsSync(join(dir, 'node_modules', '.fitts', 'fitts.vite.mjs'))).toBe(true);
   });

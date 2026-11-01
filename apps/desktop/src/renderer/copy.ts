@@ -24,6 +24,7 @@ export const copy = {
     audit: 'Audit & fix',
     done: 'Done',
     completed: 'completed',
+    show: 'Show {step}',
   },
   layout: {
     siteMap: 'Site map',

@@ -2489,3 +2489,33 @@ Allen's update (NEEDS-ALLEN).
 - A key without the Text to Speech permission is assumed to answer with a "missing
   permissions" error, which the check names; not seen yet, since that needs a key made without
   it. The Settings hint says to give the key Text to Speech access and nothing else.
+
+## Phase 3 — Allen's walkthrough feedback (round 6): the release run that did nothing
+
+- **The site never started, and no fix could be checked.** The plugin change passed Vite
+  `--config "C:\…\node_modules\.fitts\vite.config.mjs"`, and on Windows the spawner refuses any
+  token with a drive letter, backslashes or quotes for commands that go through cmd.exe. So the
+  dev server failed to start (the blank mirror, the site-down card, "Restart server" failing the
+  same way) and all 8 fixes rolled back with "unsafe argument". The config now goes as the
+  relative `node_modules/.fitts/vite.config.mjs` (Vite reads it from its working folder). The
+  unit test now runs the command through the spawner's own token check, and the fix was checked
+  by starting Vite through `spawnProcess` itself on Windows: it served stamped components. The
+  earlier checks ran Vite from a shell, which is why they missed it.
+- **Fitts wiped its own looks.** After theme-fit posted three looks, the decider chose
+  `new_look`, which clears the directions to judge the theme again; `looks` then had nothing to
+  wait on, so Ask every action went straight to fixes. `new_look` is now refused while looks are
+  showing and unpicked (the prompt points at `revise_looks`), and `fix` is refused until the look
+  is settled (picked, kept or declined).
+- **Fitts stopped listening once fixes started.** The decision loop returned when the fix phase
+  began, so "another redesign like Desktop Playground with more colors" only reached `converse`,
+  which promised a note in the report. Now the loop stays: in the fix phase each owner message gets
+  a decision (even while the fix card waits), and `finish` is refused while fixes are running or
+  waiting; they end the run when they settle. `converse` is told a site with code can be
+  changed, so it doesn't promise "the report".
+- **Queued messages that never left.** A message sent while Fitts acted was both answered (by
+  `converse`) and queued, and the queue was only delivered between crawl steps, so after the crawl
+  it stayed forever. With a conversation, messages aren't queued at all; without one, the queue
+  is also delivered at every decision.
+- **Done isn't a dead end.** On Done, the header's "Audit & fix" and "Done" steps are buttons:
+  the audit page (site, chat, findings) and the summary. "Try again" on a rolled-back fix
+  switches to the audit page, to watch it work. Each run's Done starts on the summary.

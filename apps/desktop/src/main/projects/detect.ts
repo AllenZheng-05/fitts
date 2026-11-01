@@ -5,7 +5,7 @@ import type { Detection } from '@fitts/schema';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { run } from '../spawn';
-import { fittsViteConfig } from './fitts-config';
+import { FITTS_CONFIG, fittsViteConfig } from './fitts-config';
 
 interface Pkg {
   name?: string;
@@ -89,7 +89,9 @@ export function devCommandOnPort(folder: string, port: number, pluginFile?: stri
       pkg.dependencies?.['@fitts/vite-plugin'] ?? pkg.devDependencies?.['@fitts/vite-plugin'],
     );
     const config = ownConfig || has ? null : fittsViteConfig(folder, pluginFile);
-    return `${runner} ${rest} --port ${port} --strictPort${config ? ` --config "${config}"` : ''}`;
+    // Relative to the project (Vite reads --config from its working folder), so the command
+    // passes the spawner's check on Windows: no drive letter, backslashes or quotes.
+    return `${runner} ${rest} --port ${port} --strictPort${config ? ` --config ${FITTS_CONFIG}` : ''}`;
   }
   return detectDevCommand(folder, pkg).command;
 }

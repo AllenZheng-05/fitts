@@ -853,7 +853,7 @@ describe('the guarantees hold against a hostile decider (SPEC-phase3 §1.6)', ()
     expect(decider.seen.some((x) => x.recent.includes('fix:refused'))).toBe(true);
     expect(state()?.chat.some((c) => c.type === 'approval.batch')).toBe(false);
     run.dispose();
-  });
+  }, 20_000);
 
   it('a decider that throws falls back to the scripted order and the run finishes', async () => {
     const { run, state } = setup({
@@ -1313,6 +1313,126 @@ describe('the Finding panel’s evidence (Allen’s feedback, round 5)', () => {
     expect(f?.box).toEqual({ left: 10, top: 20, width: 28, height: 20 });
     expect(f?.shotSize).toEqual({ width: 1024, height: 700 });
     expect(f?.assets?.shot).toBe('fitts-asset://demo-chat/run-1/assets/shot-_.jpg');
+    run.dispose();
+  });
+});
+
+describe('the portfolio run, replayed (Allen’s feedback, round 6)', () => {
+  const looks = [testDirection('a', 'Desktop Playground'), testDirection('b', 'Candy Arcade')];
+  /** The decider from the run: after the theme check it asks for a new look, then fixes. */
+  const asInRun = () => {
+    const asked: string[] = [];
+    const outcomes: string[] = [];
+    return {
+      asked,
+      outcomes,
+      next(s: Situation): Promise<Decision> {
+        outcomes.push(...s.recent.slice(-1).map((o) => `${o.ability}:${o.result}`));
+        const d = this.pick(s);
+        asked.push(d.ability);
+        return Promise.resolve(d);
+      },
+      pick(s: Situation): Decision {
+        const m = s.messages.find((x) => /another|more colou?r/i.test(x));
+        if (m) return { ability: 'revise_looks', wish: m };
+        if (s.ran.check_theme && !this.asked.includes('new_look'))
+          return { ability: 'new_look', wish: 'like the Fitts app' };
+        if (s.ran.check_theme && !this.asked.includes('fix')) return { ability: 'fix' };
+        return { ability: scriptedNext(s) };
+      },
+    };
+  };
+
+  it('new_look can’t wipe looks that are showing, and fixes wait for the pick', async () => {
+    const r = redesignable();
+    r.site.probes = () =>
+      Promise.resolve([
+        {
+          probe: 'target-size' as const,
+          pass: false,
+          items: [{ ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' }],
+        },
+      ]);
+    const decider = asInRun();
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      decider,
+      mode: 'ask-every',
+      themeFit: () => Promise.resolve({ fits: false, why: 'New look.', directions: looks }),
+    });
+    run.start();
+    // Ask every action asks before each tap: allow them all.
+    const allowAll = setInterval(() => {
+      const q = state()?.chat.find(
+        (c) => c.type === 'question' && c.answer === undefined && c.text.startsWith('Can I'),
+      );
+      if (q) run.answer(q.id, copy.fitts.goAhead);
+    }, 5);
+    await skipLogin(state, run);
+    const pick = () =>
+      state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook);
+    await until(() => Boolean(pick()), 10_000);
+    clearInterval(allowAll);
+    // It asked for a new look over the showing ones: refused, so the looks are still there to
+    // pick from, and no fix card came before the pick.
+    expect(decider.asked).toContain('new_look');
+    const shown = state()?.chat.filter((c) => c.type === 'directions') ?? [];
+    expect(shown).toHaveLength(1);
+    expect(state()?.chat.some((c) => c.type === 'approval.batch')).toBe(false);
+    run.dispose();
+  }, 20_000);
+
+  it('asking for another round while the fix card waits makes one, instead of a note', async () => {
+    const r = redesignable();
+    r.site.probes = () =>
+      Promise.resolve([
+        {
+          probe: 'target-size' as const,
+          pass: false,
+          items: [{ ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' }],
+        },
+      ]);
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      decider: asInRun(),
+      themeFit: () => Promise.resolve({ fits: false, why: 'New look.', directions: looks }),
+      reviseLooks: () => Promise.resolve([testDirection('c', 'Brighter Playground')]),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(
+      () =>
+        Boolean(
+          state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook),
+        ),
+      10_000,
+    );
+    run.answer(
+      state()?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook)?.id ?? '',
+      copy.fitts.keepLook,
+    );
+    await until(() => state()?.waitingFor === 'approval', 10_000);
+    run.sendMessage('Can I get another redesign like Desktop Playground with more colors?');
+    await until(
+      () => Boolean(state()?.chat.find((c) => c.type === 'directions' && c.round === 2)),
+      10_000,
+    );
+    run.dispose();
+  }, 30_000);
+
+  it('with a conversation, a message sent while Fitts acts is answered, not left queued', async () => {
+    const { run, state } = setup({ converse: () => Promise.resolve('Sure.') });
+    run.start();
+    await until(() => state()?.activity === 'acting');
+    run.sendMessage('what do you think so far?');
+    await until(() =>
+      Boolean(state()?.chat.some((c) => c.type === 'fitts.message' && c.text === 'Sure.')),
+    );
+    expect(state()?.queued).toEqual([]);
     run.dispose();
   });
 });

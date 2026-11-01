@@ -6,6 +6,9 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+/** Where the wrapper goes, relative to the project: what `vite --config` is given. */
+export const FITTS_CONFIG = 'node_modules/.fitts/vite.config.mjs';
+
 const CONFIGS = [
   'vite.config.ts',
   'vite.config.mts',
@@ -32,9 +35,8 @@ export function fittsViteConfig(folder: string, pluginFile: string | undefined):
   try {
     mkdirSync(dir, { recursive: true });
     copyFileSync(pluginFile, join(dir, 'fitts.vite.mjs'));
-    const config = join(dir, 'vite.config.mjs');
-    writeFileSync(config, wrapper(own));
-    return config;
+    writeFileSync(join(folder, FITTS_CONFIG), wrapper(own));
+    return FITTS_CONFIG;
   } catch {
     return null;
   }

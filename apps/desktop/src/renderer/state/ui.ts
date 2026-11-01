@@ -56,6 +56,8 @@ interface UiState {
   everyPage: boolean;
   /** A site map row narrowing the findings tray to one page and the pages under it. */
   findingsRoute: string | null;
+  /** After a run: the summary, or the audit page again (its site, chat and findings). */
+  doneView: 'summary' | 'audit';
   /** Findings tray filter (§6.4). */
   findingsFilter: 'all' | 'usability' | 'accessibility' | 'performance' | 'look-and-feel';
 
@@ -123,6 +125,7 @@ export const useUi = create<UiState>((set, get) => ({
   everyPage: false,
   findingsFilter: 'all',
   findingsRoute: null,
+  doneView: 'summary',
 
   openSettings: (tab) =>
     set((s) => ({
@@ -157,6 +160,7 @@ export const useUi = create<UiState>((set, get) => ({
       openFindingId: null,
       review: null,
       findingsRoute: null,
+      doneView: 'summary',
     });
   },
   goWelcome: () => set({ screen: 'welcome', projectMenuOpen: false, addProjectOpen: false }),

@@ -31,6 +31,7 @@ export function Header({
   name: string;
 }) {
   const menuOpen = useUi((s) => s.projectMenuOpen);
+  const doneView = useUi((s) => s.doneView);
   const briefOpen = useUi((s) => s.briefOpen);
   const micListening = useUi((s) => s.micListening);
   const talkMode = useSettings((s) => s.talkMode);
@@ -91,7 +92,20 @@ export function Header({
         )}
       </button>
       <div className="app-no-drag mx-auto">
-        {run && <Stepper active={run.phase} counter={counter} />}
+        {run && (
+          <Stepper
+            active={run.phase}
+            counter={counter}
+            // After a run, the audit page and the summary are both a click away (round 6).
+            {...(run.phase === 'done'
+              ? {
+                  shown: doneView === 'audit' ? ('audit' as const) : ('done' as const),
+                  onShow: (phase: RunState['phase']) =>
+                    useUi.getState().set({ doneView: phase === 'audit' ? 'audit' : 'summary' }),
+                }
+              : {})}
+          />
+        )}
       </div>
       {auditing && (
         <div className="app-no-drag">

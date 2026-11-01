@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { copy } from '../../copy';
 import { getEngine } from '../../state/engine';
+import { useUi } from '../../state/ui';
 
 /**
  * Try again on a rolled-back fix: straight away, or with a note for Fitts ("the focus styles
@@ -23,6 +24,8 @@ export function RetryControls({
   const id = useId();
   const retry = (hint?: string) => {
     getEngine().retryChange(run.projectId, change.id, hint?.trim() || undefined);
+    // After a run, trying again shows the audit page, to watch it work (round 6).
+    if (run.phase === 'done') useUi.getState().set({ doneView: 'audit' });
     setNoting(false);
     setNote('');
   };

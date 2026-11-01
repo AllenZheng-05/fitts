@@ -135,7 +135,12 @@ test('Done: stats, undo and redo, try again, all changes', async () => {
     .getByRole('listitem')
     .filter({ hasText: 'Broke the phone layout on /settings' });
   await rolled.getByRole('button', { name: 'Try again' }).click();
-  await expect(rolled).toContainText('Retrying…');
+  // Trying again shows the audit page, to watch it work; Done is a click back.
+  await expect(chat(page)).toBeVisible();
+  await page
+    .getByRole('list', { name: 'Run progress' })
+    .getByRole('button', { name: 'Show Done' })
+    .click();
   await expect(stat(page, 'Fixed & verified')).toContainText('24', { timeout: 6_000 });
 
   await summary(page).getByRole('button', { name: 'See all 26 changes' }).click();
@@ -180,4 +185,20 @@ test('Done: every finding is listed, and one opens with its evidence beside the 
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
   await expectNoWindowScrollAt(page, { width: 1200, height: 720 });
+});
+
+test('Done: the audit page is a click away, and back', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Done');
+  const stepper = page.getByRole('list', { name: 'Run progress' });
+  await stepper.getByRole('button', { name: 'Show Audit & fix' }).click();
+  await expect(page.getByRole('region', { name: 'Run summary' })).toHaveCount(0);
+  await expect(page.getByRole('log', { name: 'Conversation with Fitts' })).toBeVisible();
+  await expect(stepper.getByRole('button', { name: 'Show Audit & fix' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expectNoSeriousA11yViolations(page);
+  await stepper.getByRole('button', { name: 'Show Done' }).click();
+  await expect(page.getByRole('region', { name: 'Run summary' })).toBeVisible();
 });

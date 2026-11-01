@@ -29,6 +29,13 @@ export function Workspace() {
   const projectId = useRunStore((s) => s.activeProjectId);
   const project = useProject(projectId);
   const run = useActiveRun();
+  const doneView = useUi((s) => s.doneView);
+  // A run that isn't over yet starts its Done screen on the summary.
+  const phase = run?.phase;
+  useEffect(() => {
+    if (phase !== 'done' && useUi.getState().doneView !== 'summary')
+      useUi.getState().set({ doneView: 'summary' });
+  }, [phase]);
   useWorkspaceShortcuts(run);
   useFittsVoice();
   useWakeListening(run);
@@ -54,13 +61,13 @@ export function Workspace() {
         {/* The page's one h1, for screen readers; the header shows the same thing visually. */}
         <h1 className="sr-only">{format(copy.workspace.heading, { name })}</h1>
         {run?.phase === 'interview' && <InterviewLayout run={run} />}
-        {run?.phase === 'audit' &&
+        {(run?.phase === 'audit' || (run?.phase === 'done' && doneView === 'audit')) &&
           (isRedesigning(run, !TEST_BUILD || getEngineKind() !== 'mock') ? (
             <RedesignLayout run={run} />
           ) : (
             <AuditLayout run={run} />
           ))}
-        {run?.phase === 'done' && <DoneLayout run={run} />}
+        {run?.phase === 'done' && doneView === 'summary' && <DoneLayout run={run} />}
       </main>
       {run && <GateModal run={run} />}
     </div>

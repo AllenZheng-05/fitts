@@ -1,6 +1,7 @@
 import type { RunPhase } from '@fitts/schema';
 import { copy } from '../copy';
 import { cx } from '../lib/cx';
+import { format } from '../lib/format';
 
 const PHASES: RunPhase[] = ['interview', 'audit', 'done'];
 
@@ -8,10 +9,13 @@ interface StepperProps {
   active: RunPhase;
   /** Cobalt pill on the active step, e.g. "2 fixing" or "redesigning". */
   counter?: string | undefined;
+  /** After a run: which page shows, and switching between the audit page and the summary. */
+  shown?: RunPhase;
+  onShow?: (phase: RunPhase) => void;
 }
 
 /** Interview → Audit & fix → Done (SPEC §5.4). */
-export function Stepper({ active, counter }: StepperProps) {
+export function Stepper({ active, counter, shown, onShow }: StepperProps) {
   const activeIndex = PHASES.indexOf(active);
   return (
     <ol
@@ -31,7 +35,22 @@ export function Stepper({ active, counter }: StepperProps) {
               state === 'todo' && 'text-muted',
             )}
           >
-            {copy.stepper[phase]}
+            {onShow && phase !== 'interview' ? (
+              <button
+                type="button"
+                aria-pressed={(shown ?? active) === phase}
+                aria-label={format(copy.stepper.show, { step: copy.stepper[phase] })}
+                onClick={() => onShow(phase)}
+                className={cx(
+                  '-mx-3.5 -my-[7px] rounded-pill px-3.5 py-[7px] underline-offset-2 hover:underline',
+                  (shown ?? active) === phase && phase !== active && 'bg-mint-tint',
+                )}
+              >
+                {copy.stepper[phase]}
+              </button>
+            ) : (
+              copy.stepper[phase]
+            )}
             {state === 'done' && (
               <>
                 <span aria-hidden="true">&nbsp;✓</span>

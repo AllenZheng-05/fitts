@@ -31,7 +31,10 @@ Read every new message and act on what it asks:
 - "Stop testing, just fix what you have": `stop_exploring`, then the checks and `fix`.
 - "I don't like how it looks", "can you redesign it": `new_look` with their wish in their words.
 - Feedback on directions already shown ("none of these", "the second one but warmer", "less
-  corporate"): `revise_looks` with what they said. A pick is made with the buttons, not here.
+  corporate", "another one like this with more color"): `revise_looks` with what they said. A
+  pick is made with the buttons, not here. Never `new_look` while looks are showing.
+- While fixes are underway, only the owner's messages bring you here: act on what they ask
+  (`revise_looks`, `looks`, `dismiss`), or `finish` if they're done.
 - "That's not a problem" while pointing at something: `dismiss` with the ref they point at.
 - "Go on", "carry on": the next thing you'd have done anyway.
 - A question or a comment that asks for nothing: carry on. Someone else answers them in the

@@ -377,10 +377,15 @@ export class RealRun {
     const fallback = new ScriptedDecider();
     let refused = false;
     while (!this.finished) {
-      if (this.blocked()) {
+      // Once fixes are underway (or waiting on your answer), Fitts still listens: each message
+      // gets a decision, so "another round of looks" happens instead of being noted
+      // (Allen's feedback, round 6). Without a message there's nothing to decide.
+      const listening = this.fixPhase && this.inbox.length > 0 && this.state.activity !== 'paused';
+      if ((this.blocked() && !listening) || (this.fixPhase && this.inbox.length === 0)) {
         await this.sleepUntilKicked();
         continue;
       }
+      this.deliverQueued();
       const situation = this.situation();
       this.heard.push(...this.inbox);
       this.inbox = [];
@@ -396,7 +401,7 @@ export class RealRun {
         decision = await fallback.next(situation);
       }
       if (this.finished) return;
-      if (this.blocked()) continue;
+      if (this.blocked() && !listening) continue;
       if (decision.say) this.say(decision.say);
       this.emit([
         {
@@ -409,7 +414,7 @@ export class RealRun {
       refused = outcome.result === 'refused';
       this.recent.push(outcome);
       if (this.recent.length > RECENT) this.recent.shift();
-      if (outcome.result === 'done' && (outcome.ability === 'finish' || this.fixPhase)) return;
+      if (outcome.result === 'done' && outcome.ability === 'finish') return;
     }
   }
 
@@ -457,6 +462,10 @@ export class RealRun {
         return outcome('done');
       case 'fix': {
         if (live) return outcome('refused', 'a live site can’t be changed');
+        // Looks are showing and the owner hasn't chosen: that comes first (round 6).
+        if (this.directions.length > 0 && !this.ran.looks && this.state.mode !== 'plan')
+          return outcome('refused', 'the owner hasn’t picked a look yet; use looks first');
+        if (this.fixPhase) return outcome('refused', 'fixes are already underway');
         this.ran.fix = true;
         return (await this.offerFixes()) ? outcome('done', 'fixing') : outcome('nothing');
       }
@@ -473,6 +482,9 @@ export class RealRun {
       case 'new_look':
         if (live) return outcome('refused', 'a live site can’t be changed');
         if (this.redesignStarted) return outcome('refused', 'a look is already applied');
+        // Looks are already showing: changing them is a new round, not starting over (round 6).
+        if (this.directions.length > 0 && !this.picked)
+          return outcome('refused', 'looks are already showing; use revise_looks');
         // The wish becomes the brief's look, and the theme is judged again with it (§1.4).
         this.emit([
           {
@@ -503,6 +515,9 @@ export class RealRun {
         return outcome('done', f.title);
       }
       case 'finish':
+        // Fixes still running or waiting on the owner end the run themselves when they settle.
+        if (this.fixPhase && (this.approvalId !== undefined || this.pipeline?.busy))
+          return outcome('refused', 'fixes are still going; the run ends when they settle');
         // Every page and control is tried or skipped first, unless the crawl can't go on.
         if (!this.coverage.complete() && !this.crawlEnded)
           return outcome('refused', 'pages and controls are left to try');
@@ -2086,7 +2101,10 @@ export class RealRun {
     const pointing = opts?.pointingAt
       ? ` [pointing at ref ${opts.pointingAt}${opts.pointingLabel ? `: ${opts.pointingLabel}` : ''}]`
       : '';
-    if (this.state.activity === 'acting') this.emit([{ type: 'queued.added', text }]);
+    // Without a conversation, a message waits for the next step, shown as queued. With one,
+    // it's answered right away and heard by the next decision: no queued row that lingers.
+    if (this.state.activity === 'acting' && !this.deps.converse)
+      this.emit([{ type: 'queued.added', text }]);
     this.inbox.push(`${text}${pointing}`);
     // Waiting for a pick, they said something instead: feedback for a new round, maybe.
     if (this.pickWaiter) {
