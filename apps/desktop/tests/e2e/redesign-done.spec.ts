@@ -109,7 +109,8 @@ test('Done: stats, undo and redo, try again, all changes', async () => {
   await loadScenario(page, 'Done');
   await expect(stat(page, 'Found')).toContainText('31');
   await expect(stat(page, 'Fixed & verified')).toContainText('24');
-  await expect(stat(page, 'Pull requests')).toContainText('9');
+  // One PR for the run (§9.3).
+  await expect(stat(page, 'Pull requests')).toContainText('1');
   await expect(stat(page, 'Spent')).toContainText('$13.92');
   await expect(summary(page)).toContainText(
     '31 found = 24 fixed + 2 rolled back + 3 you marked "not a problem" + 2 still open.',
