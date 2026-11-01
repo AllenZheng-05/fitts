@@ -10,7 +10,7 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 | #   | Milestone                                          | Status | Commit |
 | --- | -------------------------------------------------- | ------ | ------ |
-| U0  | Housekeeping (§10)                                 | todo   |        |
+| U0  | Housekeeping (§10)                                 | done   | U0     |
 | U1  | Source plugin v2 (§2)                              | todo   |        |
 | U2  | Understand + the understanding card (§3)           | todo   |        |
 | U3  | Owner first + memory (§4)                          | todo   |        |
@@ -26,10 +26,9 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 ## Current milestone and next step
 
-- **Current:** U0 (housekeeping).
-- **Next step:** plan U0: the Autonomous line in run.ts, `requestMic()` in the bridge and
-  Welcome, the folder consent line, macOS usage strings in electron-builder.yml, the GitHub
-  "not set up" copy check.
+- **Current:** U1 (source plugin v2).
+- **Next step:** plugin v2 is written (package and one-file copy); SiteWindow.sourceOf, the grep
+  and run.withSources are in; left: run tests, the React fixture e2e, DECISIONS, the full suite.
 
 ## Spend
 

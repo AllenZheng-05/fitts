@@ -115,6 +115,7 @@ function AddProjectForm({ onClose }: { onClose: () => void }) {
                     value={folder}
                     placeholder="~/code/portfolio"
                     onChange={(e) => setFolder(e.target.value)}
+                    hint={detection ? undefined : copy.welcome.folderConsent}
                     trailing={
                       <Button
                         size="md"

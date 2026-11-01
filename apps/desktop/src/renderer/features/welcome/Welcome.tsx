@@ -9,9 +9,10 @@ import { copy } from '../../copy';
 import { bridge } from '../../lib/bridge';
 import { format } from '../../lib/format';
 import { checkKey, storeKey, useKeyInfo } from '../../lib/keys';
+import { canOpenMicSettings, requestMicAccess } from '../../lib/mic';
 import { useDetection } from '../../lib/use-detection';
 import { KEY_CHECK_MS, projectFromFolder } from '../../lib/new-project';
-import type { ToolsStatus } from '@fitts/schema';
+import type { MicAccess, ToolsStatus } from '@fitts/schema';
 import { TEST_BUILD } from '../../dev';
 import { LAST_RUN_CAPTIONS, MOCK_USER } from '../../mock/fixtures/projects';
 import { addAndOpenProject } from '../../state/actions';
@@ -151,12 +152,7 @@ function SetupCard() {
             </li>
           ))}
           <li>
-            <PermissionChip
-              allowed={settings.micAllowed}
-              allowLabel={copy.welcome.allowMic}
-              allowedLabel={copy.welcome.micAllowed}
-              onAllow={() => settings.set({ micAllowed: true })}
-            />
+            <MicChip />
           </li>
           <li>
             <PermissionChip
@@ -178,7 +174,7 @@ function SetupCard() {
         hint={
           detection
             ? format(copy.detection.found, { framework: detection.framework, url: detection.url })
-            : undefined
+            : copy.welcome.folderConsent
         }
         trailing={
           <Button
@@ -238,6 +234,69 @@ function SetupCard() {
         )}
       </p>
     </section>
+  );
+}
+
+/**
+ * "Allow microphone" asks the OS for real (SPEC-phase4 §10): the prompt on macOS, the system
+ * setting on Windows, and a short getUserMedia everywhere. Blocked, it says so and offers the
+ * OS's microphone settings.
+ */
+function MicChip() {
+  const allowed = useSettings((s) => s.micAllowed);
+  const [state, setState] = useState<'idle' | 'checking' | MicAccess['reason']>('idle');
+  if (allowed) {
+    return (
+      <Chip tone="mint" size="md" icon={<Check size={14} strokeWidth={2.5} aria-hidden="true" />}>
+        {copy.welcome.micAllowed}
+      </Chip>
+    );
+  }
+  const ask = () => {
+    setState('checking');
+    void requestMicAccess().then((r) => {
+      if (r.ok) useSettings.getState().set({ micAllowed: true });
+      else setState(r.reason ?? 'error');
+    });
+  };
+  if (state === 'checking') {
+    return (
+      <Chip tone="neutral" size="md" role="status">
+        {copy.welcome.micChecking}
+      </Chip>
+    );
+  }
+  if (state === 'idle') {
+    return (
+      <button
+        type="button"
+        onClick={ask}
+        className="min-h-[34px] rounded-pill border border-ink bg-sun-tint px-3 text-[13px] font-bold text-sun-ink hover:bg-sun"
+      >
+        {copy.welcome.allowMic}
+      </button>
+    );
+  }
+  const label =
+    state === 'denied'
+      ? copy.welcome.micDenied
+      : state === 'no-device'
+        ? copy.welcome.micNoDevice
+        : copy.welcome.micError;
+  return (
+    <span className="flex items-center gap-1.5">
+      <Chip tone="neutral" size="md" role="status">
+        {label}
+      </Chip>
+      {state === 'denied' && canOpenMicSettings() && (
+        <Button size="sm" onClick={() => bridge().openMicSettings?.()}>
+          {copy.welcome.micOpenSettings}
+        </Button>
+      )}
+      <Button size="sm" onClick={ask}>
+        {copy.welcome.micTryAgain}
+      </Button>
+    </span>
   );
 }
 

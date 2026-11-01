@@ -7,6 +7,50 @@ demo deadline. Each says why, the exact steps, and roughly how long it takes.
 You pushed `main` once; everything since (CI fixes, the redesign, release builds without
 stand-ins, device sizes, the test gate, the website) is committed locally and not pushed.
 
+# Phase 4 (do these first; they're in priority order)
+
+## P4-1. Android SDK and emulator (30–45 min) — unblocks the Android demo
+
+**Why:** installing system software and a Windows feature. Without it the Android audit (U8)
+is built against a fake adb and fixture dumps, and the live emulator bench waits for you.
+
+1. Android Studio › SDK Manager: **Platform-Tools**, **Emulator**, and an **API 35+ x86_64
+   Google APIs** system image.
+2. Windows Features: turn on **Windows Hypervisor Platform** (WHPX), then reboot (AEHD is being
+   retired).
+3. Device Manager: create an AVD named `Fitts_Pixel` (Pixel 8, that image). Start it once.
+4. Make sure `adb` and `emulator` are on PATH (or `ANDROID_HOME` is set).
+5. In `demo/android-chat`: `npm install`, then `npx expo run:android` once to build and install
+   the dev client on the AVD (takes minutes). Without it Fitts falls back to Expo Go.
+6. Then run the bench: `pnpm bench:android` (spends about $0.50).
+
+## P4-2. Muse Code installed and current (5 min)
+
+**Why:** installing software. No `muse login` is needed any more: Fitts passes your Meta key on
+stdin with `--api-key-stdin`. Check `muse --version` (native Windows, or inside WSL) is at least
+1.4.14, and update it if it predates `--api-key-stdin`. Until then fixes run on Fitts's own
+in-process fixer, which works.
+
+## P4-3. The microphone prompt on macOS (2 min, needs a Mac)
+
+**Why:** your mic. On a Mac, open a dev build or the dmg, press **Allow microphone** on Welcome:
+macOS should show its own prompt ("Fitts listens when you talk to it."), and the chip should turn
+mint only after you allow it. Blocked, it should say "Microphone blocked" with "Open settings".
+On Windows the same button reads the system setting and opens the mic for a second.
+
+## P4-4. Register the Fitts GitHub App (10 min)
+
+As 4b below; send the Client ID.
+
+## P4-5. Push (2 min)
+
+`git push origin main`, then the demo mirrors (`pnpm demo:mirror --push`), including the new
+`fitts-demo-android-chat` once U8 has made it.
+
+---
+
+# Phase 2 and 3 items
+
 ## 1. Push Fitts (2 min) — unblocks CI, the release and the site
 
 ```

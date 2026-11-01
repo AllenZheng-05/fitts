@@ -42,6 +42,13 @@ export interface FittsBridge {
   deleteAllData?: () => void;
   /** Opens a pull request (or another GitHub page) in the user's browser. https only. */
   openLink?: (url: string) => void;
+  /**
+   * SPEC-phase4 §10: asks the OS for the microphone for real. macOS prompts; Windows reports
+   * the system setting; everywhere the renderer then probes with a short getUserMedia.
+   */
+  requestMic?: () => Promise<MicAccess>;
+  /** Opens the OS's microphone privacy settings (after a denial). */
+  openMicSettings?: () => void;
   /** What's installed on this computer, for Welcome's chips (each null when missing). */
   tools?: () => Promise<ToolsStatus>;
   /** Sign in with GitHub (the Fitts GitHub App, device flow): PRs, pushes, Pages. */
@@ -71,6 +78,16 @@ export interface GitHubBridge {
   cancel(): void;
   signOut(): void;
   onStatus(handler: (status: GitHubStatus) => void): () => void;
+}
+
+/**
+ * What main says about the microphone (§10). `probe`: the OS didn't refuse, so the renderer
+ * should try a short getUserMedia to be sure (Windows and Linux never prompt from main).
+ */
+export interface MicAccess {
+  ok: boolean;
+  probe?: boolean;
+  reason?: 'denied' | 'no-device' | 'error';
 }
 
 export interface ToolsStatus {
@@ -389,6 +406,8 @@ export const IPC = {
   notify: 'fitts:notify',
   notificationClick: 'fitts:notification-click',
   openLink: 'fitts:open-link',
+  micRequest: 'fitts:mic-request',
+  micSettings: 'fitts:mic-settings',
   runFinish: 'fitts:run-finish',
   siteOpenInBrowser: 'fitts:site-open-in-browser',
   engineCall: 'fitts:engine-call',

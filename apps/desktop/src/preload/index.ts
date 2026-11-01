@@ -8,6 +8,7 @@ import {
   type HostSites,
   type KeyInfo,
   type KeyName,
+  type MicAccess,
   type Platform,
   type RunState,
   type PointedElement,
@@ -102,6 +103,8 @@ const bridge: FittsBridge = {
     hostForget: (host) => ipcRenderer.send(IPC.hostForget, host),
   },
   openLink: (url) => ipcRenderer.send(IPC.openLink, url),
+  requestMic: () => ipcRenderer.invoke(IPC.micRequest) as Promise<MicAccess>,
+  openMicSettings: () => ipcRenderer.send(IPC.micSettings),
   github: {
     status: () => ipcRenderer.invoke(IPC.githubStatus) as Promise<GitHubStatus>,
     signIn: () => ipcRenderer.invoke(IPC.githubSignIn) as Promise<GitHubStatus>,

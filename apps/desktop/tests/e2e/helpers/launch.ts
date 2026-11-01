@@ -44,7 +44,14 @@ export async function launchApp({
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] ??= value;
   }
   const app = await electron.launch({
-    args: [resolve(__dirname, '../../../out/main/index.js'), ...args],
+    args: [
+      resolve(__dirname, '../../../out/main/index.js'),
+      // A fake microphone, so "Allow microphone" (a real getUserMedia probe since Phase 4) can
+      // succeed on a machine without one and without an OS prompt.
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+      ...args,
+    ],
     env,
   });
   // A test may quit the app itself (closing its window); then there's nothing to close.

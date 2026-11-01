@@ -752,7 +752,7 @@ export class RealRun {
     this.emit([{ type: 'now.changed' }]);
     if (mode === 'autonomous' || mode === 'dangerous') {
       this.say(
-        `Fixing ${fixable.length} of these now. Each one is checked before its pull request opens.`,
+        `Fixing ${fixable.length} of these now. Each one is checked before it goes on the run’s branch.`,
       );
       this.pipeline.start(fixable);
       return true;

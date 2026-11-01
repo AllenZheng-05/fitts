@@ -2589,3 +2589,31 @@ understand the project's CI before coding; and one PR for the whole run.
   The mock engine's "+9" revert number became `revertPrNumber`.
 - **Not done:** the per-fix "Can I push…?" question is gone from the ask modes (approval
   covers the branch; the push is asked once at the end). Fix jobs no longer run two at a time.
+
+# Phase 4
+
+## Phase 4 — U0: housekeeping
+
+- **"Allow microphone" asks for real.** The chip used to set a flag. Now `requestMic()` goes to
+  main: macOS `systemPreferences.askForMediaAccess('microphone')` (the OS prompt), Windows
+  `getMediaAccessStatus('microphone')` (the system setting, which main can read but never
+  prompt), and then the renderer opens the microphone for one second with `getUserMedia` and
+  stops the tracks, which is the only check that proves a device can be used (Linux has only
+  that). `micAllowed` is set on success alone. Blocked, the chip says "Microphone blocked" with
+  "Open settings" (`x-apple.systempreferences:…Privacy_Microphone`, `ms-settings:privacy-microphone`)
+  and "Try again"; no device says so. The e2e launcher passes Chromium's fake-device flags to
+  every launch, so the real probe runs in tests on a machine without a microphone. The macOS
+  prompt itself is a manual check (NEEDS-ALLEN).
+- **The build config says why.** `electron-builder.yml` gains `mac.extendInfo` with the
+  microphone, Documents, Desktop and Downloads usage strings, `hardenedRuntime: true` and the
+  audio-input entitlement in `resources/entitlements.mac.plist` (with Electron's JIT
+  entitlements). The build is still unsigned (`identity: null`), so the entitlements only
+  take effect once an identity is set; the strings go in the plist regardless.
+- **The folder step says what Fitts does with the code.** Welcome's folder field and Add a
+  project's code tab show "Fitts reads this project's code to understand it, and only changes
+  it on its own fitts/ branch." until a project is detected (the detection line then takes the
+  hint's place, so the card grows by nothing). Reading the folder right after picking is what
+  `detect` already does (package.json); Pass 1 of the App Model joins it in U2.
+- **GitHub: nothing to build.** Settings › GitHub already says sign-in isn't set up in this
+  build and that Fitts uses the GitHub CLI instead (`copy.github.unavailable`).
+- **The Autonomous line** says "checked before it goes on the run's branch" (one PR per run).

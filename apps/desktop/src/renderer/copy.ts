@@ -127,10 +127,18 @@ export const copy = {
     },
     allowMic: 'Allow microphone',
     micAllowed: 'Microphone',
+    micChecking: 'Checking the microphone…',
+    micDenied: 'Microphone blocked',
+    micNoDevice: 'No microphone found',
+    micError: 'Microphone unavailable',
+    micOpenSettings: 'Open settings',
+    micTryAgain: 'Try again',
     allowNotifications: 'Allow notifications',
     notificationsAllowed: 'Notifications',
     folderLabel: 'Project folder',
     folderPlaceholder: '~/code/your-site',
+    folderConsent:
+      'Fitts reads this project’s code to understand it, and only changes it on its own fitts/ branch.',
     browse: 'Browse',
     modeLabel: 'How much should I ask you?',
     modeOptions: {

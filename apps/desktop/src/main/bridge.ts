@@ -1,6 +1,6 @@
-import { BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, Notification, shell, systemPreferences } from 'electron';
 import { writeFile } from 'node:fs/promises';
-import { IPC } from '@fitts/schema';
+import { IPC, type MicAccess } from '@fitts/schema';
 
 // E2E runs answer native dialogs through env vars, since tests can't click OS dialogs.
 const e2eFolder = process.env['FITTS_E2E_PICK_FOLDER'];
@@ -25,10 +25,46 @@ export function openableLink(url: unknown): url is string {
   }
 }
 
+/** Where each OS keeps its microphone privacy setting (SPEC-phase4 §10). */
+export const MIC_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  win32: 'ms-settings:privacy-microphone',
+};
+
+/**
+ * The microphone, for real (SPEC-phase4 §10): macOS asks the OS (its prompt shows once);
+ * Windows reads the system setting; both then leave a short getUserMedia probe to the renderer,
+ * which is the only place a device can actually be opened.
+ */
+export async function requestMicAccess(
+  platform: NodeJS.Platform = process.platform,
+  prefs: Pick<
+    typeof systemPreferences,
+    'askForMediaAccess' | 'getMediaAccessStatus'
+  > = systemPreferences,
+): Promise<MicAccess> {
+  try {
+    if (platform === 'darwin') {
+      const granted = await prefs.askForMediaAccess('microphone');
+      return granted ? { ok: true, probe: true } : { ok: false, reason: 'denied' };
+    }
+    if (platform === 'win32' && prefs.getMediaAccessStatus('microphone') === 'denied')
+      return { ok: false, reason: 'denied' };
+    return { ok: true, probe: true };
+  } catch {
+    return { ok: true, probe: true };
+  }
+}
+
 /** The small set of native features the renderer may use (SPEC §2, §3). */
 export function registerBridge(): void {
   ipcMain.on(IPC.openLink, (_e, url: unknown) => {
     if (openableLink(url)) void shell.openExternal(url);
+  });
+  ipcMain.handle(IPC.micRequest, () => requestMicAccess());
+  ipcMain.on(IPC.micSettings, () => {
+    const url = MIC_SETTINGS[process.platform];
+    if (url) void shell.openExternal(url);
   });
 
   ipcMain.handle(IPC.pickFolder, async (event) => {
