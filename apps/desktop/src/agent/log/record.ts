@@ -225,6 +225,12 @@ export const PROBE_NOTE: Record<
   'text-spacing': { kind: 'cut-off', hint: 2 },
   'resize-text': { kind: 'cut-off', hint: 2 },
   orientation: { kind: 'cut-off', hint: 2 },
+  axe: { kind: 'missing-detail', hint: 2 },
+  keyboard: { kind: 'keyboard', hint: 3 },
+  navigation: { kind: 'wrong-place', hint: 3 },
+  surprise: { kind: 'focus-moved', hint: 3 },
+  state: { kind: 'state', hint: 3 },
+  perf: { kind: 'perf', hint: 2 },
 };
 
 /** The dedupe key of a probe item's note: one per route, probe and element (and what it measured). */

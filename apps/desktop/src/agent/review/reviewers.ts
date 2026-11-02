@@ -36,7 +36,18 @@ export interface RouteEvidence {
   /** SPEC-phase4 §6A.4: what Fitts noticed here (each id citable) and the measured actions. */
   observations?: Observation[];
   records?: ActionRecord[];
+  /** SPEC-phase4 §6B.3: other states of this page (dialogs, errors, after an action), each citable. */
+  states?: {
+    key: string;
+    label: string;
+    stepIndex: number;
+    shot?: { jpegBase64: string };
+    dialog?: boolean;
+    error?: boolean;
+  }[];
 }
+
+export const stateId = (route: string, n: number) => `${route}#state-${n + 1}`;
 
 export interface PersonaReview {
   route: string;
@@ -102,6 +113,13 @@ export function reviewInput(ev: RouteEvidence, brief: Brief): string {
           )}`,
         ]
       : []),
+    ...(ev.states?.length
+      ? [
+          `Other states of this page, shown after the first screenshot in this order (cite by id): ${ev.states
+            .map((s, i) => `${stateId(ev.route, i)}: ${s.label}`)
+            .join('; ')}`,
+        ]
+      : []),
     ...(ev.observations?.length
       ? [
           `What Fitts noticed here (cite by id): ${JSON.stringify(
@@ -122,6 +140,7 @@ export function validIds(ev: RouteEvidence): string[] {
     ...(ev.trace.length ? [traceId(ev.route)] : []),
     ...ev.probes.map((p) => p.evidenceId),
     ...(ev.observations ?? []).map((o) => o.id),
+    ...(ev.states ?? []).map((_s, i) => stateId(ev.route, i)),
   ];
 }
 
@@ -209,6 +228,17 @@ export class ReviewerPanel {
                           },
                         ]
                       : []),
+                    ...(ev.states ?? []).flatMap((s, i) =>
+                      s.shot
+                        ? [
+                            { type: 'input_text', text: `${stateId(ev.route, i)} (${s.label}):` },
+                            {
+                              type: 'input_image',
+                              image_url: `data:image/jpeg;base64,${s.shot.jpegBase64}`,
+                            },
+                          ]
+                        : [],
+                    ),
                     ...(ev.phoneShot
                       ? [
                           { type: 'input_text', text: `The same page on ${ev.phoneShot.label}:` },

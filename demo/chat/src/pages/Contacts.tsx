@@ -8,9 +8,13 @@ export function Contacts() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    void api.contacts().then(setContacts);
+    api
+      .contacts()
+      .then((list) => (Array.isArray(list) ? setContacts(list) : setFailed(true)))
+      .catch(() => setFailed(true));
   }, []);
 
   const add = async () => {
@@ -27,14 +31,18 @@ export function Contacts() {
     setContacts(await api.contacts());
   };
 
+  // Planted #33: when the contacts request fails, the page is simply blank.
+  if (failed) return null;
   const shown = contacts.filter((c) => c.name.toLowerCase().includes(filter.trim().toLowerCase()));
   return (
     <>
       <h1 className="title">Contacts</h1>
+      {/* Planted #28: a search field with no label (a magnifier glyph is all it has). */}
+      <span aria-hidden="true" className="muted">
+        ⌕
+      </span>
       <input
         data-ref="contacts-filter"
-        aria-label="Find a contact"
-        placeholder="Find a contact"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="input"

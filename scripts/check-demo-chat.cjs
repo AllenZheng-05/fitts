@@ -1,4 +1,4 @@
-// Reproduces each of demo/chat's 26 planted issues (demo/chat/PLANTED.md) in an offscreen
+// Reproduces each of demo/chat's 33 planted issues (demo/chat/PLANTED.md) in an offscreen
 // Electron window, the way Fitts's CDP driver will see the app. Usage:
 //   pnpm --filter demo-chat dev        (in another terminal)
 //   electron scripts/check-demo-chat.cjs [port]
@@ -278,11 +278,91 @@ app.whenReady().then(async () => {
     return err && vals[0] === '' && vals[1] === '';
   });
 
+  // Detect more (#27–#33).
+  await go('/');
+  await check(27, 'Avatar images with no alt text', async () =>
+    js(
+      `[...document.querySelectorAll('img.avatar')].filter((i) => !i.hasAttribute('alt')).length`,
+    ).then((n) => n > 0 && `${n} images`),
+  );
+  await check(29, '"Rate us" pops up 4 s in; the keyboard can’t close it', async () => {
+    await js("sessionStorage.removeItem('rated')");
+    await go('/');
+    await sleep(4300);
+    const open = await js('!!document.querySelector(\'[role=dialog][aria-label="Rate us"]\')');
+    const focusIn = await js(
+      "document.querySelector('[role=dialog]')?.contains(document.activeElement) ?? false",
+    );
+    const closeIsButton = await js("document.querySelector('.rate-close')?.tagName === 'BUTTON'");
+    return open && !focusIn && !closeIsButton && 'open, focus outside, close not a button';
+  });
+  await go('/contacts');
+  await check(28, 'Contacts search field with no label', async () =>
+    js(
+      `(() => { const i = document.querySelector('[data-ref="contacts-filter"]'); return !i.getAttribute('aria-label') && !i.getAttribute('placeholder') && !i.labels.length; })()`,
+    ),
+  );
+  await go('/settings');
+  await check(31, 'Settings’ "Contacts" link goes to /settings/privacy', async () => {
+    const href = await js(
+      `document.querySelector('[data-ref="settings-contacts"]').getAttribute('href')`,
+    );
+    await click('settings-contacts');
+    const path = await js('location.pathname');
+    return href === '/contacts' && path === '/settings/privacy' && `href ${href}, went to ${path}`;
+  });
+  await go('/compose/confirm');
+  await withTimeout(
+    new Promise((r) => {
+      wc.once('did-finish-load', r);
+      wc.reload();
+    }),
+    10000,
+    'reload',
+  );
+  await sleep(500);
+  await check(32, 'Refreshing /compose/confirm shows a blank page', async () =>
+    js("document.querySelector('main').textContent.trim() === ''"),
+  );
+  await go('/compose');
+  await click('compose-next-1');
+  await click('compose-next');
+  await check(30, 'A tip pushes Send down as you reach for it', async () => {
+    const before = await js(
+      `document.querySelector('[data-ref="compose-send"]').getBoundingClientRect().top`,
+    );
+    await js(
+      `document.querySelector('[data-ref="compose-send"]').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))`,
+    );
+    await sleep(200);
+    const after = await js(
+      `document.querySelector('[data-ref="compose-send"]').getBoundingClientRect().top`,
+    );
+    return after - before > 20 && `moved ${Math.round(after - before)} px`;
+  });
+  await check(33, 'Contacts goes blank when its request fails', async () => {
+    await dbg.sendCommand('Fetch.enable', { patterns: [{ urlPattern: '*/api/contacts' }] });
+    const onPause = (_e, method, params) => {
+      if (method === 'Fetch.requestPaused')
+        void dbg.sendCommand('Fetch.fulfillRequest', {
+          requestId: params.requestId,
+          responseCode: 500,
+          body: Buffer.from('{}').toString('base64'),
+        });
+    };
+    dbg.on('message', onPause);
+    await go('/contacts');
+    await sleep(500);
+    dbg.removeListener('message', onPause);
+    await dbg.sendCommand('Fetch.disable');
+    return js("document.querySelector('main').textContent.trim() === ''");
+  });
+
   await fetch(BASE + '/api/__reset', { method: 'POST' });
   results.sort((a, b) => a.n - b.n);
   for (const r of results)
     console.log(`${r.ok ? 'PASS' : 'FAIL'} #${r.n} ${r.name}${r.detail ? ' — ' + r.detail : ''}`);
   const passed = results.filter((r) => r.ok).length;
   console.log(`${passed}/${results.length} planted issues reproduced`);
-  app.exit(passed === 26 && results.length === 26 ? 0 : 1);
+  app.exit(passed === 33 && results.length === 33 ? 0 : 1);
 });

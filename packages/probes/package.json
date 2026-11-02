@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./page.js": "./dist/page.js"
+    "./page.js": "./dist/page.js",
+    "./detector.js": "./dist/detector.js"
   },
   "scripts": {
     "build": "node build.mjs",

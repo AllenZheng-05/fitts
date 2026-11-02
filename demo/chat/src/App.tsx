@@ -3,7 +3,7 @@ import { Contacts } from './pages/Contacts';
 import { Inbox } from './pages/Inbox';
 import { NotFound } from './pages/NotFound';
 import { Search } from './pages/Search';
-import { Settings } from './pages/Settings';
+import { Privacy, Settings } from './pages/Settings';
 import { Thread } from './pages/Thread';
 import { usePath } from './router';
 
@@ -25,6 +25,8 @@ function page(path: string) {
       return <Thread conversationId={12} />;
     case '/settings':
       return <Settings />;
+    case '/settings/privacy':
+      return <Privacy />;
     default:
       return <NotFound />;
   }

@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Finding, RunState } from '@fitts/schema';
+import { PLANTED, matches } from '../bench/planted';
 import { launchApp, type LaunchedApp } from './helpers/launch';
 
 const DEMO = resolve(__dirname, '../../../../demo/chat');
@@ -188,7 +189,8 @@ async function startAudit(page: Page) {
 }
 
 test('the real crawl reaches every route and tries every primary control (coverage gate)', async () => {
-  test.setTimeout(240_000);
+  // U5c: the Tab sweeps, fresh reloads, data cases and throttled phone loads add minutes.
+  test.setTimeout(900_000);
   const { page } = launched;
   await startAudit(page);
 
@@ -213,7 +215,7 @@ test('the real crawl reaches every route and tries every primary control (covera
         return now.waitingFor === 'finish-proposal';
       },
       {
-        timeout: 200_000,
+        timeout: 600_000,
         intervals: [2000],
       },
     )
@@ -230,7 +232,7 @@ test('the real crawl reaches every route and tries every primary control (covera
   // The proposal says what was covered; "Keep going" hands back to Fitts, which (with nothing
   // left) proposes again; Finish is the owner's, and the only way to Done.
   const proposal = chat(page).getByRole('listitem').filter({ hasText: 'Your call.' });
-  await expect(proposal.first()).toContainText(/Pages: \d+ reached of 8 the code names/);
+  await expect(proposal.first()).toContainText(/Pages: \d+ reached of 9 the code names/);
   await expect(proposal.first()).toContainText(/Findings: \d+ shown/);
   // SPEC-phase4 §6: the journeys from the code all ran (done, failed or blocked: none left
   // planned), the device matrix ran its cells, and the planted 320px overflow on /settings
@@ -254,6 +256,19 @@ test('the real crawl reaches every route and tries every primary control (covera
     expect(reflow?.evidence.join(' ')).toMatch(/at 320px on Reflow · 320×640/);
   }
   await expect(proposal.first()).toContainText(/Screen sizes: \d+ checked/);
+  // SPEC-phase4 §6B (U5c acceptance): at least 6 of the planted #26–#33 are found offline, by
+  // the probes alone (no reviewers in the e2e build).
+  {
+    const shown = (await runState(page)).findings.filter((f) => (f.lane ?? 'shown') === 'shown');
+    const found = PLANTED.filter((p) => p.n >= 26 && shown.some((f) => matches(f, p))).map(
+      (p) => p.n,
+    );
+    const titles = shown.map((f) => `${f.title} (${f.route})`);
+    expect(
+      found.length,
+      `found #${found.join(', #')} in ${JSON.stringify(titles)}`,
+    ).toBeGreaterThanOrEqual(6);
+  }
   // SPEC-phase4 §6A: the search step carries its measured wait (planted #13: 1.5 s with no
   // loading indicator), and the "(null)" note is linked to its finding.
   {
@@ -280,7 +295,8 @@ test('the real crawl reaches every route and tries every primary control (covera
       async () =>
         (await runState(page)).findings.find((f) => /\bnull\b/.test(f.title))?.repro?.confirmed ??
         null,
-      { timeout: 90_000, intervals: [2000] },
+      // U5c: the repro job works through the top 20 findings by severity, with ddmin's replays.
+      { timeout: 300_000, intervals: [2000] },
     )
     .toBe('replayed');
   const nullRepro = (await runState(page)).findings.find((f) => /\bnull\b/.test(f.title))?.repro;

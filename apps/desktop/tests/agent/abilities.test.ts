@@ -24,7 +24,7 @@ describe('ScriptedDecider: Phase 2’s order (SPEC-phase3 §1.2)', () => {
     const ended = { ...base().coverage, ended: true };
     const seq: string[] = [];
     const ran: Situation['ran'] = {};
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       const next = scriptedNext(base({ coverage: ended, ran }));
       seq.push(next);
       ran[next] = true;
@@ -32,6 +32,9 @@ describe('ScriptedDecider: Phase 2’s order (SPEC-phase3 §1.2)', () => {
     expect(seq).toEqual([
       'device_pass',
       'check_links',
+      // SPEC-phase4 §6B: before the review, so their findings are in it.
+      'state_pass',
+      'perf_pass',
       'review',
       'check_theme',
       'looks',
@@ -45,6 +48,8 @@ describe('ScriptedDecider: Phase 2’s order (SPEC-phase3 §1.2)', () => {
     const ran: Situation['ran'] = {
       device_pass: true,
       check_links: true,
+      state_pass: true,
+      perf_pass: true,
       review: true,
       check_theme: true,
     };

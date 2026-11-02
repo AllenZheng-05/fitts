@@ -1,8 +1,26 @@
 // The agent's only way to touch the user's site: RPC to main (SPEC-phase2 §1). Main runs each
 // operation on the project's site window (and, from P8, through the permission gate).
-import type { PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
+import type {
+  FaultCase,
+  PageProbeName,
+  PageProbeResult,
+  PagePerf,
+  RequestRecord,
+  SurpriseEvent,
+  TabStop,
+} from '@fitts/probes';
 import type { DeviceCell, ProbeItem, SiteRect, SourceFrame } from '@fitts/schema';
-import type { AgentMessage, AxSnapshot, FixCall, OpTrace, SiteOp, SiteOpResult } from './protocol';
+import type {
+  AgentMessage,
+  AxSnapshot,
+  DialogCheck,
+  FixCall,
+  KeyboardFacts,
+  OpTrace,
+  PageFacts,
+  SiteOp,
+  SiteOpResult,
+} from './protocol';
 import type { ReplayAnswer, ReplayAsk } from './repro/replay';
 
 export interface ActionResult {
@@ -37,6 +55,17 @@ export interface Site {
   breakpoints?(): Promise<string[]>;
   /** The cheap probes in a cell: overflow and the cell's own check (text spacing, 200%, landscape). */
   cellProbes?(cell: DeviceCell): Promise<PageProbeResult[]>;
+  // SPEC-phase4 §6B.
+  keyboard?(): Promise<{ stops: TabStop[]; facts: KeyboardFacts }>;
+  dialog?(): Promise<DialogCheck | null>;
+  facts?(path?: string): Promise<PageFacts>;
+  surprise?(): Promise<{ events: SurpriseEvent[]; inputs: number[] }>;
+  fault?(
+    route: string,
+    endpoint: string,
+    fault: FaultCase,
+  ): Promise<Extract<SiteOpResult, { op: 'fault' }>>;
+  perf?(routes: string[]): Promise<PagePerf[]>;
   value(ref: string): Promise<string | null>;
   links(hrefs: string[]): Promise<Record<string, number>>;
   network(): Promise<RequestRecord[]>;
@@ -130,6 +159,19 @@ export class SiteRpc {
       },
       breakpoints: async () => (await expect({ op: 'breakpoints' }, 'breakpoints')).media,
       cellProbes: async (cell) => (await expect({ op: 'cellProbes', cell }, 'probes')).results,
+      keyboard: async () => {
+        const r = await expect({ op: 'keyboard' }, 'keyboard');
+        return { stops: r.stops, facts: r.facts };
+      },
+      dialog: async () => (await expect({ op: 'dialog' }, 'dialog')).check,
+      facts: async (path) =>
+        (await expect({ op: 'facts', ...(path ? { path } : {}) }, 'facts')).facts,
+      surprise: async () => {
+        const r = await expect({ op: 'surprise' }, 'surprise');
+        return { events: r.events, inputs: r.inputs };
+      },
+      fault: (route, endpoint, fault) => expect({ op: 'fault', route, endpoint, fault }, 'fault'),
+      perf: async (routes) => (await expect({ op: 'perf', routes }, 'perf')).pages,
       value: async (ref) => (await expect({ op: 'value', ref }, 'value')).value,
       links: async (hrefs) => (await expect({ op: 'links', hrefs }, 'links')).statuses,
       network: async () => (await expect({ op: 'network' }, 'network')).requests,

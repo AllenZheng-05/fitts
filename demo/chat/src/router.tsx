@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react';
 
 const listeners = new Set<() => void>();
 
+/** The app has moved at least once since it loaded (planted #32 tells fresh loads apart). */
+let moved = false;
+export const navigatedInApp = () => moved;
+
 export function navigate(path: string): void {
   if (path === location.pathname) return;
+  moved = true;
   history.pushState(null, '', path);
   for (const l of listeners) l();
 }

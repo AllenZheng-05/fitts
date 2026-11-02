@@ -13,7 +13,7 @@ const DEMO = resolve(__dirname, '../../../../demo/chat');
 
 describe('extract: demo/chat (react + vite, a path switch)', () => {
   const x = extract(DEMO);
-  it('finds all 8 pages with their component files', () => {
+  it('finds all 9 pages with their component files', () => {
     expect(x.pages.map((p) => p.route)).toEqual([
       '/',
       '/compose',
@@ -23,6 +23,8 @@ describe('extract: demo/chat (react + vite, a path switch)', () => {
       '/contacts/grandma',
       '/search',
       '/settings',
+      // Planted #31's destination (Phase 4 U5c).
+      '/settings/privacy',
     ]);
     expect(x.pages.find((p) => p.route === '/compose/recipient')?.file).toBe(
       'src/pages/Compose.tsx',

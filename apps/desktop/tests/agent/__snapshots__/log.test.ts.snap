@@ -2,6 +2,7 @@
 
 exports[`noticeProbe: every probe has a template (§6A.2) > writes one noticed line per failing item, in Fitts’s words, never "problem" 1`] = `
 {
+  "axe": "Noticed Images must have alternate text (axe)",
   "back-mid-flow": "Noticed going back lost what I typed: Message was empty after Back",
   "button-name": "Noticed this button has no name a screen reader can say",
   "contrast": "Noticed text that’s hard to read: 2.6:1 (#a1a1a1 on #ffffff) (needs 4.5:1)",
@@ -10,14 +11,19 @@ exports[`noticeProbe: every probe has a template (§6A.2) > writes one noticed l
   "fitts-id": "Noticed **Send** is far and small for a primary action: 4.6 bits (small and far from the last tap)",
   "focus-visible": "Noticed **Send** shows no focus when tabbed to",
   "font-inventory": "Noticed 3 font families (Georgia, system-ui, Trebuchet MS)",
+  "keyboard": "Noticed "div-button" can’t be reached with Tab",
   "label-consistency": "Noticed one action with different names: NEXT, Create Message and Send Text for one action",
   "link-name": "Noticed this link has no name a screen reader can say",
   "links": "Noticed a link that doesn’t work: /help → 404",
+  "navigation": "Noticed "Contacts" went to /settings/privacy (its link says /contacts)",
   "network": "Noticed 20,000 items (1.9 MB) in one response",
   "orientation": "Noticed the page asks for portrait in landscape",
+  "perf": "Noticed the main content shows after 3.4 s on a mid-range phone on Slow 4G (dev build)",
   "placeholder-leak": "Noticed the page shows "(null)"",
   "resize-text": "Noticed the text cut off at 200% text",
   "spacing": "Noticed spacing off the grid: 22, 7, 13, 11 and 9px",
+  "state": "Noticed /contacts goes blank when contacts fails",
+  "surprise": "Noticed "Send" moved 40 px just before the tap",
   "target-size": "Noticed **Send** is small to tap: 28×20px (needs at least 24×24px)",
   "text-spacing": "Noticed text clipped with wider spacing",
   "viewport-sweep": "Noticed the page is 341px wide at 320px",

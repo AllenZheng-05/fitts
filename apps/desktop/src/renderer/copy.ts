@@ -1069,6 +1069,7 @@ export const copy = {
     consoleError: 'Noticed {n} {errors} in the page’s console after tapping **{name}**',
     redirect: 'Noticed {path} bounced through {hops} before landing on {to}',
     journeyFailed: 'Noticed I couldn’t finish “{name}”: {reason}',
+    surprise: 'Noticed {measured}',
     probe: {
       contrast: 'Noticed text that’s hard to read: {measured} (needs {expected})',
       'target-size': 'Noticed **{name}** is small to tap: {measured} (needs {expected})',
@@ -1090,6 +1091,12 @@ export const copy = {
       'text-spacing': 'Noticed {measured}',
       'resize-text': 'Noticed the {measured}',
       orientation: 'Noticed the page {measured}',
+      axe: 'Noticed {measured} (axe)',
+      keyboard: 'Noticed {measured}',
+      navigation: 'Noticed {measured}',
+      surprise: 'Noticed {measured}',
+      state: 'Noticed {measured}',
+      perf: 'Noticed {measured}',
     },
   },
   fitts: {
@@ -1148,11 +1155,16 @@ export const copy = {
     journeyDone: 'Done: “{name}”, in {n} steps.',
     journeyFailed: 'I couldn’t finish “{name}”: {reason}.',
     checkingCell: 'Checking {route} at {cell}',
+    statePassNow: 'Checking pages when their data is empty, fails or is slow',
+    perfPassNow: 'Measuring speed on a mid-range phone on Slow 4G (dev build)',
+    stateAfter: 'after {what}',
     // SPEC-phase4 §6A.3: "Every detail" names each ability as it starts and ends.
     abilityNames: {
       explore: 'exploring',
       journey: 'a journey',
       device_pass: 'the screen-size pass',
+      state_pass: 'the empty, failing and slow data check',
+      perf_pass: 'the phone speed check',
       check_links: 'the link and network check',
       review: 'the reviewer panel',
       check_theme: 'the look check',

@@ -222,6 +222,169 @@ function targetSize(F: Refs): PageProbeResult {
   };
 }
 
+/**
+ * SPEC-phase4 §6B.1: every axe rule at WCAG 2.0–2.2 A/AA and best practice, except the three the
+ * other probes own (their templates and verification stay).
+ */
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
+async function axeAll(F: Refs): Promise<PageProbeResult> {
+  const res = await axe.run(document, {
+    runOnly: { type: 'tag', values: AXE_TAGS },
+    rules: Object.fromEntries(AXE_RULES.map((r) => [r, { enabled: false }])),
+    resultTypes: ['violations'],
+  });
+  const items: ProbeItem[] = [];
+  for (const v of res.violations) {
+    for (const node of v.nodes.slice(0, 5)) {
+      const target = node.target[0];
+      const el = typeof target === 'string' ? document.querySelector(target) : null;
+      const base = el
+        ? item(F, el, v.help, 'passes the axe rule')
+        : {
+            ref: '',
+            selector: String(target ?? ''),
+            measured: v.help,
+            expected: 'passes the axe rule',
+          };
+      items.push({
+        ...base,
+        rule: {
+          id: v.id,
+          help: v.help,
+          impact: v.impact ?? 'moderate',
+          tags: v.tags,
+          ...(v.helpUrl ? { helpUrl: v.helpUrl.split('?')[0] } : {}),
+        },
+      });
+    }
+    if (items.length > 60) break;
+  }
+  return { probe: 'axe', pass: items.length === 0, items };
+}
+
+// ── Keyboard (SPEC-phase4 §6B.2): one Tab stop's facts, and the page's controls ──
+
+/** Share of an element's box a person can see: in the viewport and not under a fixed bar. */
+function visibleShare(el: Element): number {
+  const r = el.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return 0;
+  const pts = [
+    [r.left + r.width / 2, r.top + r.height / 2],
+    [r.left + 2, r.top + 2],
+    [r.right - 2, r.top + 2],
+    [r.left + 2, r.bottom - 2],
+    [r.right - 2, r.bottom - 2],
+  ];
+  let seen = 0;
+  for (const [x = 0, y = 0] of pts) {
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+    const top = document.elementFromPoint(x, y);
+    if (top && (top === el || el.contains(top) || top.contains(el))) seen += 1;
+  }
+  return seen / pts.length;
+}
+
+function tabStop(F: Refs): {
+  ref: string;
+  selector: string;
+  name: string;
+  rect: { x: number; y: number; width: number; height: number };
+  visible: number;
+} | null {
+  const el = document.activeElement;
+  if (!el || el === document.body) return null;
+  const r = el.getBoundingClientRect();
+  return {
+    ref: F.refOf(anchorOf(el)),
+    selector: selectorOf(el),
+    name: ((el as HTMLElement).innerText || el.getAttribute('aria-label') || '')
+      .trim()
+      .slice(0, 40),
+    rect: {
+      x: Math.round(r.x + scrollX),
+      y: Math.round(r.y + scrollY),
+      width: Math.round(r.width),
+      height: Math.round(r.height),
+    },
+    visible: Math.round(visibleShare(el) * 100) / 100,
+  };
+}
+
+function keyboardFacts(F: Refs): {
+  interactive: { ref: string; selector: string; name: string }[];
+  navLinks: number;
+  skipLink: boolean;
+} {
+  const interactive: { ref: string; selector: string; name: string }[] = [];
+  for (const el of document.querySelectorAll(INTERACTIVE)) {
+    if (!visible(el) || (el as HTMLButtonElement).disabled) continue;
+    if (el.closest('[inert],[aria-hidden=true]')) continue;
+    interactive.push({
+      ref: F.refOf(anchorOf(el)),
+      selector: selectorOf(el),
+      name: ((el as HTMLElement).innerText || el.getAttribute('aria-label') || '')
+        .trim()
+        .slice(0, 40),
+    });
+    if (interactive.length > 150) break;
+  }
+  const navLinks = document.querySelectorAll(
+    'nav a[href], header a[href], [role=navigation] a[href]',
+  ).length;
+  const first = document.querySelector('a[href^="#"]');
+  const skipLink = Boolean(first && /skip/i.test(first.textContent ?? ''));
+  return { interactive, navLinks, skipLink };
+}
+
+/** An open dialog's ref, and whether focus is inside it (dialog checks, §6B.2). */
+function dialogState(
+  F: Refs,
+): { ref: string; selector: string; name: string; focusInside: boolean } | null {
+  const d = [
+    ...document.querySelectorAll('[role=dialog],[role=alertdialog],dialog[open],[aria-modal=true]'),
+  ].find(visible);
+  if (!d) return null;
+  return {
+    ref: F.refOf(anchorOf(d)),
+    selector: selectorOf(d),
+    name: (d.getAttribute('aria-label') ?? d.querySelector('h1,h2,h3')?.textContent ?? '')
+      .trim()
+      .slice(0, 40),
+    focusInside: d.contains(document.activeElement),
+  };
+}
+
+/** What a fresh load shows (navigation checks, §6B.4). */
+function pageFacts(): {
+  status: number;
+  mainText: number;
+  errorText?: string;
+  headings: string[];
+  text: string;
+} {
+  const nav: (PerformanceEntry & { responseStatus?: number }) | undefined =
+    performance.getEntriesByType('navigation')[0];
+  const main = document.querySelector('main') ?? document.body;
+  const text = (main.textContent ?? '').trim().replace(/\s+/g, ' ');
+  const err = [...document.querySelectorAll('body *')]
+    .map((e) => (e.childNodes.length === 1 ? (e.textContent ?? '').trim() : ''))
+    .find((t) =>
+      /^(something went wrong|unexpected application error|application error|error:|uncaught)/i.test(
+        t,
+      ),
+    );
+  return {
+    status: nav?.responseStatus ?? 200,
+    mainText: text.length,
+    ...(err ? { errorText: err.slice(0, 80) } : {}),
+    headings: [...document.querySelectorAll('h1,h2')]
+      .map((h) => (h.textContent ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 6),
+    text: text.slice(0, 400),
+  };
+}
+
 async function axeNamed(F: Refs, probe: 'button-name' | 'link-name'): Promise<PageProbeResult> {
   const what = probe === 'button-name' ? 'button' : 'link';
   const items = (await axeRule(probe)).map(({ el }) =>
@@ -431,6 +594,7 @@ const STATIC: Record<string, (F: Refs) => PageProbeResult | Promise<PageProbeRes
   'font-inventory': fontInventory,
   spacing,
   'web-vitals': webVitals,
+  axe: axeAll,
 };
 
 async function run(names: PageProbeName[], F: Refs): Promise<PageProbeResult[]> {
@@ -733,6 +897,10 @@ const api = {
   textSpacing,
   resizeText,
   orientation,
+  tabStop,
+  keyboardFacts,
+  dialogState,
+  pageFacts,
 };
 export type ProbesApi = typeof api;
 (window as unknown as { __fittsProbes: ProbesApi }).__fittsProbes = api;

@@ -12,3 +12,15 @@ await build({
   outfile: 'dist/page.js',
   logLevel: 'warning',
 });
+
+// SPEC-phase4 §6B.5: the surprise detector, installed on every page load.
+await build({
+  entryPoints: ['src/detector.ts'],
+  bundle: true,
+  format: 'iife',
+  target: 'chrome140',
+  minify: true,
+  legalComments: 'none',
+  outfile: 'dist/detector.js',
+  logLevel: 'warning',
+});

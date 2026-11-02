@@ -4,6 +4,14 @@
 import { ICON_PATH } from '../window';
 import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
 import PROBES from '@fitts/probes/page.js?raw';
+import DETECTOR from '@fitts/probes/detector.js?raw';
+import {
+  faultable,
+  rewrite,
+  type FaultCase,
+  type SurpriseEvent,
+  type TabStop,
+} from '@fitts/probes';
 import {
   DEVICES,
   type DeviceCell,
@@ -120,6 +128,10 @@ export class SiteWindow {
     wc.on('did-navigate-in-page', pushHistory);
     // SPEC-phase4 §6A: what the page logged, when it loaded and where it bounced, per action.
     wc.on('did-finish-load', () => (this.loadedAt = Date.now()));
+    // SPEC-phase4 §6B.5: the surprise detector on every page, before anything happens.
+    wc.on('did-finish-load', () => {
+      void wc.executeJavaScriptInIsolatedWorld(WORLD, [{ code: DETECTOR }]).catch(() => undefined);
+    });
     wc.on('did-redirect-navigation', (_e, url) => {
       try {
         this.redirects.push(new URL(url).pathname);
@@ -145,6 +157,14 @@ export class SiteWindow {
   private readonly networkIds = new WeakMap<RequestRecord, string>();
   /** The control being used right now, so requests can be traced back to it. */
   private acting: string | undefined;
+  /** SPEC-phase4 §6B.5: when input reached the page (Fitts's and the owner's), ms since epoch. */
+  private readonly inputs: number[] = [];
+  private noteInput(): void {
+    this.inputs.push(Date.now());
+    if (this.inputs.length > 400) this.inputs.shift();
+  }
+  /** SPEC-phase4 §6B.6: the GET being rewritten while state_pass loads a page. */
+  private fault: { endpoint: string; fault: FaultCase } | undefined;
   /** SPEC-phase4 §6A: per-action console errors, redirect hops and the last load time. */
   private consoleErrors: string[] = [];
   private redirects: string[] = [];
@@ -316,6 +336,12 @@ export class SiteWindow {
     const id = typeof params['requestId'] === 'string' ? params['requestId'] : '';
     const networkId = typeof params['networkId'] === 'string' ? params['networkId'] : '';
     const req = params['request'] as { url: string; method: string };
+    // SPEC-phase4 §6B.6: state_pass rewrites one of the site's own GETs, only on localhost.
+    const f = this.fault;
+    if (f && faultable(req, this.origin) && new URL(req.url).pathname.startsWith(f.endpoint)) {
+      void this.applyFault(id, f.fault, params).catch(() => undefined);
+      return;
+    }
     if (!this.gating || !destructiveRequest(req.method, req.url, this.destructiveAct)) {
       void this.wc.debugger
         .sendCommand('Fetch.continueRequest', { requestId: id })
@@ -324,6 +350,44 @@ export class SiteWindow {
     }
     this.held.set(id, networkId);
     this.onHeld({ id, method: req.method, url: req.url });
+  }
+
+  /** Empty, error or slow, for one paused GET (§6B.6); writes never reach here. */
+  private async applyFault(
+    id: string,
+    fault: FaultCase,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    const dbg = this.wc.debugger;
+    const atResponse = params['responseStatusCode'] !== undefined;
+    if (fault === 'error') {
+      const r = rewrite('error', { status: 200, body: '' });
+      await dbg.sendCommand('Fetch.fulfillRequest', {
+        requestId: id,
+        responseCode: r.status,
+        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+        body: Buffer.from(r.body).toString('base64'),
+      });
+    } else if (fault === 'slow') {
+      await new Promise((res) => setTimeout(res, 3000));
+      await dbg.sendCommand('Fetch.continueRequest', { requestId: id });
+    } else if (!atResponse) {
+      await dbg.sendCommand('Fetch.continueRequest', { requestId: id, interceptResponse: true });
+    } else {
+      const got = (await dbg.sendCommand('Fetch.getResponseBody', { requestId: id })) as {
+        body: string;
+        base64Encoded: boolean;
+      };
+      const body = got.base64Encoded ? Buffer.from(got.body, 'base64').toString('utf8') : got.body;
+      const status = Number(params['responseStatusCode'] ?? 200);
+      const r = rewrite('empty', { status, body });
+      await dbg.sendCommand('Fetch.fulfillRequest', {
+        requestId: id,
+        responseCode: r.status,
+        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+        body: Buffer.from(r.body).toString('base64'),
+      });
+    }
   }
 
   /** The gate's answer: send the held request, or fail it as if the network refused. */
@@ -377,6 +441,181 @@ export class SiteWindow {
     }
     await this.evaluate('document.activeElement && document.activeElement.blur(); return true;');
     return items;
+  }
+
+  // ── SPEC-phase4 §6B: detect more ─────────────────────────────────────────────
+
+  /** A real Tab sweep: up to 200 stops, each with its box and how much of it shows. */
+  async keyboardSweep(): Promise<{
+    stops: TabStop[];
+    facts: {
+      interactive: { ref: string; selector: string; name: string }[];
+      navLinks: number;
+      skipLink: boolean;
+    };
+  }> {
+    this.focus();
+    await this.evaluate(
+      'document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); return true;',
+    );
+    const facts = await this.probes<{
+      interactive: { ref: string; selector: string; name: string }[];
+      navLinks: number;
+      skipLink: boolean;
+    }>('return P.keyboardFacts(F);');
+    const stops: TabStop[] = [];
+    const firstRef = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+      this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+      await new Promise((r) => setTimeout(r, 30));
+      const stop = await this.probes<TabStop | null>('return P.tabStop(F);').catch(() => null);
+      if (!stop) {
+        if (stops.length > 0) break; // Back to the address bar: the loop is done.
+        continue;
+      }
+      // Around once: the sweep is complete.
+      if (firstRef.has(stop.ref) && stops.length > 3 && stops.at(-1)?.ref !== stop.ref) break;
+      firstRef.add(stop.ref);
+      stops.push(stop);
+    }
+    await this.evaluate(
+      'document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); return true;',
+    );
+    return { stops, facts };
+  }
+
+  /** An open dialog: does focus move in, stay in on Tab, does Esc close it, does focus return? */
+  async dialogCheck(): Promise<{
+    ref: string;
+    selector: string;
+    name: string;
+    focusMovedIn: boolean;
+    tabStaysIn: boolean;
+    escCloses: boolean;
+    focusReturned: boolean;
+  } | null> {
+    type D = { ref: string; selector: string; name: string; focusInside: boolean } | null;
+    const d = await this.probes<D>('return P.dialogState(F);').catch(() => null);
+    if (!d) return null;
+    const focusMovedIn = d.focusInside;
+    this.focus();
+    let tabStaysIn = true;
+    for (let i = 0; i < 8; i++) {
+      this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
+      this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
+      await new Promise((r) => setTimeout(r, 30));
+      const s = await this.probes<D>('return P.dialogState(F);').catch(() => null);
+      if (s && !s.focusInside) {
+        tabStaysIn = false;
+        break;
+      }
+    }
+    this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await new Promise((r) => setTimeout(r, 200));
+    const after = await this.probes<D>('return P.dialogState(F);').catch(() => null);
+    const escCloses = after === null;
+    const focusReturned = escCloses
+      ? await this.evaluate<boolean>('return document.activeElement !== document.body;').catch(
+          () => false,
+        )
+      : true;
+    return {
+      ref: d.ref,
+      selector: d.selector,
+      name: d.name,
+      focusMovedIn,
+      tabStaysIn,
+      escCloses,
+      focusReturned,
+    };
+  }
+
+  /** What the page shows (after loading `path` fresh, when given). */
+  async facts(path?: string): Promise<{
+    status: number;
+    mainText: number;
+    errorText?: string;
+    headings: string[];
+    text: string;
+    path: string;
+  }> {
+    if (path) {
+      // Loaded, then refreshed: what a refresh or a returning visitor sees (§6B.4).
+      await this.load(path).catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 400));
+      await this.reloadAndCheck().catch(() => false);
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    const f = await this.probes<{
+      status: number;
+      mainText: number;
+      errorText?: string;
+      headings: string[];
+      text: string;
+    }>('return P.pageFacts();');
+    return { ...f, path: this.path() };
+  }
+
+  /** The detector's events since the last read, and the input times on its clock (ms). */
+  async surpriseEvents(): Promise<{
+    events: SurpriseEvent[];
+    inputs: number[];
+  }> {
+    const r = await this.evaluate<{
+      events: SurpriseEvent[];
+      now: number;
+    } | null>(
+      'const S = window.__fittsSurprise; if (!S) return null; return { events: S.take(), now: performance.now() - S.startedAt };',
+    ).catch(() => null);
+    if (!r) return { events: [], inputs: [] };
+    const wall = Date.now();
+    return { events: r.events, inputs: this.inputs.map((t) => Math.round(r.now - (wall - t))) };
+  }
+
+  /** state_pass: load `route` with one GET rewritten; what it shows, and a shot. */
+  async faultLoad(
+    route: string,
+    endpoint: string,
+    fault: FaultCase,
+  ): Promise<{
+    facts: {
+      status: number;
+      mainText: number;
+      errorText?: string;
+      headings: string[];
+      text: string;
+      path: string;
+    };
+    uncaught: number;
+    busyWithin1s: boolean;
+    jpegBase64?: string;
+    results: PageProbeResult[];
+  }> {
+    this.fault = { endpoint, fault };
+    this.consoleErrors = [];
+    try {
+      void this.load(route).catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 1000));
+      const busyWithin1s = await this.evaluate<boolean>(
+        "return !!document.querySelector('[aria-busy=true],[role=progressbar],.spinner,.loading') || /loading|searching|please wait/i.test(document.body.innerText);",
+      ).catch(() => false);
+      await new Promise((r) => setTimeout(r, fault === 'slow' ? 3000 : 800));
+      const facts = await this.facts();
+      const results = await this.runProbes(['placeholder-leak']).catch(() => []);
+      const jpeg = await this.capture().catch(() => undefined);
+      return {
+        facts,
+        uncaught: this.consoleErrors.length,
+        busyWithin1s,
+        ...(jpeg ? { jpegBase64: jpeg.toString('base64') } : {}),
+        results,
+      };
+    } finally {
+      this.fault = undefined;
+      await this.load(route).catch(() => undefined);
+    }
   }
 
   /** 360, 768 and 1280px wide: sideways scrolling and cut-off text. */
@@ -539,6 +778,7 @@ export class SiteWindow {
 
   input(input: SiteInput): void {
     const wc = this.wc;
+    if (input.kind !== 'focus') this.noteInput();
     if (input.kind === 'focus') {
       this.focus();
     } else if (input.kind === 'key') {
@@ -821,6 +1061,7 @@ export class SiteWindow {
     this.consoleErrors = [];
     this.redirects = [];
     this.loadedAt = 0;
+    this.lastMoved = undefined;
     this.acting = ref;
     this.fittsUntil = t0 + 15_000;
     let rect: SiteRect | null;
@@ -866,6 +1107,7 @@ export class SiteWindow {
         navigationMs,
         console: { errors: errors.length, ...(errors[0] ? { first: errors[0] } : {}) },
         ...(redirects.length ? { redirects: [...redirects] } : {}),
+        ...(this.lastMoved ? { moved: this.lastMoved } : {}),
       },
     };
   }
@@ -921,13 +1163,33 @@ export class SiteWindow {
       const r = el.getBoundingClientRect();
       return { left: r.left, top: r.top, width: r.width, height: r.height };`);
     if (!rect) throw new Error(`No element ${ref} on ${before}`);
-    const x = Math.round(rect.left + rect.width / 2);
-    const y = Math.round(rect.top + rect.height / 2);
+    const x0 = Math.round(rect.left + rect.width / 2);
+    const y0 = Math.round(rect.top + rect.height / 2);
+    // Reach for it like a person: move there, a beat, then press (§6B.5: did it move away?).
+    this.noteInput();
+    this.wc.sendInputEvent({ type: 'mouseMove', x: x0, y: y0 });
+    await new Promise((r) => setTimeout(r, 150));
+    const now = await this.evaluate<SiteRect | null>(
+      `
+      const el = F.find(${JSON.stringify(ref)});
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };`,
+    ).catch(() => null);
+    const at = now ?? rect;
+    const x = Math.round(at.left + at.width / 2);
+    const y = Math.round(at.top + at.height / 2);
+    this.lastMoved =
+      Math.hypot(x - x0, y - y0) > 20 ? { decided: { x: x0, y: y0 }, tapped: { x, y } } : undefined;
     this.wc.sendInputEvent({ type: 'mouseMove', x, y });
     this.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
     this.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
-    return rect;
+    return at;
   }
+
+  /** The last click's target moved while Fitts reached for it (§6B.5). */
+  private lastMoved:
+    { decided: { x: number; y: number }; tapped: { x: number; y: number } } | undefined;
 
   /** Focuses the field, clears it, and types like a person (char events). */
   type(ref: string, text: string) {
@@ -936,6 +1198,7 @@ export class SiteWindow {
 
   private async typeInto(ref: string, text: string): Promise<null> {
     const before = this.path();
+    this.noteInput();
     this.focus();
     const ok = await this.evaluate<boolean>(`
       const el = F.find(${JSON.stringify(ref)});

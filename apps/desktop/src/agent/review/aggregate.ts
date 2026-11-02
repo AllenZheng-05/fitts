@@ -14,6 +14,8 @@ import {
   type ProbeResult,
   type Severity,
 } from '@fitts/schema';
+import { keyboardKind, surpriseKind } from '@fitts/probes';
+import { navigationKind } from '../crawler/navigation';
 import type { PersonaReview } from './reviewers';
 
 export const PANEL_SIZE = 5;
@@ -149,6 +151,201 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
         fix: 'Support both orientations; never ask people to rotate their device.',
         lens: 'accessibility',
         severity: 2,
+      };
+    case 'axe': {
+      const rule = item.rule;
+      const impact = rule?.impact ?? 'moderate';
+      const sev = impact === 'critical' ? 4 : impact === 'serious' ? 3 : impact === 'minor' ? 1 : 2;
+      const bestPractice =
+        rule?.tags.includes('best-practice') && !rule.tags.some((t) => /^wcag/.test(t));
+      return {
+        title: (rule?.help ?? m).replace(/\.$/, ''),
+        finding: `${rule?.help ?? m} (axe rule ${rule?.id ?? 'unknown'}). People using a screen reader, a keyboard or zoom run into this.`,
+        fix: `Fix the markup so the "${rule?.id ?? 'axe'}" rule passes: ${(rule?.help ?? m).toLowerCase()}.`,
+        lens: 'accessibility',
+        severity: (bestPractice ? Math.min(2, sev) : sev) as Template['severity'],
+      };
+    }
+    case 'keyboard': {
+      const kind = keyboardKind(m);
+      return kind === 'stuck'
+        ? {
+            title: 'Keyboard focus gets stuck',
+            finding: `Tabbing through the page, ${m}: keyboard users can't get out.`,
+            fix: 'Let Tab move on (no focus traps outside open dialogs).',
+            lens: 'accessibility',
+            severity: 4,
+          }
+        : kind === 'unreachable'
+          ? {
+              title: 'A control can’t be reached with the keyboard',
+              finding: `${m}, so people who don't use a mouse can't use it.`,
+              fix: 'Use a real button or link, or give it tabindex="0" and key handlers.',
+              lens: 'accessibility',
+              severity: 3,
+            }
+          : kind === 'hidden'
+            ? {
+                title: 'The focused control is hidden',
+                finding: `${m}: keyboard users can't see where they are.`,
+                fix: 'Leave room for sticky headers (scroll-padding-top) and keep focused controls in view.',
+                lens: 'accessibility',
+                severity: 2,
+              }
+            : kind === 'skip-link'
+              ? {
+                  title: 'No way to skip the navigation',
+                  finding: `${m}, so keyboard users tab through all of it on every page.`,
+                  fix: 'Add a "Skip to content" link as the first focusable element.',
+                  lens: 'accessibility',
+                  severity: 1,
+                }
+              : {
+                  title: 'A dialog doesn’t work with the keyboard',
+                  finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}.`,
+                  fix: 'Move focus into the dialog, keep Tab inside it, close it on Esc and return focus to what opened it.',
+                  lens: 'accessibility',
+                  severity: 3,
+                };
+    }
+    case 'navigation': {
+      const kind = navigationKind(m);
+      const t: Record<
+        typeof kind,
+        [string, string, Template['severity'], Heuristic | undefined, Lens]
+      > = {
+        'wrong-place': [
+          'A link goes to the wrong page',
+          'Point the control at the page it names.',
+          3,
+          'H4',
+          'usability',
+        ],
+        loop: ['A page redirects in a loop', 'Break the redirect loop.', 4, 'H9', 'usability'],
+        chain: [
+          'Too many redirects before a page opens',
+          'Redirect straight to the final address.',
+          2,
+          undefined,
+          'performance',
+        ],
+        login: [
+          'A page asks for a login it doesn’t need',
+          'Let the page open without a login, or say why it needs one.',
+          3,
+          'H2',
+          'usability',
+        ],
+        dropped: [
+          'A redirect drops part of the address',
+          'Keep the query and anchor through the redirect.',
+          2,
+          'H3',
+          'usability',
+        ],
+        'back-trap': [
+          'Back sends you straight back',
+          'Use a replace-style redirect so Back leaves the page.',
+          3,
+          'H3',
+          'usability',
+        ],
+        refresh: [
+          'Refreshing a page breaks it',
+          'Make the page load on its own from its address.',
+          3,
+          'H9',
+          'usability',
+        ],
+        'soft-404': [
+          'Unknown addresses show the home page',
+          'Show a "page not found" page with status 404.',
+          2,
+          'H9',
+          'usability',
+        ],
+      };
+      const [title, fix, severity, heuristic, lens] = t[kind];
+      return {
+        title,
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}.`,
+        fix,
+        ...(heuristic ? { heuristic } : {}),
+        lens,
+        severity,
+      };
+    }
+    case 'surprise': {
+      const kind = surpriseKind(m);
+      const t: Record<typeof kind, [string, string, Template['severity']]> = {
+        focus: [
+          'Focus alone changes the page',
+          'Change the page only when people press or submit something.',
+          3,
+        ],
+        typing: [
+          'Typing changes the page before you submit',
+          'Wait for submit (or a button) before changing the page.',
+          3,
+        ],
+        vanished: [
+          'A message disappears before it can be read',
+          'Keep messages up until dismissed, or at least 5 s plus reading time.',
+          2,
+        ],
+        autoplay: [
+          'Sound plays on its own',
+          'Don’t autoplay sound; or start muted with a visible control.',
+          3,
+        ],
+        moved: [
+          'A control moves just as you reach for it',
+          'Reserve space for late content so controls don’t move.',
+          3,
+        ],
+      };
+      const [title, fix, severity] = t[kind];
+      return {
+        title,
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}.`,
+        fix,
+        lens: kind === 'moved' ? 'ergonomics' : 'accessibility',
+        severity,
+      };
+    }
+    case 'state':
+      return {
+        title: /fails/.test(m)
+          ? 'The page breaks when a request fails'
+          : /empty/.test(m)
+            ? 'An empty list shows nothing at all'
+            : 'No sign the page is loading',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}.`,
+        fix: /fails/.test(m)
+          ? 'Catch the error and say what went wrong, with a way to try again.'
+          : /empty/.test(m)
+            ? 'Say there’s nothing here yet and what to do about it.'
+            : 'Show a loading indicator within a second.',
+        heuristic: /fails/.test(m) ? 'H9' : 'H1',
+        lens: 'usability',
+        severity: /fails/.test(m) ? 3 : 2,
+      };
+    case 'perf':
+      return {
+        title: /KB$/.test(m)
+          ? 'A file is too big for phones'
+          : /tap/.test(m)
+            ? 'Slow to answer a tap'
+            : /layout shift/.test(m)
+              ? 'The layout jumps while loading'
+              : /page change/.test(m)
+                ? 'Slow to change pages'
+                : 'Slow to load on a phone',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}.`,
+        fix: 'Size images, lazy-load below the fold, split code at route boundaries and drop duplicate requests.',
+        lens: 'performance',
+        // Measured on a dev server, the numbers are pessimistic: a low-severity lead, not a verdict.
+        severity: /(dev build)/.test(m) ? 1 : 2,
       };
     case 'web-vitals':
       return {

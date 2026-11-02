@@ -31,7 +31,7 @@ const recorded = existsSync(join(FIXTURES, 'understand.json'));
 
 describe('Pass 2 on demo/chat (recorded fixture)', () => {
   it.skipIf(!recorded)(
-    'the model names 8 pages with features and at least 4 journeys, one to send a message',
+    'the model names 9 pages with features and at least 4 journeys, one to send a message',
     async () => {
       const client = new FakeLlmClient([fixture('understand')]);
       const caller = new LlmCaller(() => client, new CostLedger());
@@ -45,7 +45,7 @@ describe('Pass 2 on demo/chat (recorded fixture)', () => {
       });
       const v = validate(x, raw, (f) => x.files.includes(f));
       expect(v.modeled).toBe(true);
-      expect(v.pages).toHaveLength(8);
+      expect(v.pages).toHaveLength(9);
       expect(v.pages.filter((p) => p.features.length > 0).length).toBeGreaterThanOrEqual(6);
       expect(v.journeys.length).toBeGreaterThanOrEqual(4);
       expect(v.journeys.some((j) => /send/i.test(j.name) && /message/i.test(j.name))).toBe(true);
@@ -82,7 +82,7 @@ describe('Pass 2 on demo/chat (recorded fixture)', () => {
     const first = await buildModel(ask, undefined);
     expect(first.fresh).toBe(true);
     expect(first.modeled).toBe(false);
-    expect(first.model.pages).toHaveLength(8);
+    expect(first.model.pages).toHaveLength(9);
     expect(Object.keys(first.hashes)).toEqual(expect.arrayContaining(['src/pages/Compose.tsx']));
     const again = await buildModel(
       {
@@ -204,7 +204,7 @@ describe('what the UI and the interview get', () => {
       },
       false,
     );
-    expect(s.pages).toHaveLength(8);
+    expect(s.pages).toHaveLength(9);
     expect(s.pages.find((p) => p.route === '/contacts')).toEqual({
       route: '/contacts',
       file: 'src/pages/Contacts.tsx',
@@ -216,7 +216,7 @@ describe('what the UI and the interview get', () => {
     expect('apis' in s).toBe(false);
     const text = appModelContext(s);
     expect(text).toContain('read without a model');
-    expect(text).toContain('Pages (8): /, /compose');
+    expect(text).toContain('Pages (9): /, /compose');
     expect(text).toContain('Fill in the contacts-add form on /contacts (priority 2)');
   });
 });
@@ -318,7 +318,7 @@ describe('validation (§3.2)', () => {
     const v = validate(x, null, exists);
     expect(v.modeled).toBe(false);
     expect(v.summary).toBe(plainSummary(x));
-    expect(v.summary).toMatch(/^demo-chat is a Vite \+ React app with 8 pages/);
+    expect(v.summary).toMatch(/^demo-chat is a Vite \+ React app with 9 pages/);
     expect(v.journeys).toEqual([
       expect.objectContaining({
         id: 'fill-contacts-add-contacts',

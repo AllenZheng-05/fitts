@@ -8,6 +8,10 @@ export type AbilityName =
   | 'journey'
   /** SPEC-phase4 §6.3: every explored page at every cell of the device matrix (was phone_pass). */
   | 'device_pass'
+  /** SPEC-phase4 §6B.6: the site's own GETs empty, failing and slow (local projects only). */
+  | 'state_pass'
+  /** SPEC-phase4 §6B.7: throttled phone speed. */
+  | 'perf_pass'
   | 'check_links'
   | 'review'
   | 'check_theme'
@@ -129,7 +133,14 @@ export function scriptedNext(s: Situation): AbilityName {
   if (planned((p) => p <= 2)) return 'journey';
   if (!s.coverage.ended) return 'explore';
   if (planned((p) => p === 3) && s.budget.spentUsd < s.budget.capUsd * 0.5) return 'journey';
-  const order: AbilityName[] = ['device_pass', 'check_links', 'review', 'check_theme'];
+  const order: AbilityName[] = [
+    'device_pass',
+    'check_links',
+    'state_pass',
+    'perf_pass',
+    'review',
+    'check_theme',
+  ];
   for (const a of order) if (!s.ran[a]) return a;
   if (!s.live && !s.ran.looks) return 'looks';
   if (!s.live && !s.ran.fix) return 'fix';

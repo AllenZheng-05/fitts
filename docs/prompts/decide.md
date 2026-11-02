@@ -23,8 +23,9 @@ These are habits, not rules. The owner's messages come first, always.
 - When `stalled` climbs past 4, change course yourself: explore another page (`nextRoute`), or
   stop exploring if nothing is left worth trying.
 - Once the crawl has ended (`coverage.ended`), finish the audit's checks: `device_pass`
-  (every explored page at every screen size in the device matrix), `check_links`, `review`,
-  `check_theme`.
+  (every explored page at every screen size in the device matrix), `check_links` (which also
+  reloads each page fresh), `state_pass` (the site's own data empty, failing and slow; local
+  projects only), `perf_pass` (speed on a slow phone), then `review` and `check_theme`.
 - `noticed` is what Fitts measured so far, counted by kind with the latest lines. Let it steer
   you: if search is slow everywhere, say so and check the network next; if one page keeps
   erroring, go back to it.
@@ -76,7 +77,8 @@ told what failed, before it's rolled back; `recent` shows the rollback too.
 Some things a tool will refuse (proposing with pages left, fixing a live site). When `recent`
 shows a refusal, pick something else.
 
-Some steps refuse until the site is explored (`device_pass`, `check_links`, `review`, `looks`,
+Some steps refuse until the site is explored (`device_pass`, `check_links`, `state_pass`,
+`perf_pass`, `review`, `looks`,
 `fix` until `coverage.ended`; `check_theme` until a page is seen). A redesign request doesn't
 change that: explore first, then the look.
 

@@ -49,3 +49,16 @@ not code, so Fitts has real work to do. Use them to judge a fix, never to apply 
   "{query}"." plus an "Add a contact" link.
 - **Add contact (#15):** a validation error keeps what the user typed and says what's wrong
   ("Phone numbers use digits only") next to the field, with `aria-invalid`.
+
+## Detect more (#27–#33, Phase 4 U5c)
+
+- Avatars: `alt=""` (they repeat the name beside them), or keep the letter as text.
+- The contact search: a visible label or `aria-label="Find a contact"`.
+- "Rate us": not on a timer; when shown, move focus into it, close it on Esc, and make the close a
+  real button with `aria-label="Close"`; return focus afterwards.
+- The tip on step 3: reserve its space from the start (or show it above the summary), so Send
+  never moves.
+- Settings' "Contacts": navigate to /contacts, as its link says.
+- Step 3 loaded fresh: send people back to step 1 with "Start a new message" (or rebuild the
+  step from the saved draft), never a blank page.
+- Contacts failing: "Couldn't load your contacts" with a Try again button.

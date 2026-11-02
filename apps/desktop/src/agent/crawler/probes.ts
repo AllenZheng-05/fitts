@@ -3,6 +3,15 @@
 // (the page probes, Tab and the viewport sweep), after each action (feedback, errors, Fitts ID,
 // back mid-flow), and when the crawl ends (links, network, label consistency).
 import {
+  brokenOnError,
+  dialogProblems,
+  faultLabel,
+  keyboardProblems,
+  movedBeforeTap,
+  perfProblems,
+  surpriseProblems,
+  type FaultCase,
+  type SurpriseNote,
   feedbackTiming,
   fittsId,
   labelConsistency,
@@ -16,6 +25,7 @@ import type { DeviceCell, ProbeItem, ProbeName, ProbeResult } from '@fitts/schem
 import type { AxSnapshot } from '../protocol';
 import type { ActionResult, Site } from '../site-client';
 import { routeOf } from './coverage';
+import { backTrap, chainProblems, refreshProblem, soft404, wrongPlace } from './navigation';
 
 /** Labels that submit or move a form on; "search" is not one (it's fine to run empty). */
 const SUBMIT = /^(next|send|submit|save|create|add|continue|post|sign up|done)\b/i;
@@ -39,11 +49,23 @@ export class ProbeRunner {
   private readonly labels = new Map<string, { route: string; ref: string; name: string }>();
   private readonly hrefs = new Map<string, { route: string; ref: string }>();
   private lastClick: { x: number; y: number } | null = null;
+  /** SPEC-phase4 §6B: each control's link target; each route's headings when first seen. */
+  private readonly hrefOf = new Map<string, string>();
+  private readonly headingsOf = new Map<string, string[]>();
+  private readonly dialogsChecked = new Set<string>();
+  /** Surprise notes already made (first-load banners are reported once per site). */
+  private readonly surprised = new Set<string>();
+  /** The App Model says a page needs earlier steps (refresh problems there are notes only). */
+  needsFlow: (route: string) => boolean = (route) => route.includes(':');
+  /** The App Model says a page needs a login (a redirect to log in is expected there). */
+  gated: (route: string) => boolean = () => false;
 
   constructor(
     private readonly site: Site,
     private readonly runId: string,
     private readonly onResult: (r: ProbeResult) => void,
+    /** SPEC-phase4 §6B.5: things that happened with nothing to prompt them (notes, not findings). */
+    private readonly onSurprise: (route: string, notes: SurpriseNote[]) => void = () => undefined,
   ) {}
 
   private add(
@@ -69,6 +91,15 @@ export class ProbeRunner {
     this.onResult(result);
   }
 
+  /** A page state's probe result (§6B.3), labeled with how the state was reached. */
+  addState(
+    r: { probe: ProbeName; items: ProbeItem[]; summary?: string | undefined },
+    route: string,
+    label: string,
+  ): void {
+    this.add(r.probe, route, r.items, r.summary ? `${label}: ${r.summary}` : label);
+  }
+
   /** Every page the crawl sees: remember its labels and links; probe it on the first visit. */
   async onPage(snap: AxSnapshot): Promise<void> {
     const route = routeOf(snap.path);
@@ -76,7 +107,20 @@ export class ProbeRunner {
       if ((n.role === 'button' || n.role === 'link') && n.name && !this.labels.has(n.ref))
         this.labels.set(n.ref, { route, ref: n.ref, name: n.name });
       if (n.href && !this.hrefs.has(n.href)) this.hrefs.set(n.href, { route, ref: n.ref });
+      if (n.href) this.hrefOf.set(n.ref, n.href);
     }
+    if (!this.headingsOf.has(route)) this.headingsOf.set(route, snap.headings);
+    // A dialog open on the page: its keyboard rules, once per route (§6B.2).
+    if (snap.nodes.some((n) => n.region === 'dialog') && !this.dialogsChecked.has(route)) {
+      this.dialogsChecked.add(route);
+      try {
+        const d = await this.site.dialog?.();
+        if (d) this.add('keyboard', route, dialogProblems(d));
+      } catch {
+        // Best effort.
+      }
+    }
+    await this.surprise(route);
     if (this.visited.has(route)) return;
     this.visited.add(route);
     try {
@@ -94,6 +138,44 @@ export class ProbeRunner {
     }
     try {
       this.add('viewport-sweep', route, await this.site.viewportSweep());
+    } catch {
+      // Best effort.
+    }
+    // SPEC-phase4 §6B.2: a real Tab sweep: unreachable, stuck, hidden, order, skip link.
+    try {
+      const k = await this.site.keyboard?.();
+      if (k) {
+        const r = keyboardProblems({ stops: k.stops, ...k.facts });
+        this.add(
+          'keyboard',
+          route,
+          r.items,
+          r.orderJumps >= 3
+            ? `focus jumps back up the page ${r.orderJumps} times while tabbing`
+            : undefined,
+        );
+      }
+    } catch {
+      // Best effort.
+    }
+  }
+
+  /** SPEC-phase4 §6B.5: what the detector saw since the last look, judged against input times. */
+  async surprise(route: string): Promise<void> {
+    if (!this.site.surprise) return;
+    try {
+      const { events, inputs } = await this.site.surprise();
+      if (events.length === 0) return;
+      const r = surpriseProblems(events, inputs);
+      if (r.items.length) this.add('surprise', route, r.items);
+      const fresh = r.notes.filter((n) => {
+        // A banner on first load is reported once per site, not per page.
+        const key = `${n.kind}|${n.ref || n.measured.replace(/[\d.]+ s|\d+ px/g, '')}`;
+        if (this.surprised.has(key)) return false;
+        this.surprised.add(key);
+        return true;
+      });
+      if (fresh.length) this.onSurprise(route, fresh);
     } catch {
       // Best effort.
     }
@@ -173,6 +255,47 @@ export class ProbeRunner {
 
     if (action.kind === 'type' && action.text)
       this.typed.set(route, { ref: action.ref, text: action.text });
+
+    // SPEC-phase4 §6B.5: the target moved while Fitts reached for it.
+    const moved = result.trace?.moved;
+    if (action.kind === 'click' && moved) {
+      const m = movedBeforeTap({ ref: action.ref, selector: '', name: action.name, ...moved });
+      if (m) this.add('surprise', route, [m]);
+    }
+    // SPEC-phase4 §6B.4: where it went vs where its link says, and the redirects on the way.
+    if (action.kind === 'click') {
+      const expected = this.hrefOf.get(action.ref);
+      const arrived = routeOf(result.path);
+      const hops = result.trace?.redirects ?? [];
+      const w = wrongPlace({
+        ref: action.ref,
+        name: action.name,
+        ...(expected ? { expected: new URL(expected, 'http://x').pathname } : {}),
+        arrived,
+        redirects: hops,
+      });
+      if (w) this.add('navigation', route, [w]);
+      if (hops.length) {
+        const from = expected ? new URL(expected, 'http://x').pathname : route;
+        const chain = chainProblems({ from, hops, gated: this.gated(from) });
+        if (chain.length)
+          this.add(
+            'navigation',
+            route,
+            chain.map((c) => ({ ...c, ref: action.ref })),
+          );
+        // Back once after a redirect: sent straight forward again is a trap.
+        try {
+          const back = await this.site.back();
+          const trap = backTrap({ redirectedFrom: from, afterBack: back.path, arrived });
+          if (trap) this.add('navigation', route, [{ ...trap, ref: action.ref }]);
+          if (routeOf(back.path) !== arrived) await this.site.navigate(arrived);
+        } catch {
+          // Best effort.
+        }
+      }
+    }
+    await this.surprise(routeOf(result.path));
 
     const rect = result.trace?.rect;
     if (action.kind === 'click' && rect) {
@@ -281,5 +404,128 @@ export class ProbeRunner {
     const where =
       this.forward.find((f) => f.ref === first)?.route ?? this.labels.get(first ?? '')?.route;
     this.add('label-consistency', where ?? '/', label);
+    await this.freshLoads();
+  }
+
+  /**
+   * SPEC-phase4 §6B.4: every reached route loaded fresh once (a refresh or a deep link), and an
+   * address that can't exist, to see whether it says so.
+   */
+  private async freshLoads(): Promise<void> {
+    if (!this.site.facts) return;
+    for (const route of this.visited) {
+      try {
+        const f = await this.site.facts(route);
+        const p = refreshProblem({
+          route,
+          status: f.status,
+          mainText: f.mainText,
+          ...(f.errorText ? { errorText: f.errorText } : {}),
+          headings: f.headings,
+          expectedHeadings: this.headingsOf.get(route) ?? [],
+          needsFlow: this.needsFlow(route),
+        });
+        if (p) this.add('navigation', route, [p]);
+      } catch {
+        // Best effort.
+      }
+    }
+    try {
+      const path = `/fitts-not-a-page-${Math.random().toString(36).slice(2, 8)}`;
+      const f = await this.site.facts(path);
+      const s = soft404({
+        path,
+        status: f.status,
+        headings: f.headings,
+        homeHeadings: this.headingsOf.get('/') ?? [],
+        text: f.text,
+      });
+      if (s) this.add('navigation', '/', [s]);
+    } catch {
+      // Best effort.
+    }
+  }
+
+  /**
+   * SPEC-phase4 §6B.6, state_pass: up to 6 of the site's own GET endpoints (most used first),
+   * each page that uses one loaded with it empty, failing and slow. Local projects only.
+   */
+  async statePass(
+    origin: string,
+    onState: (s: { route: string; label: string; jpegBase64?: string }) => void,
+  ): Promise<void> {
+    if (!this.site.fault) return;
+    const own = this.requests.filter((r) => {
+      if (r.method.toUpperCase() !== 'GET' || (r.type !== 'Fetch' && r.type !== 'XHR'))
+        return false;
+      try {
+        return new URL(r.url).origin === new URL(origin).origin;
+      } catch {
+        return false;
+      }
+    });
+    const uses = new Map<string, { n: number; route: string }>();
+    for (const r of own) {
+      const endpoint = new URL(r.url).pathname;
+      const u = uses.get(endpoint) ?? { n: 0, route: r.route };
+      uses.set(endpoint, { n: u.n + 1, route: u.route });
+    }
+    const top = [...uses.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 6);
+    for (const [endpoint, { route }] of top) {
+      for (const fault of ['error', 'empty', 'slow'] as FaultCase[]) {
+        try {
+          const r = await this.site.fault(route, endpoint, fault);
+          const label = faultLabel(fault, endpoint);
+          onState({ route, label, ...(r.jpegBase64 ? { jpegBase64: r.jpegBase64 } : {}) });
+          const items: ProbeItem[] = [];
+          if (fault === 'error') {
+            const broken = brokenOnError({
+              mainText: r.facts.mainText,
+              ...(r.facts.errorText ? { errorText: r.facts.errorText } : {}),
+              uncaught: r.uncaught,
+            });
+            if (broken)
+              items.push({
+                ref: '',
+                selector: 'main',
+                measured: `${route} ${broken} ${label}`,
+                expected: 'says what went wrong, with a way to try again',
+              });
+          }
+          if (fault === 'slow' && !r.busyWithin1s)
+            items.push({
+              ref: '',
+              selector: 'main',
+              measured: `no sign ${route} is loading ${label}`,
+              expected: 'a loading indicator within 1 s',
+            });
+          if (items.length) this.add('state', route, items);
+          for (const res of r.results)
+            if (!res.pass) this.add(res.probe, route, res.items, `${label}`);
+        } catch {
+          // Best effort: the next case.
+        }
+      }
+    }
+  }
+
+  /** SPEC-phase4 §6B.7, perf_pass: throttled phone numbers, journey pages first. */
+  async perfPass(routes: string[]): Promise<void> {
+    if (!this.site.perf) return;
+    try {
+      for (const page of await this.site.perf(routes))
+        this.add(
+          'perf',
+          page.route,
+          perfProblems(page).map((p) => ({
+            ref: '',
+            selector: '',
+            measured: p.measured,
+            expected: p.expected,
+          })),
+        );
+    } catch {
+      // Best effort.
+    }
   }
 }

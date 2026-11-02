@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { navigate } from '../router';
 
 const TOGGLES = [
   'Sounds',
@@ -22,6 +23,18 @@ export function Settings() {
   return (
     <>
       <h1 className="title">Settings</h1>
+      {/* Planted #31: "Contacts" says /contacts but goes to /settings/privacy. */}
+      <a
+        href="/contacts"
+        data-ref="settings-contacts"
+        className="link small"
+        onClick={(e) => {
+          e.preventDefault();
+          navigate('/settings/privacy');
+        }}
+      >
+        Contacts
+      </a>
       <ul data-ref="settings-list" className="settings">
         {TOGGLES.map((name) => {
           const value = Boolean(on[name]);
@@ -41,6 +54,16 @@ export function Settings() {
           );
         })}
       </ul>
+    </>
+  );
+}
+
+/** Where Settings' "Contacts" link really goes (planted #31). */
+export function Privacy() {
+  return (
+    <>
+      <h1 className="title">Privacy</h1>
+      <p className="muted">Your messages stay on this device.</p>
     </>
   );
 }

@@ -251,6 +251,18 @@ const SAMPLE: Record<ProbeName, [string, string]> = {
   'text-spacing': ['text clipped with wider spacing', 'text that fits'],
   'resize-text': ['text cut off at 200% text', 'text that fits or wraps'],
   orientation: ['asks for portrait in landscape', 'both orientations'],
+  axe: ['Images must have alternate text', 'passes the axe rule'],
+  keyboard: ['"div-button" can’t be reached with Tab', 'every control reachable from the keyboard'],
+  navigation: [
+    '"Contacts" went to /settings/privacy (its link says /contacts)',
+    '"Contacts" opens /contacts',
+  ],
+  surprise: ['"Send" moved 40 px just before the tap', 'controls stay put while the page loads'],
+  state: ['/contacts goes blank when contacts fails', 'says what went wrong'],
+  perf: [
+    'the main content shows after 3.4 s on a mid-range phone on Slow 4G (dev build)',
+    'under 2.5 s',
+  ],
 };
 
 describe('noticeProbe: every probe has a template (§6A.2)', () => {

@@ -1,5 +1,14 @@
 // Messages between main and the agent utility process (process.parentPort).
-import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
+import type {
+  FaultCase,
+  Feedback,
+  PageProbeName,
+  PageProbeResult,
+  PagePerf,
+  RequestRecord,
+  SurpriseEvent,
+  TabStop,
+} from '@fitts/probes';
 import type {
   AppModel,
   AppModelPatch,
@@ -107,6 +116,19 @@ export type SiteOp =
   | { op: 'breakpoints' }
   /** The cheap probes for a cell on the page as it is: overflow, and the cell's own check. */
   | { op: 'cellProbes'; cell: DeviceCell }
+  // SPEC-phase4 §6B: detect more.
+  /** A Tab sweep (up to 200 stops) and the page's controls (keyboard). */
+  | { op: 'keyboard' }
+  /** An open dialog's keyboard facts (focus in, Tab stays in, Esc closes, focus returns). */
+  | { op: 'dialog' }
+  /** What the page shows now, or after loading `path` fresh (refresh, deep link, soft 404). */
+  | { op: 'facts'; path?: string }
+  /** The surprise detector's events since the last read, with the input times. */
+  | { op: 'surprise' }
+  /** Load `route` with one of the site's own GETs rewritten (state_pass, local only). */
+  | { op: 'fault'; route: string; endpoint: string; fault: FaultCase }
+  /** Throttled phone measurements of some pages on a hidden window (perf_pass). */
+  | { op: 'perf'; routes: string[] }
   | { op: 'value'; ref: string }
   | { op: 'links'; hrefs: string[] }
   | { op: 'network' }
@@ -254,6 +276,30 @@ export interface VerifyPagesResult {
 }
 
 /** What an action caused: page feedback, the requests it started, and the target's box. */
+/** SPEC-phase4 §6B: what the page script reports for the new checks. */
+export interface KeyboardFacts {
+  interactive: { ref: string; selector: string; name: string }[];
+  navLinks: number;
+  skipLink: boolean;
+}
+export interface DialogCheck {
+  ref: string;
+  selector: string;
+  name: string;
+  focusMovedIn: boolean;
+  tabStaysIn: boolean;
+  escCloses: boolean;
+  focusReturned: boolean;
+}
+export interface PageFacts {
+  status: number;
+  mainText: number;
+  errorText?: string;
+  headings: string[];
+  text: string;
+  path?: string;
+}
+
 export interface OpTrace {
   feedback: Feedback | null;
   requests: RequestRecord[];
@@ -268,6 +314,8 @@ export interface OpTrace {
   console?: { errors: number; first?: string };
   /** Redirect hops the action caused (paths), when there were any. */
   redirects?: string[];
+  /** SPEC-phase4 §6B.5: where the target was when Fitts reached for it, and when it tapped. */
+  moved?: { decided: { x: number; y: number }; tapped: { x: number; y: number } };
 }
 
 export type SiteOpResult =
@@ -281,6 +329,19 @@ export type SiteOpResult =
   | { op: 'value'; value: string | null }
   | { op: 'device'; previous: string | null }
   | { op: 'breakpoints'; media: string[] }
+  | { op: 'keyboard'; stops: TabStop[]; facts: KeyboardFacts }
+  | { op: 'dialog'; check: DialogCheck | null }
+  | { op: 'facts'; facts: PageFacts }
+  | { op: 'surprise'; events: SurpriseEvent[]; inputs: number[] }
+  | {
+      op: 'fault';
+      facts: PageFacts;
+      uncaught: number;
+      busyWithin1s: boolean;
+      jpegBase64?: string;
+      results: PageProbeResult[];
+    }
+  | { op: 'perf'; pages: PagePerf[] }
   | { op: 'ok' }
   | { op: 'links'; statuses: Record<string, number> }
   | { op: 'network'; requests: RequestRecord[] }

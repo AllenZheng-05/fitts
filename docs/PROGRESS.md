@@ -15,12 +15,12 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U2  | Understand + the understanding card (§3) | done        | `ba8d406` |
 | U3  | Owner first + memory (§4)                | done        | `bad28a3` |
 | U4  | Repro (§5)                               | done        | `4105a5a` |
-| U4b | ddmin for repros (§5.2 step 3)           | done        | see git   |
+| U4b | ddmin for repros (§5.2 step 3)           | done        | `c16b554` |
 | U5  | Journeys, coverage, device matrix (§6)   | done        | `bb5c828` |
 | U5a | Models unreachable: pause (§6C, added)   | done        | `1f18153` |
 | U5b | The action log (§6A)                     | done        | `7bc4565` |
-| U5c | Detect more (§6B)                        | todo        |           |
-| U6  | Code-aware fixer (§7)                    | todo        |           |
+| U5c | Detect more (§6B)                        | done        | see git   |
+| U6  | Code-aware fixer (§7)                    | in progress |           |
 | U7  | App Map (§8)                             | todo        |           |
 | U8  | Android audit (§9.1–9.3)                 | todo        |           |
 | U9  | Android fix (§9.4)                       | todo        |           |
@@ -28,7 +28,7 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 ## Current milestone and next step
 
-**U5c (detect more, §6B) next** (U4b committed), per the U5c plan below.
+**U6 (code-aware fixer, §7) in progress.** U5c is committed. New U6 files so far: main/fix/allowlist.ts, main/fix/muse.ts, agent/fix/outline.ts, agent/fix/groups.ts (+ tests). Next: wire them (fix-host scope/grant/muse, run-host owner answers, fixer tools and task context, device and trace verification, Checked by review, root-cause groups on the approval card). The paid bench:chat (≤ $2) for U5c recall is still to run.
 
 Lessons: an edit script's "skip if already applied" guard must not be `includes(b)`; insertions
 keep their anchor, so a rerun applies them again (revert and apply once instead). TaskStop on a
@@ -103,10 +103,13 @@ Total so far: **$0.03** of $15.
 
 ## Cuts applied
 
-(none; ddmin was cut in U4 and put back in U4b at Allen's request, Nov 2)
+- U5c: the production build in perf_pass (§13 #3). In ROADMAP.
+- U5c: the Wonder judge and SAM frames (§13 #4). In ROADMAP.
+- (ddmin was cut in U4 and put back in U4b at Allen's request, Nov 2.)
 
 ## Notes for the next context
 
+- **demo/android-chat (Allen, Nov 2), for U8:** make it look and feel like a believable real product, not a demo: e.g. a team chat app (or a clinic booking app) with realistic names, content and branding. Plant issues real apps actually ship (an unlabeled icon button, a 36 dp target, low-contrast secondary text, a missing loading state, a delete with no confirmation, an inconsistent label), not obvious ones like "(null)" or "Error 0x3F". Keep PLANTED.md and the bench as SPEC §9 specifies.
 - **Android (Allen, Nov 1), for U8:** the emulator is set up and verified. The Fitts_Pixel AVD (API 37, x86_64, 4 GB) runs on WHPX and adb sees it as emulator-5554. ANDROID_HOME and JAVA_HOME are set and the SDK licenses are accepted. A create-expo-app@latest smoke app (C:/Users/Plasm/code/expo-smoke: expo ~58.0.22, react 19.3.0, react-native 0.88.1) built with `npx expo run:android` (Gradle 9.4.1, NDK 27.1, build tools 36/37, compileSdk 37, targetSdk 36) and ran as a development build with Metro on localhost:8081. demo/android-chat uses the same Expo SDK and a development build (expo-dev-client), not Expo Go. Allen will have the emulator running at U8, so the U8 bench runs on the real emulator, not only fake adb.
 
 - **Muse Code (Allen, Nov 1):** 1.4.14 in WSL is installed and has `--api-key-stdin` (no login).

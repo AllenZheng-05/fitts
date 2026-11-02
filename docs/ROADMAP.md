@@ -110,3 +110,13 @@ Metro, the way the Fitts plugin does for Vite today.
 (Claude Code adds each cut here, with the reason, as it applies `SPEC-phase4.md` §13's cut
 order.)
 
+- **The production build in perf_pass (§13 #3, cut in U5c, Nov 2).** Speed is measured on the dev
+  server, throttled and labeled "dev build", at most 3 pages and at severity 1, because an
+  unbundled dev server at Slow 4G is minutes per page and pessimistic. A later phase builds a
+  detached production copy (`.fitts-worktrees/<runId>/perf`), serves it and measures every
+  journey page, with INP and page-change timing.
+- **The Wonder judge and SAM frames for surprise events (§13 #4, cut in U5c, Nov 2).** Popped-up,
+  jumped and scrolled-by-itself events stay notes for the reviewers. A later phase keeps a
+  4-second frame buffer, asks Muse Wonder whether a person would expect what happened, and
+  shows a before/after strip.
+

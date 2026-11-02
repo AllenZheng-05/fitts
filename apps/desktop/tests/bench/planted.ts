@@ -185,6 +185,55 @@ export const PLANTED: Planted[] = [
     refs: ['settings-list'],
     words: /sideways|wider than the screen|horizontal(ly)? scroll|320px|reflow|overflow/,
   },
+  {
+    n: 27,
+    issue: 'Avatar images with no alt text',
+    routes: ['/'],
+    refs: [],
+    words: /alt|alternat|image|picture|avatar/,
+  },
+  {
+    n: 28,
+    issue: 'Contacts search field with no label',
+    routes: ['/contacts'],
+    refs: ['contacts-filter'],
+    words: /label|name|search field|form element/,
+  },
+  {
+    n: 29,
+    issue: '"Rate us" pops up; the keyboard can’t close it',
+    routes: ['/'],
+    refs: ['rate-dialog', 'rate-now'],
+    words: /dialog|pop(s|ped)? up|rate us|esc|keyboard|focus/,
+  },
+  {
+    n: 30,
+    issue: 'A tip pushes Send down as you reach for it',
+    routes: ['/compose/confirm'],
+    refs: ['compose-send'],
+    words: /moved?|jump|shift|push/,
+  },
+  {
+    n: 31,
+    issue: 'Settings’ "Contacts" link goes to /settings/privacy',
+    routes: ['/settings'],
+    refs: ['settings-contacts'],
+    words: /went to|wrong page|privacy|link says|goes to/,
+  },
+  {
+    n: 32,
+    issue: 'Refreshing /compose/confirm shows a blank page',
+    routes: ['/compose/confirm'],
+    refs: [],
+    words: /refresh|blank|deep link|loads on its own/,
+  },
+  {
+    n: 33,
+    issue: 'Contacts goes blank when its request fails',
+    routes: ['/contacts'],
+    refs: [],
+    words: /fail|blank|error|request/,
+  },
 ];
 
 const textOf = (f: Finding) => [f.title, f.finding, ...f.evidence].join(' ').toLowerCase();

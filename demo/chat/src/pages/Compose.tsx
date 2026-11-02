@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Contact } from '../api';
-import { navigate } from '../router';
+import { navigate, navigatedInApp } from '../router';
 
 const KEY_TO = 'draft.to';
 const KEY_TEXT = 'draft.text';
@@ -96,8 +96,16 @@ export function ComposeRecipient() {
 }
 
 /** Step 3: check and send. */
+/** This page load was a reload (the browser's Refresh). */
+const reloaded = () =>
+  (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)
+    ?.type === 'reload';
+
 export function ComposeConfirm() {
   const [error, setError] = useState<string | null>(null);
+  const [tip, setTip] = useState(false);
+  // Planted #32: refreshed (a reload, not a first visit by its link), step 3 renders nothing.
+  if (!navigatedInApp() && reloaded()) return null;
   const text = sessionStorage.getItem(KEY_TEXT) ?? '';
   const to = Number(sessionStorage.getItem(KEY_TO) ?? undefined);
   const send = async () => {
@@ -122,7 +130,9 @@ export function ComposeConfirm() {
           {error}
         </p>
       )}
-      <div className="row end">
+      {/* Planted #30: the tip slides in above Send the moment the pointer comes near it. */}
+      {tip && <p className="late-tip">Tip: messages arrive faster on Wi-Fi.</p>}
+      <div className="row end" onPointerEnter={() => setTimeout(() => setTip(true), 60)}>
         <button
           type="button"
           data-ref="compose-send"

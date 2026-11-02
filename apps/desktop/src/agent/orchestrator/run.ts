@@ -28,6 +28,7 @@ import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
 import { Coverage, DESTRUCTIVE, patternOf, routeOf } from '../crawler/coverage';
 import { chooseCells, mergeBreakpoints, widthsFromCss } from '../devices/matrix';
+import { chooseStates, stateKey } from '../crawler/states';
 import {
   buildRecord,
   noticeAction,
@@ -330,19 +331,48 @@ export class RealRun {
       if (!p.dynamic && !p.route.includes(':')) this.coverage.discover(p.route, 'code');
     const { first, later } = journeyOrder(deps.appModel?.journeys ?? []);
     for (const j of [...first, ...later]) this.journeyStatus.set(j.id, { status: 'planned' });
-    this.probes = new ProbeRunner(deps.site, from.runId, (result) => {
-      this.emit([{ type: 'probe.result', result }]);
-      this.notice(
-        noticeProbe(
-          result,
-          this.state.step,
-          this.nextObsId,
-          (ref) => this.lastSnap?.nodes.find((n) => n.ref === ref)?.name,
-          this.noted,
-          this.cellNow,
-        ),
-      );
-    });
+    this.probes = new ProbeRunner(
+      deps.site,
+      from.runId,
+      (result) => {
+        this.emit([{ type: 'probe.result', result }]);
+        this.notice(
+          noticeProbe(
+            result,
+            this.state.step,
+            this.nextObsId,
+            (ref) => this.lastSnap?.nodes.find((n) => n.ref === ref)?.name,
+            this.noted,
+            this.cellNow,
+          ),
+        );
+      },
+      (route, notes) => {
+        this.notice(
+          notes.map((n) => ({
+            id: this.nextObsId(),
+            step: this.state.step,
+            route,
+            ...(this.cellNow ? { cell: this.cellNow } : {}),
+            kind: n.kind,
+            text: format(copy.noticed.surprise, { measured: n.measured }),
+            ...(n.ref ? { ref: n.ref } : {}),
+            severityHint: n.kind === 'popped-up' || n.kind === 'jumped' ? 3 : 2,
+          })),
+        );
+      },
+    );
+    if (deps.appModel) {
+      const model = deps.appModel;
+      this.probes.needsFlow = (route) => {
+        const page = model.pages.find((p) => p.route === route);
+        return route.includes(':') || Boolean(page?.dynamic) || page?.gate === 'data';
+      };
+      this.probes.gated = (route) => {
+        const page = model.pages.find((p) => p.route === route);
+        return page?.gate === 'login' || page?.gate === 'role';
+      };
+    }
     this.state = {
       ...from,
       phase: 'audit',
@@ -635,7 +665,15 @@ export class RealRun {
    * feedback, round 7: a redesign brief sent the decider straight to them).
    */
   private refusal(d: Decision): string | undefined {
-    const needsPages: AbilityName[] = ['device_pass', 'check_links', 'review', 'looks', 'fix'];
+    const needsPages: AbilityName[] = [
+      'device_pass',
+      'check_links',
+      'state_pass',
+      'perf_pass',
+      'review',
+      'looks',
+      'fix',
+    ];
     if (needsPages.includes(d.ability) && !this.crawlEnded)
       return 'explore first: the crawl hasn’t finished';
     if (d.ability === 'check_theme' && this.pages.size === 0)
@@ -646,6 +684,8 @@ export class RealRun {
       'journey',
       'device_pass',
       'check_links',
+      'state_pass',
+      'perf_pass',
       'review',
       'check_theme',
     ];
@@ -670,6 +710,27 @@ export class RealRun {
         await this.devicePass();
         this.ran.device_pass = true;
         return outcome('done');
+      case 'state_pass':
+        if (live) {
+          this.ran.state_pass = true;
+          return outcome('nothing', 'a live site is never altered, not even in the browser');
+        }
+        this.emit([{ type: 'now.changed', nowText: copy.fitts.statePassNow }]);
+        await this.probes.statePass(this.deps.origin, (s) =>
+          this.addState(s.route, s.label, s.jpegBase64),
+        );
+        this.ran.state_pass = true;
+        return outcome('done');
+      case 'perf_pass': {
+        this.emit([{ type: 'now.changed', nowText: copy.fitts.perfPassNow }]);
+        const journeyPages = (this.deps.appModel?.journeys ?? []).flatMap((j) => j.pages);
+        const routes = [
+          ...new Set([...journeyPages.filter((r) => this.pages.has(r)), ...this.pages.keys()]),
+        ].filter((r) => !FILE_ROUTE.test(r));
+        await this.probes.perfPass(routes);
+        this.ran.perf_pass = true;
+        return outcome('done');
+      }
       case 'check_links':
         this.emit([{ type: 'now.changed', nowText: 'Checking links and network' }]);
         await this.probes.finish();
@@ -786,7 +847,13 @@ export class RealRun {
           if (!this.coverage.complete() && !this.crawlEnded)
             return outcome('refused', 'pages and controls are left to try');
           // And the audit's own checks have run: a run never ends unreviewed.
-          for (const owed of ['device_pass', 'check_links', 'review'] as const)
+          for (const owed of [
+            'device_pass',
+            'check_links',
+            'state_pass',
+            'perf_pass',
+            'review',
+          ] as const)
             if (!this.ran[owed]) return outcome('refused', `${owed} hasn’t run yet`);
           this.crawlComplete();
         }
@@ -1303,7 +1370,11 @@ export class RealRun {
   /** A route's first visit: its screenshot and controls, for the reviewer panel. */
   private async remember(snap: AxSnapshot): Promise<void> {
     const route = routeOf(snap.path);
-    if (this.pages.has(route)) return;
+    if (this.pages.has(route)) {
+      await this.rememberState(snap);
+      return;
+    }
+    this.stateKeys.add(stateKey(snap));
     let shot: RouteEvidence['shot'];
     let size: { width: number; height: number } | undefined;
     let rects: Record<string, SiteRect> | undefined;
@@ -1345,6 +1416,59 @@ export class RealRun {
       ...(rects ? { rects } : {}),
       ...(chains && Object.keys(chains).length ? { chains } : {}),
     });
+  }
+
+  /** SPEC-phase4 §6B.3: the states seen (route + controls + dialogs + headings). */
+  private readonly stateKeys = new Set<string>();
+
+  /** A page's new state: its own probes (axe, contrast, target size, leaks) and a shot. */
+  private async rememberState(snap: AxSnapshot): Promise<void> {
+    const key = stateKey(snap);
+    if (this.stateKeys.has(key)) return;
+    this.stateKeys.add(key);
+    const route = routeOf(snap.path);
+    const page = this.pages.get(route);
+    if (!page || (page.evidence.states?.length ?? 0) >= 12) return;
+    const dialog = snap.nodes.some((n) => n.region === 'dialog');
+    const label = format(copy.fitts.stateAfter, {
+      what: this.history.at(-1)?.split(' · ')[0] ?? 'looking around',
+    });
+    try {
+      const results = await this.deps.site.probes([
+        'axe',
+        'contrast',
+        'target-size',
+        'placeholder-leak',
+      ]);
+      for (const r of results) if (!r.pass) this.probes.addState(r, route, label);
+    } catch {
+      // Best effort.
+    }
+    let jpegBase64: string | undefined;
+    if (this.deps.panel)
+      jpegBase64 = (await this.deps.site.screenshot().catch(() => null))?.jpegBase64;
+    this.addState(route, label, jpegBase64, { dialog, key });
+  }
+
+  /** Adds a state to its page's evidence (state_pass's and the crawl's alike). */
+  private addState(
+    route: string,
+    label: string,
+    jpegBase64?: string,
+    more: { dialog?: boolean; error?: boolean; key?: string } = {},
+  ): void {
+    const page = this.pages.get(route);
+    if (!page) return;
+    const states = page.evidence.states ?? [];
+    states.push({
+      key: more.key ?? `${route}#${label}`,
+      label,
+      stepIndex: this.state.step,
+      ...(jpegBase64 ? { shot: { jpegBase64 } } : {}),
+      ...(more.dialog ? { dialog: true } : {}),
+      ...(more.error || /fails/.test(label) ? { error: true } : {}),
+    });
+    page.evidence.states = states;
   }
 
   /** Plan only and Ask every action, for a click or typing (§13). False skips the control. */
@@ -2177,6 +2301,16 @@ export class RealRun {
                   ...p.evidence,
                   probes: this.probes.results.filter((r) => r.route === p.evidence.route),
                   observations: this.observations.filter((o) => o.route === p.evidence.route),
+                  states: chooseStates(
+                    [
+                      { key: 'first', route: p.evidence.route, label: 'first', stepIndex: 0 },
+                      ...(p.evidence.states ?? []).map((s) => ({ ...s, route: p.evidence.route })),
+                    ],
+                    1 + 5,
+                  )
+                    .slice(1)
+                    .map((s) => (p.evidence.states ?? []).find((x) => x.key === s.key))
+                    .filter((s): s is NonNullable<typeof s> => Boolean(s)),
                   records: (this.state.actions ?? []).filter(
                     (a) => a.from === p.evidence.route || a.to === p.evidence.route,
                   ),
@@ -2850,6 +2984,15 @@ export class RealRun {
       ...(page?.size ? { size: page.size } : {}),
       ...(item ? { item } : {}),
       ...(check ? { probe: check.probe } : {}),
+      ...(item?.rule
+        ? {
+            axe: {
+              id: item.rule.id,
+              tags: item.rule.tags,
+              ...(item.rule.helpUrl ? { helpUrl: item.rule.helpUrl } : {}),
+            },
+          }
+        : {}),
       ...(f.reviewerRepro ? { draft: f.reviewerRepro } : {}),
       ...(this.deps.appModel ? { model: this.deps.appModel } : {}),
     };

@@ -3103,3 +3103,82 @@ cuts.
   reproduce with); confirmed steps are now used as they are (`ReproInput.steps`). And when the
   pruned steps were the very same list as the full trail (a trail already minimal), the loop
   skipped both and the finding said `observed` without a replay; it now replays that list once.
+
+## Phase 4 — U5c: detect more
+
+- **Every axe rule** runs once per page and per new state (`ProbeName 'axe'`), WCAG 2.0–2.2 A/AA
+  and best practice, with `color-contrast`, `button-name` and `link-name` switched off (their
+  own probes keep their templates and verification). Each violation node is an item carrying
+  the rule (id, help, impact, tags, help URL); the finding's title is axe's help text, severity
+  comes from impact (critical 4 … minor 1, best-practice-only rules capped at 2), the repro's WCAG
+  links come from the rule's tags, and `axe` is verifiable like the other page probes (it's in
+  `PAGE_PROBES`). At most 5 nodes per rule and 60 items per page.
+- **Keyboard** (`packages/probes/src/keyboard.ts`, pure, with the sweep in the site window): a
+  real Tab sweep of up to 200 stops records each stop's box and how much of it a person can see
+  (five sample points through `elementFromPoint`, so a sticky header counts). Unreachable
+  controls, focus stuck on one element for 3 Tabs, a focused control under half visible, and a
+  long nav with no skip link are findings; jumps back up the page are counted and, at 3 or more,
+  told to the reviewers in the result's summary (an observation, never a finding on its own).
+  An open dialog gets the four dialog checks (focus moves in, Tab stays in, Esc closes, focus
+  returns), once per page, whenever a snapshot shows one. Keyboard findings aren't offered for
+  fixing yet (no verification path in U5c; U6 decides).
+- **States** (`agent/crawler/states.ts`): a state is the route plus a hash of its controls'
+  `role:name`, open dialogs and headings. A new state of a page already seen gets axe,
+  contrast, target size and leak probes (labeled "after tapping NEXT…") and a screenshot; the
+  reviewers see each page's first state plus up to five more, dialogs and error states first.
+  The perceptual hash (8×8 average) is in the selection code and tested, but states don't carry
+  one yet: the agent process has no image decoder, so near-identical pictures aren't skipped by
+  picture, only by key. The run cap (40/20) is enforced per page (1 + 5).
+- **Navigation** (`agent/crawler/navigation.ts`, pure): a click whose anchor says one place and
+  lands in another is a finding (expected destination from the href; the App Model's static
+  targets for buttons are left for later, so name-only guesses stay out); redirect chains over 2
+  hops, loops, an unexpected login (the App Model's gates say which pages expect one) and a
+  dropped query or anchor; Back after a redirect that sends you straight forward again. At the
+  end of `check_links` every reached page is loaded and then reloaded once (a refresh) and an
+  address that can't exist is tried for a soft 404. A page inside a flow (dynamic, or the App
+  Model's `gate: 'data'`) that sends people back somewhere is a note, but a blank page or an
+  error never counts as "somewhere sensible": that's planted #32.
+- **The surprise detector** is its own small bundle (`dist/detector.js`) installed on every
+  page load in the same isolated world as the probes. It only records (added overlays and
+  dialogs, layout shifts with their sources, focus changes and whether a page change or dialog
+  followed, typing that changed the page before a submit, big scrolls, toasts that vanished,
+  sound that played); main records every input it sends (Fitts's and the owner's) and converts
+  those times to the page's clock when the agent reads the events. The analysis
+  (`packages/probes/src/surprise.ts`) calls an event unprompted when it came more than 1 s after
+  the last input. WCAG ones (3.2.1, 3.2.2, 2.2.1, 1.4.2) are findings; popped up, jumped,
+  scrolled by itself and focus moved are notes in the action log (first-load banners once per
+  site).
+- **Moved before tap**: a click now reaches for its target like a person (mouse moves there, 150
+  ms, then press); if the target moved more than 20 px in that beat, it's a finding (Fitts still
+  taps where it now is, so the crawl carries on). This costs 150 ms per click.
+- **state_pass** (local projects only; a live site's responses are never altered): the six most
+  used same-origin GET endpoints, each page that used one loaded three times with CDP Fetch
+  rewriting only that endpoint: failing (500, `{"error":"fitts-test"}`), empty (arrays become
+  `[]`, through response interception, so main makes no request of its own) and slow (held 3 s).
+  The rewrite lives in the gate's existing request handler; only GETs from the project's own
+  localhost origin are touched, writes never. A crash, error boundary or blank page on the error
+  case and no loading sign within 1 s on the slow case are findings; leaks on the empty case are
+  probe results; each case is a state the reviewers can see.
+- **Order**: `state_pass` and `perf_pass` run after `check_links` and before `review` (the
+  spec says "after the review's evidence is in"; before the review, their findings are part of
+  it rather than arriving after it).
+- **Cut §13 #3, the production build in perf_pass**: measured on the dev server in a hidden
+  phone-sized window with Chrome's Slow 4G values and a 4× slower CPU, every number labeled
+  "dev build". An unbundled dev server at Slow 4G fetches every module at 560 ms latency, so
+  loads take minutes and every page looks slow: the pass measures at most 3 pages (journey pages
+  first), gives each 25 s, and dev-build speed findings are severity 1 (leads, not verdicts, and
+  out of the bench's false-positive count). INP and SPA page-change timing need the build too
+  and are left with it.
+- **Cut §13 #4, the Wonder judge and SAM frames**: popped up, jumped and scrolled-by-itself events
+  stay notes for the reviewers (who see the state shots), as the cut list allows; no frame ring
+  buffer, no Muse Wonder call, no before/after strip.
+- **Planted #27–#33** on demo/chat: avatar images with no alt (#27), the contact search with no
+  label at all (#28; axe accepts a placeholder as a name, so it has none), a "Rate us" sheet 4 s
+  into the inbox that keeps focus outside, ignores Esc and closes only by a mouse-only span (#29;
+  top-left, once a session, gone after 20 s so the crawl isn't blocked), a tip that slides in
+  above Send 60 ms after the pointer reaches it (#30), Settings' "Contacts" whose href says
+  /contacts but which navigates to a new /settings/privacy page (#31), step 3 rendering nothing after a reload (#32; a first visit by its link still shows it, so the crawl can reach it and send) and Contacts rendering nothing when its request fails (#33). The check
+  script reproduces all 33; demo/chat now has 9 pages (the e2e and understand tests count 9).
+- **The demo/chat crawl e2e** takes longer (Tab sweeps, fresh loads, three data cases per
+  endpoint, three throttled loads): its limits are 12 minutes and 10 for the poll. It asserts at
+  least 6 of #26–#33 are found offline by the probes alone.

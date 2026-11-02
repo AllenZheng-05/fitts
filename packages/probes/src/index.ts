@@ -2,3 +2,7 @@
 // (built by build.mjs from src/page.ts); this entry is the pure analysis the agent runs.
 export * from './analyze';
 export * from './standards';
+export * from './keyboard';
+export * from './surprise';
+export * from './faults';
+export * from './perf';

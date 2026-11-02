@@ -1208,7 +1208,14 @@ export type ProbeName =
   // SPEC-phase4 §6.3: the device matrix's own checks.
   | 'text-spacing'
   | 'resize-text'
-  | 'orientation';
+  | 'orientation'
+  // SPEC-phase4 §6B: detect more.
+  | 'axe'
+  | 'keyboard'
+  | 'navigation'
+  | 'surprise'
+  | 'state'
+  | 'perf';
 
 /** One element (or request) a probe measured. `measured` and `expected` are plain language. */
 export interface ProbeItem {
@@ -1218,6 +1225,8 @@ export interface ProbeItem {
   expected: string;
   /** `data-fitts-src` of the element or its nearest stamped ancestor. */
   src?: string;
+  /** SPEC-phase4 §6B.1: the axe rule a violation came from. */
+  rule?: { id: string; help: string; impact: string; tags: string[]; helpUrl?: string };
 }
 
 /** A probe's result on one route; reviewers cite it by `evidenceId` (P6). */

@@ -158,6 +158,13 @@ export const PROBE_STANDARDS: Record<ProbeName, string[] | null> = {
   'text-spacing': ['1.4.12'],
   'resize-text': ['1.4.4'],
   orientation: ['1.3.4'],
+  // From the axe rule's own tags (axeStandards), per item.
+  axe: null,
+  keyboard: ['2.1.1', '2.1.2', '2.4.3'],
+  navigation: null,
+  surprise: ['3.2.1', '3.2.2', '2.2.1', '1.4.2'],
+  state: null,
+  perf: null,
 };
 
 /** The criteria for a probe's finding (empty for a usability check). */

@@ -33,6 +33,8 @@ const TOOLS = [
   }),
   tool('device_pass', 'Check every explored page at every screen size in the device matrix.'),
   tool('check_links', 'Check links and network requests.'),
+  tool('state_pass', 'See pages when their data is empty, fails or is slow (local projects).'),
+  tool('perf_pass', 'Measure speed on a mid-range phone on Slow 4G.'),
   tool('review', 'The five-reviewer panel on the explored pages.'),
   tool('check_theme', 'Judge whether the look fits the brief.'),
   tool('looks', 'Pick and apply a new look, when directions exist.'),

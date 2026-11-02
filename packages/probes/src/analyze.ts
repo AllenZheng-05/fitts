@@ -19,7 +19,8 @@ export type PageProbeName =
   | 'placeholder-leak'
   | 'font-inventory'
   | 'spacing'
-  | 'web-vitals';
+  | 'web-vitals'
+  | 'axe';
 
 export const PAGE_PROBES: PageProbeName[] = [
   'contrast',
@@ -30,6 +31,7 @@ export const PAGE_PROBES: PageProbeName[] = [
   'font-inventory',
   'spacing',
   'web-vitals',
+  'axe',
 ];
 
 /** A probe result before the agent gives it a route and an evidence id. */

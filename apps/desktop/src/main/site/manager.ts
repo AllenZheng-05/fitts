@@ -23,6 +23,7 @@ import { DevServer, responds } from './dev-server';
 import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
 import { replay } from './replayer';
+import { measurePerf } from './perf';
 import { mapDebugSrc } from './source-chain';
 import { hostOf, SITE_TAB, TabSet } from './tabs';
 
@@ -335,6 +336,32 @@ export class SiteManager {
       }
       case 'breakpoints':
         return { op: 'breakpoints', media: await win.breakpoints() };
+      case 'keyboard': {
+        const k = await win.keyboardSweep();
+        return { op: 'keyboard', stops: k.stops, facts: k.facts };
+      }
+      case 'dialog':
+        return { op: 'dialog', check: await win.dialogCheck() };
+      case 'facts':
+        return { op: 'facts', facts: await win.facts(request.path) };
+      case 'surprise': {
+        const s = await win.surpriseEvents();
+        return { op: 'surprise', events: s.events, inputs: s.inputs };
+      }
+      case 'fault': {
+        // Never on a live site: rewriting responses is for the project's own dev server.
+        if (!live.server.url) throw new Error('state checks run on local projects only');
+        const r = await win.faultLoad(request.route, request.endpoint, request.fault);
+        return { op: 'fault', ...r };
+      }
+      case 'perf': {
+        const pages = await Promise.race([
+          measurePerf(projectId, live.server.url || win.wc.getURL(), request.routes),
+          // Never hold up the run on a slow measurement (§6B.7).
+          new Promise<[]>((r) => setTimeout(() => r([]), 150_000)),
+        ]);
+        return { op: 'perf', pages };
+      }
       case 'cellProbes':
         return { op: 'probes', results: await win.cellProbes(request.cell) };
       case 'value':
