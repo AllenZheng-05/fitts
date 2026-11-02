@@ -2,6 +2,8 @@ packages:
   - apps/*
   - packages/*
   - demo/*
+  # Joins at U8's wiring commit (dependencies installed, versions fixed).
+  - '!demo/basil-ember-android'
 
 # demo/basil-ember's jest-dom 6 imports `vitest` without declaring it, so pnpm resolved it to the
 # workspace's hoisted Vitest 5; declaring the peer links each package's own Vitest.
