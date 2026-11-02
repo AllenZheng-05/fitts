@@ -10,6 +10,12 @@ let launched: LaunchedApp;
 
 const chat = (page: Page) => page.getByRole('log', { name: 'Conversation with Fitts' });
 const summary = (page: Page) => page.getByRole('region', { name: 'Run summary' });
+/** Done opens on the App Map when the run has 4 or more pages (SPEC-phase4 §8.3). */
+const showSummary = (page: Page) =>
+  summary(page)
+    .getByRole('group', { name: 'Show as' })
+    .getByRole('button', { name: 'Summary' })
+    .click();
 const stat = (page: Page, label: string) =>
   summary(page)
     .locator('div')
@@ -75,6 +81,7 @@ test('Autonomous redesign: pick another direction, undo wording, reach Done', as
   await expect(wording).toContainText('Undone');
 
   await expect(summary(page)).toBeVisible({ timeout: 20_000 });
+  await showSummary(page);
   await expect(summary(page)).toContainText('Redesign: Quiet & dignified');
   await expect(summary(page)).toContainText('PR #22');
 });
@@ -107,6 +114,7 @@ test('Redesign in an Ask mode waits for a pick', async () => {
 test('Done: stats, undo and redo, try again, all changes', async () => {
   const { page } = launched;
   await loadScenario(page, 'Done');
+  await showSummary(page);
   await expect(stat(page, 'Found')).toContainText('31');
   await expect(stat(page, 'Fixed & verified')).toContainText('24');
   // One PR for the run (§9.3).
@@ -154,6 +162,7 @@ test('Done: stats, undo and redo, try again, all changes', async () => {
 test('Done: export, run picker, new run', async () => {
   const { page, userData } = launched;
   await loadScenario(page, 'Done');
+  await showSummary(page);
   await summary(page).getByRole('button', { name: 'Export report' }).click();
   await expect(page.getByText('Report saved')).toBeVisible();
   const report = readFileSync(join(userData, 'report.md'), 'utf8');
@@ -173,6 +182,7 @@ test('Done: export, run picker, new run', async () => {
 test('Done: every finding is listed, and one opens with its evidence beside the site', async () => {
   const { page } = launched;
   await loadScenario(page, 'Done');
+  await showSummary(page);
   const list = summary(page).getByRole('list', { name: /^What I found/ });
   const row = list.getByRole('button').first();
   await expect(row).toBeVisible();
@@ -191,6 +201,7 @@ test('Done: every finding is listed, and one opens with its evidence beside the 
 test('Done: the audit page is a click away, and back', async () => {
   const { page } = launched;
   await loadScenario(page, 'Done');
+  await showSummary(page);
   const stepper = page.getByRole('list', { name: 'Run progress' });
   await stepper.getByRole('button', { name: 'Show Audit & fix' }).click();
   await expect(page.getByRole('region', { name: 'Run summary' })).toHaveCount(0);
@@ -202,4 +213,29 @@ test('Done: the audit page is a click away, and back', async () => {
   await expectNoSeriousA11yViolations(page);
   await stepper.getByRole('button', { name: 'Show Done' }).click();
   await expect(page.getByRole('region', { name: 'Run summary' })).toBeVisible();
+});
+
+test('Done: the App Map shows every page as a tree; a page opens its drawer', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Done');
+  const views = summary(page).getByRole('group', { name: 'Show as' });
+  await expect(views.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
+  const tree = summary(page).getByRole('tree', { name: 'Map of your app' });
+  await expect(tree).toBeVisible();
+  const items = tree.getByRole('treeitem');
+  expect(await items.count()).toBeGreaterThanOrEqual(4);
+  // The keyboard walks the tree; Enter opens the page's drawer.
+  const first = tree.getByRole('button').first();
+  await first.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  const drawer = summary(page).getByRole('complementary');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole('heading', { level: 3 })).toBeVisible();
+  await expectNoSeriousA11yViolations(page);
+  await expectNoWindowScrollAt(page, { width: 1200, height: 720 });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // The choice is remembered: Summary stays after a view of the audit and back.
+  await views.getByRole('button', { name: 'Summary' }).click();
+  await expect(stat(page, 'Found')).toContainText('31');
 });

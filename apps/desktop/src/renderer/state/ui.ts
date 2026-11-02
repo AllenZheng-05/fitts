@@ -58,6 +58,8 @@ interface UiState {
   findingsRoute: string | null;
   /** After a run: the summary, or the audit page again (its site, chat and findings). */
   doneView: 'summary' | 'audit';
+  /** SPEC-phase4 §8.3: Done's main area: the summary or the App Map (null: Map from 4 pages). */
+  summaryView: 'summary' | 'map' | null;
   /** Findings tray filter (§6.4). */
   findingsFilter: 'all' | 'usability' | 'accessibility' | 'performance' | 'look-and-feel';
 
@@ -128,6 +130,7 @@ export const useUi = create<UiState>((set, get) => ({
   findingsFilter: 'all',
   findingsRoute: null,
   doneView: 'summary',
+  summaryView: null,
 
   openSettings: (tab) =>
     set((s) => ({

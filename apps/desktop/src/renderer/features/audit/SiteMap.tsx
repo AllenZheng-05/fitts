@@ -1,4 +1,4 @@
-import type { RunState } from '@fitts/schema';
+import { matchesTemplate, type RunState } from '@fitts/schema';
 import { ProgressBar, StatusDot } from '../../components/StatusChips';
 import { copy } from '../../copy';
 import { cx } from '../../lib/cx';
@@ -6,6 +6,44 @@ import { format } from '../../lib/format';
 import { ScrollBody } from '../../components/Panel';
 import { useSite } from '../../state/site';
 import { useUi } from '../../state/ui';
+
+type Row =
+  | { kind: 'route'; path: string; route: RunState['routes'][number] }
+  | { kind: 'known'; path: string; depth: number; shown: string };
+
+/**
+ * The routes the crawl has, in path order, with the pages the code names that it hasn't
+ * reached yet among them (SPEC-phase4 §8.3: the map fills in as Fitts works).
+ */
+function rowsOf(run: RunState): Row[] {
+  const rows: Row[] = run.routes.map((route): Row => ({ kind: 'route', path: route.path, route }));
+  for (const page of run.appModel?.pages ?? []) {
+    const seen = run.routes.some(
+      (r) => r.path === page.route || matchesTemplate(page.route, r.path),
+    );
+    if (seen || page.route.includes(':')) continue;
+    const parts = page.route.split('/').filter(Boolean);
+    rows.push({
+      kind: 'known',
+      path: page.route,
+      depth: Math.max(0, parts.length - 1),
+      shown: parts.length > 1 ? `/${parts.at(-1) ?? ''}` : page.route,
+    });
+  }
+  // The crawl's order stands; a known page goes after the last route that's its parent or
+  // an earlier sibling (so it sits in its part of the tree).
+  const known = rows.filter((r) => r.kind === 'known');
+  const ordered: Row[] = rows.filter((r) => r.kind === 'route');
+  for (const k of known) {
+    const parent = k.path.split('/').slice(0, -1).join('/') || '/';
+    let at = -1;
+    ordered.forEach((r, i) => {
+      if (r.path === parent || r.path.startsWith(`${parent === '/' ? '' : parent}/`)) at = i;
+    });
+    ordered.splice(at + 1, 0, k);
+  }
+  return ordered;
+}
 
 /**
  * Routes with status dots (SPEC §6.4): mint done, cobalt testing (row tinted), hollow queued.
@@ -32,7 +70,25 @@ export function SiteMap({ run, width = 210 }: { run: RunState; width?: number })
       </h2>
       <ScrollBody label={copy.audit.siteMap} className="-mx-1 px-1">
         <ul className="flex flex-col gap-0.5 font-mono text-[12px]">
-          {run.routes.map((route) => {
+          {rowsOf(run).map((row) => {
+            if (row.kind === 'known')
+              return (
+                <li
+                  key={row.path}
+                  className={cx(
+                    'flex items-center gap-2 py-[7px] pr-2 text-muted',
+                    row.depth > 0 ? 'pl-[22px]' : 'pl-2',
+                  )}
+                >
+                  <StatusDot status="queued" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {row.shown}
+                    <span className="sr-only">, {copy.audit.notYetStatus}</span>
+                  </span>
+                  <span aria-hidden="true">{copy.audit.notYet}</span>
+                </li>
+              );
+            const route = row.route;
             const testing = route.status === 'testing';
             const selected = selectedPath === route.path;
             const shown = route.depth > 0 ? `/${route.path.split('/').pop() ?? ''}` : route.path;

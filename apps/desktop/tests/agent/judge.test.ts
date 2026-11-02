@@ -255,3 +255,67 @@ describe('U5a: the judge waits while Meta’s models can’t be reached', () => 
     expect(sent.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('the judge’s moment joins the probe finding for the same thing (bench:chat, Nov 2)', () => {
+  const stepOf = () => ({ stepIndex: 1, atMs: 0 });
+  const judged = (ref: string | null) => ({
+    ...judgeDraft(
+      { kind: 'popped-up', measured: 'a dialog ("Rate us") popped up', ref: ref ?? '' },
+      { expected: false, why: 'A sheet covers the inbox.', severity: 3, heuristic: 'H3' as const },
+      'obs-3',
+    ),
+    elementRef: ref,
+  });
+
+  it('same element on the same page: one finding, with the Judge among its voices', () => {
+    const f = aggregate({
+      runId: 'run-1',
+      probes: [
+        {
+          evidenceId: 'e1',
+          probe: 'keyboard',
+          route: '/',
+          pass: false,
+          items: [
+            {
+              ref: 'rate-dialog',
+              selector: 'div',
+              measured: 'Esc doesn\'t close the "Rate us" dialog',
+              expected: '',
+            },
+          ],
+        },
+      ],
+      reviews: [{ route: '/', persona: JUDGE_PERSONA, drafts: [judged('rate-dialog')] }],
+      stepOf,
+    });
+    expect(f).toHaveLength(1);
+    expect(f[0]?.agreement.who).toContain('Judge');
+    expect(f[0]?.evidenceIds).toContain('obs-3');
+  });
+
+  it('no element: it joins the same page’s surprise finding', () => {
+    const f = aggregate({
+      runId: 'run-1',
+      probes: [
+        {
+          evidenceId: 'e2',
+          probe: 'surprise',
+          route: '/compose/confirm',
+          pass: false,
+          items: [
+            {
+              ref: 'compose-send',
+              selector: 'a',
+              measured: '"Send Text" moved 58 px as it was tapped',
+              expected: '',
+            },
+          ],
+        },
+      ],
+      reviews: [{ route: '/compose/confirm', persona: JUDGE_PERSONA, drafts: [judged(null)] }],
+      stepOf,
+    });
+    expect(f).toHaveLength(1);
+  });
+});

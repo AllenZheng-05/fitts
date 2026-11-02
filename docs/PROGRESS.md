@@ -21,14 +21,14 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U5b | The action log (§6A)                     | done        | `7bc4565` |
 | U5c | Detect more (§6B)                        | done        | `4650f2b` |
 | U6  | Code-aware fixer (§7)                    | done        |           |
-| U7  | App Map (§8)                             | todo        |           |
+| U7  | App Map (§8)                             | done        |           |
 | U8  | Android audit (§9.1–9.3)                 | todo        |           |
 | U9  | Android fix (§9.4)                       | todo        |           |
 | U10 | Release polish                           | todo        |           |
 
 ## Current milestone and next step
 
-**Done since U6:** Muse Code by default; navigation and keyboard verifiable; the paid bench:chat runs (numbers below); the Muse Wonder judge restored (§13 #4; e2e 145/145, demo/chat #29 and #30 judged). **Next:** one more paid bench:chat (judge and routing fixes in), then U7 (App Map). Still owed: p9.bench (U6, on purpose). demo/basil-ember-android stays untracked until U8 (A9 below).
+**Done since U6:** Muse Code by default; navigation and keyboard verifiable; the paid bench:chat runs (numbers below); the Muse Wonder judge restored (§13 #4); **U7 the App Map (e2e 146/146).** **Next: U8** (Android audit, with A9): commit demo/basil-ember-android as built, wiring, plant A9; main/android (adb, dump, AndroidWindow), Android probes, Maestro repro, themefit on Android shots, bench:android on the emulator. Still owed: p9.bench (U6, on purpose).
 
 **Spend (Allen, Nov 2):** Allen has $129 of free Meta credits, so paid runs and paid tests are fine when they give real evidence (the original $15 cap is superseded). About $0.11 spent so far in Phase 4. Plan: the judge, then the bench noise fixes, one paid bench for both, then p9.bench.
 
@@ -39,6 +39,8 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
   - 4 reviewer or state findings on /compose and /settings/privacy: a failed request breaks /compose, no loading sign, empty contacts with no guidance, Privacy is a dead end. These are plausibly real but unplanted.
 
   The first two groups (6) are Fitts noise worth fixing.
+
+**bench:chat, Nov 2 ~06:55 (paid; judge committed, routing fixes in): spent $0.193.** Recall **29/33 (88%)**, missing #15, #18, #21 (14 ungrouped toggles) and #33. Shown 48. Precision: 29/48 (**60%** strict). At severity ≥ 2, 29/37 (**78%**): 8 unplanted. Two of the 8 are the judge's own findings for #29 and #30, duplicates of the probe findings that matched them, so the judge's draft now joins the probe finding for the same moment. The rest are the U5 cells (3), the /settings phone tap target, and two plausible /compose state findings.
 
 **bench:chat, Nov 2 ~04:35 (paid; judge and noise fixes in; recorded fixtures): spent $0.135.** Recall **27/33 (82%)**. Missed #15, #16 (Delete conversation deletes instantly), #18, #25 (no empty state on Contacts), #29 and #33. Shown 48. Precision: 27/48 (**56%** strict). At severity ≥ 2, 27/37 (**73%**): 10 unplanted. The noise fixes worked (no /help findings, one phone tap finding). The judge judged #30 correctly ("a tip box appears above the Send Text link and pushes it 58px down") but filed it under / instead of /compose/confirm, so it counted as a false positive. #29 never showed during the audit: the sheet shows once a session and appeared during the interview. Both are fixed since (events carry their page; the detector is read before the audit's first load). One run varies: #16 and #25 were found in the run before. Next paid run after the judge commit.
 

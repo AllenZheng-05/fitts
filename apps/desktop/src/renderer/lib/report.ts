@@ -1,4 +1,4 @@
-import type { Change, Project, RunState } from '@fitts/schema';
+import { appMap, mapMarkdown, type Change, type Project, type RunState } from '@fitts/schema';
 import { copy } from '../copy';
 import { format, formatUsd } from './format';
 import { severityLabel } from './severity';
@@ -133,6 +133,10 @@ export function buildReport(project: Project | undefined, run: RunState, now = n
         ];
       }),
     '',
+    // SPEC-phase4 §8.3: the App Map as nested lists, each page with what it does, found, fixed.
+    ...(run.routes.length > 0 || run.appModel
+      ? [`## ${r.map}`, '', ...mapMarkdown(appMap(run)), '']
+      : []),
     // SPEC-phase4 §6A.4: what Fitts did and noticed, per page, folded.
     ...((run.actions?.length ?? 0) > 0
       ? [

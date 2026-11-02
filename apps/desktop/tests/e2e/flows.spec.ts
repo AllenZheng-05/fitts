@@ -65,6 +65,11 @@ test('§12.1 first launch → interview → audit → Fix it → gate → deny �
 
   await expect(step(page, /^Done$/)).toHaveAttribute('aria-current', 'step', { timeout: 30_000 });
   const summary = page.getByRole('region', { name: 'Run summary' });
+  // Done opens on the App Map for a run with 4 or more pages (SPEC-phase4 §8.3).
+  await summary
+    .getByRole('group', { name: 'Show as' })
+    .getByRole('button', { name: 'Summary' })
+    .click();
   const row = summary.getByRole('listitem').filter({ hasText: "Show 'Sent' confirmation" });
   await row.getByRole('button', { name: 'Undo' }).click();
   await expect(row).toContainText('Undone');

@@ -615,6 +615,18 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
       c ??= clusters.find(
         (x) => x.probe === 'links' && x.items.some((i) => i.measured.startsWith(`${route} `)),
       );
+      // The judge's moment is the same thing a probe measured there (bench:chat, Nov 2: #29's
+      // sheet is also a keyboard finding on its element, #30's tip a surprise finding): one
+      // finding, with the judge's vote and the moment, not a duplicate.
+      if (persona === JUDGE_PERSONA)
+        c ??=
+          clusters.find(
+            (x) =>
+              x.probe &&
+              x.routes.has(route) &&
+              draft.elementRef !== null &&
+              x.refs.includes(draft.elementRef),
+          ) ?? clusters.find((x) => x.probe === 'surprise' && x.routes.has(route));
       c ??= clusters.find(
         (x) =>
           !x.probe &&

@@ -3393,3 +3393,37 @@ cuts.
   Earlier runs had "matched" #29 only through other findings on / that mention focus or the
   keyboard. Showing it soon after the screen opens is how real rate prompts behave. Everything
   else about #29 is the same; PLANTED.md and check:demo-chat say 1.5 s.
+- **A judged moment joins the probe finding for the same thing** (from the third paid run): the
+  probe finding on the same page and element, else the page's surprise finding. It adds the
+  Judge's vote and the moment there, rather than standing as a second finding for one problem.
+
+## Phase 4 — U7: the App Map
+
+- **`appMap(run, model)` is a pure function in `packages/schema`** (with `flattenMap`, the
+  report's `mapMarkdown` and the PR body's `mapTable`).
+  - Its pages are the App Model's, the routes the run reached, and every finding's page.
+  - A concrete path folds into the model's template ("/contacts/grandma" into
+    "/contacts/:id", which shows "× N pages").
+  - A missing parent is a group node with no page.
+  - Totals roll up over shown findings only, counting each finding once per subtree.
+- **What isn't in RunState isn't on the map yet:** the drawer has no state thumbnails and no
+  per-page speed (§8.3). Neither is in the event log, and adding them would grow every run's
+  log. "Checked at" lists the run's cells for every reached page: the run doesn't record
+  which cells visited which page.
+- **Layout (`tree-layout.ts`, no dependency):** a column per depth, leaves in order, each
+  parent midway between its first and last child. That's the tidy property for a layered tree,
+  done in one pass with no threads, since sibling subtrees can't overlap when every leaf takes
+  its own row. Groups of more than 12 children start collapsed. Filtering (All, With findings,
+  Not reached, and the search) keeps the matching nodes and the paths to them.
+- **Accessibility:** a flat ARIA tree. Each `treeitem` carries `aria-level`, `aria-posinset`,
+  `aria-setsize` and `aria-expanded`, with one tab stop (roving tabindex that follows focus).
+  - Keys: Up and Down; Right expands, then goes to the first child; Left collapses, then goes
+    to the parent; Home and End; type-ahead; Enter and Space open the drawer.
+  - The SVG edges and the journey path are `aria-hidden`.
+  - The map pans with the wheel and zooms with ctrl+wheel or the buttons, inside its panel.
+- **Done** opens on the Map when the run has 4 or more pages and on the Summary otherwise. The
+  choice is kept in the UI store for the session. The Done e2e tests open Summary first.
+- **During the audit** the site map keeps the crawl's rows and adds the pages the code names
+  that Fitts hasn't reached yet, hollow and labeled "not yet", in their part of the tree.
+- **Kept, not cut:** the journey highlight (selecting or hovering a journey tints its pages
+  and draws its path in cobalt) and the search.

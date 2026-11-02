@@ -7,6 +7,7 @@
 // good commit, with a reason. The run's one PR opens at the end (finalize). Undo reverts one
 // commit on the branch (or opens a revert PR once the run's PR is merged); retry runs the job
 // again.
+import { appMap, mapTable } from '@fitts/schema';
 import type {
   AppModel,
   Brief,
@@ -350,14 +351,26 @@ export function runPrTitle(changes: Change[]): string {
 export function runPrBody(
   sections: string[],
   verification: { tested: boolean; ci: string[]; redesigned: boolean },
+  /** SPEC-phase4 §8.3: the compact per-page table (page, fixed, open). */
+  pages: string[] = [],
 ): string {
   return [
     ...sections.flatMap((s) => [s, '']),
+    ...(pages.length ? ['## Pages', '', ...pages, ''] : []),
     '## Verification',
     `Each change was checked on this branch's dev server before it was committed${
       verification.redesigned ? ' (the redesign on every page)' : ''
     }.${verification.tested ? ' Your test suite passes on this branch.' : ''}${ciLine(verification.ci)}`,
   ].join('\n');
+}
+
+/** The PR body's per-page table; a run state it can't read never blocks the PR. */
+function pagesTable(s: RunState): string[] {
+  try {
+    return mapTable(appMap(s));
+  } catch {
+    return [];
+  }
 }
 
 /** "+ line" / "- line" from a unified diff, for `finding.diff` (the Finding panel's code view). */
@@ -1084,6 +1097,7 @@ export class FixPipeline {
             ci: this.ciPassed,
             redesigned: verified.some((c) => c.kind === 'redesign'),
           },
+          pagesTable(s),
         ),
       })) as { number: number; url: string };
       this.runPr = pr;

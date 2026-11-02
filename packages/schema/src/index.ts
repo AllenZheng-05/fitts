@@ -1205,6 +1205,7 @@ export type EdgeStateAnswer<K extends EdgeStateKind = EdgeStateKind> =
   (typeof EDGE_STATE_ANSWERS)[K][number];
 
 export * from './events';
+export * from './app-map';
 
 // ── Probes (SPEC-phase2 §7) ─────────────────────────────────────────────────
 

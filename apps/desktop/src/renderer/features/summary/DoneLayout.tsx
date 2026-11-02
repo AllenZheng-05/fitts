@@ -1,5 +1,13 @@
-import type { Change, ChatItem, CostPhase, Finding, RunState } from '@fitts/schema';
-import { useEffect, useId, useState } from 'react';
+import {
+  appMap,
+  flattenMap,
+  type Change,
+  type ChatItem,
+  type CostPhase,
+  type Finding,
+  type RunState,
+} from '@fitts/schema';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '../../components/Button';
 import { Chip, SeverityBadge } from '../../components/Chip';
 import { Select } from '../../components/fields';
@@ -29,6 +37,7 @@ import { ResizeHandle } from '../../components/ResizeHandle';
 import { panelSize, useLayout } from '../../state/layout';
 import { SiteView } from '../site-view/SiteView';
 import { FINDING_HOST, FindingPanel } from '../finding-panel/FindingPanel';
+import { AppMap } from './AppMap';
 
 /** How many verified changes show before "See all N changes". */
 const COLLAPSED = 4;
@@ -141,6 +150,12 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
             (c): c is Extract<ChatItem, { type: 'fitts.message' }> => c.type === 'fitts.message',
           )?.text ?? copy.fitts.done);
 
+  const chosen = useUi((s) => s.summaryView);
+  const pages = useMemo(
+    () => flattenMap(appMap(run)).filter(({ node }) => node.page).length,
+    [run],
+  );
+  const view = chosen ?? (pages >= 4 ? 'map' : 'summary');
   const shown: RunStats = past
     ? { ...stats, found: past.found, fixed: past.fixed, prs: past.prs, spentUsd: past.spentUsd }
     : stats;
@@ -193,28 +208,45 @@ function RunSummary({ run, stats }: { run: RunState; stats: RunStats }) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-[18px] py-3.5">
-        <div className="flex gap-2.5">
-          <Stat label={copy.done.stats.found} value={String(shown.found)} tone="bg-coral-tint" />
-          <Stat label={copy.done.stats.fixed} value={String(shown.fixed)} tone="bg-mint-tint" />
-          <Stat label={copy.done.stats.prs} value={String(shown.prs)} tone="bg-cobalt-tint" />
-          <Stat
-            label={copy.done.stats.spent}
-            value={formatUsd(shown.spentUsd)}
-            tone="bg-sun-tint"
-          />
-        </div>
-        {past ? (
-          <p className="text-[14px] text-muted">{copy.done.pastRun}</p>
-        ) : (
-          <>
-            <p className="text-[13px] text-muted">{mathLine(stats)}</p>
-            <ChangeList run={run} />
-            <FindingList run={run} />
-            <CostBar run={run} />
-          </>
-        )}
+      <div className="flex flex-none items-center gap-2.5 px-[18px] pt-3">
+        <SegmentedControl
+          label={copy.done.viewLabel}
+          selected={view}
+          onSelect={(id) => useUi.getState().set({ summaryView: id === 'map' ? 'map' : 'summary' })}
+          segments={[
+            { id: 'summary', label: copy.done.views.summary },
+            { id: 'map', label: copy.done.views.map },
+          ]}
+        />
       </div>
+      {view === 'map' && !past ? (
+        <div className="flex min-h-0 flex-1 flex-col px-[18px] py-3.5">
+          <AppMap run={run} />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-[18px] py-3.5">
+          <div className="flex gap-2.5">
+            <Stat label={copy.done.stats.found} value={String(shown.found)} tone="bg-coral-tint" />
+            <Stat label={copy.done.stats.fixed} value={String(shown.fixed)} tone="bg-mint-tint" />
+            <Stat label={copy.done.stats.prs} value={String(shown.prs)} tone="bg-cobalt-tint" />
+            <Stat
+              label={copy.done.stats.spent}
+              value={formatUsd(shown.spentUsd)}
+              tone="bg-sun-tint"
+            />
+          </div>
+          {past ? (
+            <p className="text-[14px] text-muted">{copy.done.pastRun}</p>
+          ) : (
+            <>
+              <p className="text-[13px] text-muted">{mathLine(stats)}</p>
+              <ChangeList run={run} />
+              <FindingList run={run} />
+              <CostBar run={run} />
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }
