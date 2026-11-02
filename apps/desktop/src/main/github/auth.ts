@@ -46,7 +46,23 @@ interface TokenResponse {
   expires_in?: number;
   refresh_token?: string;
   error?: string;
+  error_description?: string;
   interval?: number;
+}
+
+/**
+ * Why GitHub refused, in its own words: a 4xx with JSON carries `error_description` (e.g. "Device
+ * Flow must be explicitly enabled for this App"), else `message`; otherwise just the status.
+ */
+export async function githubError(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as {
+    error_description?: unknown;
+    message?: unknown;
+  } | null;
+  const why = [body?.error_description, body?.message].find(
+    (v): v is string => typeof v === 'string' && v.trim() !== '',
+  );
+  return why ? `GitHub said ${res.status}: ${why.trim()}` : `GitHub said ${res.status}`;
 }
 
 export class GitHubAuth {
@@ -84,7 +100,7 @@ export class GitHubAuth {
     if (!id) return { state: 'unavailable' };
     this.cancel();
     const res = await this.fetchFn(DEVICE_URL, form({ client_id: id }));
-    if (!res.ok) return { state: 'error', message: `GitHub said ${res.status}` };
+    if (!res.ok) return { state: 'error', message: await githubError(res) };
     const code = (await res.json()) as {
       device_code: string;
       user_code: string;
@@ -154,7 +170,7 @@ export class GitHubAuth {
               ? 'You cancelled on GitHub.'
               : body.error === 'expired_token'
                 ? 'The code expired. Try again.'
-                : 'GitHub didn’t sign you in.',
+                : body.error_description?.trim() || 'GitHub didn’t sign you in.',
         });
         return;
       }
