@@ -3435,7 +3435,7 @@ cuts.
   `legacy-peer-deps`: Expo 58's optional react-dom 19.3.1 wants React 19.3.1, and the app pins
   19.3.0 like the SDK's template. `npx expo install --fix` moved react-native-safe-area-context
   to ~5.10.1, react-native-screens to ~4.30.1, @types/react to ~19.3 and TypeScript to ~6.0.
-- **One wiring fix in the app:** the tab icons cast \`color\` to string (the newer React Native
+- **One wiring fix in the app:** the tab icons cast `color` to string (the newer React Native
   ColorValue type includes null, which @expo/vector-icons doesn't accept). It typechecks
   clean. Nothing planted changed.
 - **The mirror** exports it as AllenZheng-05/fitts-demo-basil-ember-android. A demo with its own
