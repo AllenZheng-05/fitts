@@ -19,7 +19,7 @@ const base = (over: Partial<Situation> = {}): Situation => ({
 });
 
 describe('ScriptedDecider: Phase 2’s order (SPEC-phase3 §1.2)', () => {
-  it('explores until the crawl ends, then phone, links, review, theme, looks, fix, finish', () => {
+  it('explores until the crawl ends, then phone, links, review, theme, looks, fix, then proposes finishing', () => {
     expect(scriptedNext(base())).toBe('explore');
     const ended = { ...base().coverage, ended: true };
     const seq: string[] = [];
@@ -36,8 +36,8 @@ describe('ScriptedDecider: Phase 2’s order (SPEC-phase3 §1.2)', () => {
       'check_theme',
       'looks',
       'fix',
-      'finish',
-      'finish',
+      'propose_finish',
+      'propose_finish',
     ]);
   });
 
@@ -50,6 +50,6 @@ describe('ScriptedDecider: Phase 2’s order (SPEC-phase3 §1.2)', () => {
     };
     expect(
       scriptedNext(base({ live: true, coverage: { ...base().coverage, ended: true }, ran })),
-    ).toBe('finish');
+    ).toBe('propose_finish');
   });
 });

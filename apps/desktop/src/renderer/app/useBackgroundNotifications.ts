@@ -17,6 +17,11 @@ function needsYou(run: RunState): { id: string; text: string } | null {
     if (item) return { id: `${run.projectId}:${item.id}`, text: item.text };
   }
   if (run.gate) return { id: `${run.projectId}:${run.gate.id}`, text: copy.gate.title };
+  // SPEC-phase4 §4.1: Fitts thinks it's done; only the owner finishes, so it reaches them.
+  if (run.waitingFor === 'finish-proposal') {
+    const item = [...run.chat].reverse().find((c) => c.type === 'finish-proposal');
+    if (item) return { id: `${run.projectId}:${item.id}`, text: copy.notify.finishProposal };
+  }
   return null;
 }
 

@@ -76,6 +76,7 @@ test('bench:chat', async () => {
         return (
           s?.phase === 'done' ||
           s?.waitingFor === 'approval' ||
+          s?.waitingFor === 'finish-proposal' ||
           Boolean(s?.chat.some((c) => c.stateKind === 'nothing-found'))
         );
       },

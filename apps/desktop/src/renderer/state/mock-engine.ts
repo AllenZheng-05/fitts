@@ -421,6 +421,16 @@ export class MockRunEngine implements RunEngine {
   answerQuestion(projectId: string, itemId: string, answer: string): void {
     this.withRun(projectId, (s, ctx) => {
       const ctrl = this.ensure(projectId);
+      // "This matters more/less" on a finding (SPEC-phase4 §4.2): the item id is the finding's.
+      const finding = s.findings.find((f) => f.id === itemId);
+      if (finding && (answer === 'more' || answer === 'less')) {
+        const next = Math.max(1, Math.min(4, finding.severity + (answer === 'more' ? 1 : -1)));
+        if (next !== finding.severity) {
+          finding.severity = next as typeof finding.severity;
+          ctx.say(format(copy.fitts.severityNoted, { title: finding.title, n: next }));
+        }
+        return;
+      }
       if (ctrl.held?.key === `question:${itemId}`) this.release(ctrl, s);
       this.applyAnswer(ctrl, s, ctx, itemId, answer);
     });
@@ -456,13 +466,18 @@ export class MockRunEngine implements RunEngine {
     });
   }
 
-  dismissFinding(projectId: string, findingId: string): void {
+  dismissFinding(projectId: string, findingId: string, reason?: string): void {
     this.withRun(projectId, (s, ctx) => {
       const finding = s.findings.find((f) => f.id === findingId);
       if (!finding) return;
       finding.status = 'dismissed';
+      if (reason) finding.ownerReason = reason;
       s.overlays.problems = s.overlays.problems.filter((p) => p.ref !== finding.elementRef);
-      ctx.say(copy.fitts.dismissFollowUp);
+      ctx.say(
+        reason
+          ? format(copy.fitts.dismissNoted, { reason: reason.toLowerCase() })
+          : copy.fitts.dismissFollowUp,
+      );
     });
   }
 

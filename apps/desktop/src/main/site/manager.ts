@@ -174,13 +174,13 @@ export class SiteManager {
       return;
     }
     const project = this.projectFor(projectId);
+    if (project) this.onOpen?.(projectId);
     if (project?.kind === 'live') return this.openLive(projectId, project);
     const folder = project?.kind === 'local' ? project.folder : undefined;
     if (!project || !folder || !existsSync(folder)) {
       this.broadcast(IPC.siteStatus, { projectId, status: 'unavailable' } satisfies SiteStatus);
       return;
     }
-    this.onOpen?.(projectId);
     const detection = await detectProject(folder);
     const forced = Number(process.env['FITTS_SITE_PORT'] ?? '');
     const port = forced || detection?.port || 5173;

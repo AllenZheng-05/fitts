@@ -23,6 +23,7 @@ import {
   type VoiceName,
 } from '../../state/settings';
 import { useUi, type SettingsTab } from '../../state/ui';
+import { Remembers } from './Remembers';
 
 const TABS: SettingsTab[] = ['general', 'run', 'voice', 'keys', 'projects'];
 const MODES: UserMode[] = ['plan', 'ask-every', 'ask-unsure', 'autonomous'];
@@ -537,54 +538,57 @@ function ProjectRow({ id, onRemove }: { id: string; onRemove: () => void }) {
   const inputRef = useFocusWhen(editing);
   if (!project) return null;
   return (
-    <li className="flex items-center gap-3 py-3">
-      {editing ? (
-        <form
-          className="flex flex-1 items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name.trim()) rename(id, name.trim());
-            setEditing(false);
-          }}
-        >
-          <TextField
-            label={format(copy.settings.renameLabel, { name: project.name })}
-            hideLabel
-            size="md"
-            className="flex-1"
-            ref={inputRef}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Button type="submit" variant="primary" size="sm" disabled={!name.trim()}>
-            {copy.settings.save}
-          </Button>
-          <Button size="sm" onClick={() => setEditing(false)}>
-            {copy.overlay.cancel}
-          </Button>
-        </form>
-      ) : (
-        <>
-          <div className="flex min-w-0 flex-1 flex-col">
-            <strong className="truncate">{project.name}</strong>
-            <span className="truncate font-mono text-[12px] text-muted">
-              {project.folder ?? project.url}
-            </span>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              setName(project.name);
-              setEditing(true);
+    <li className="flex flex-col gap-2 py-3">
+      <div className="flex items-center gap-3">
+        {editing ? (
+          <form
+            className="flex flex-1 items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (name.trim()) rename(id, name.trim());
+              setEditing(false);
             }}
           >
-            {copy.settings.rename}
-          </Button>
-          <Button size="sm" variant="danger-outline" onClick={onRemove}>
-            {copy.settings.remove}
-          </Button>
-        </>
-      )}
+            <TextField
+              label={format(copy.settings.renameLabel, { name: project.name })}
+              hideLabel
+              size="md"
+              className="flex-1"
+              ref={inputRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button type="submit" variant="primary" size="sm" disabled={!name.trim()}>
+              {copy.settings.save}
+            </Button>
+            <Button size="sm" onClick={() => setEditing(false)}>
+              {copy.overlay.cancel}
+            </Button>
+          </form>
+        ) : (
+          <>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <strong className="truncate">{project.name}</strong>
+              <span className="truncate font-mono text-[12px] text-muted">
+                {project.folder ?? project.url}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setName(project.name);
+                setEditing(true);
+              }}
+            >
+              {copy.settings.rename}
+            </Button>
+            <Button size="sm" variant="danger-outline" onClick={onRemove}>
+              {copy.settings.remove}
+            </Button>
+          </>
+        )}
+      </div>
+      {!editing && <Remembers projectId={id} />}
     </li>
   );
 }

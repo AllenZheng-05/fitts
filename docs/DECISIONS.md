@@ -2730,3 +2730,68 @@ understand the project's CI before coding; and one PR for the whole run.
   shared files (schema, run.ts, copy, protocol) couldn't be split without committing states that
   were never tested on their own. From here each milestone's shared-file edits wait for the
   previous milestone's commit; the e2e wait is for planning and new files only.
+
+## Phase 4 — U3: owner first, and memory
+
+- **`propose_finish` replaces `finish`, and the loop owns the proposal.** The ability keeps
+  `finish`'s preconditions (crawl ended or coverage complete; phone pass, links and review run;
+  no fix running or awaiting approval) and then posts `{ type: 'finish-proposal' }`, sets
+  `waitingFor: 'finish-proposal'` and waits; it never calls `finish()`. `fixesSettled()` and the
+  end of the crawl set a `wantsProposal` flag the loop acts on itself, before asking the
+  decider, so a decider that never proposes still can't keep a settled run from being proposed,
+  and one that only ever proposes gets "already proposed; the owner decides". An ability name
+  that isn't one (a fake or broken decider) is refused instead of crashing the loop. The three
+  ways to Done are the owner's: Finish on the card, Stop (its confirm), and the budget card's
+  Stop. A hostile-decider test proves a run that only proposes or babbles stays in the audit
+  until `answerQuestion(proposalId, 'finish')`.
+- **"Nothing found" is the proposal.** The real run no longer posts the `nothing-found` card:
+  the proposal's title says "I didn't find anything worth showing. Your call." and the steps
+  group lists what was checked. The edge-state kind stays for the test build's scripted runs.
+- **The card's numbers come from the run state**, not a new event: pages reached vs the App
+  Model's pages (with the unreached ones and why: a login or data gate, else "not reached"),
+  journeys planned vs done (U5 fills `RunState.journeys`), device cells (U5), findings shown /
+  fixed / rolled back / open (+ "you said are fine"), and the PR to come from the verified
+  changes ("Fitts: 3 fixes" · N commits on the branch). "Fix the rest" shows only when open
+  fixable findings remain; "Keep going" prefills the box, and any message closes the card with
+  `continue` and reaches the decider as usual. A background project's proposal sends the OS
+  notification ("Fitts thinks it's done. Have a look?") through the existing hook.
+- **Dismiss with a reason.** `dismissFinding(projectId, findingId, reason?)` is the same method
+  with an optional argument (the interface stays at 22). The Finding panel's "Not a problem" is
+  a menu: Intentional, Not a problem for my audience, Won't fix, Fitts got it wrong, or typed
+  words; in a batch review the reason rides with the decision until Go ahead. A reason writes a
+  `not-a-problem` rule and Fitts says "Noted: intentional. I'll remember that for this
+  project."; no reason (the old path) keeps "Want to tell me why?". "It is a problem" forgets
+  the rule. Pointing and saying "that's not a problem" (the `dismiss` ability) records "Fitts
+  got it wrong".
+- **Rules match on what a finding is, and where when the owner meant one element.** The key is
+  `probe|title` (reviewer findings: `|title`); a finding with an element also keeps its route
+  and source file, so dismissing one faint timestamp doesn't silence every contrast finding,
+  while dismissing a site-wide one (no element) does, everywhere. Matching findings go to the
+  `owner-ok` lane with the owner's reason: never posted, pinned, offered or fixed
+  (`approveFixes` filters them out even when asked by id), listed on Done under "You said this
+  is fine" with one click to reopen. Severity rules shift the severity by one. The run's first
+  message says what it remembers ("I remember 1 thing you said isn't a problem, 1 like from
+  last time."), the decider gets the same line in `situation.memory`, and each reviewer gets the
+  rules and tastes appended to its input as calibration, with the shared prompt saying the
+  owner's judgment outranks theirs.
+- **Memory lives in main, is read by the agent.** `main/store/memory.ts` keeps
+  `userData/projects/<id>/memory.json`; main sends it to the agent on every project open (local
+  or live) and after Settings changes it; the agent sends rules, forgets and tastes back as it
+  makes them, and keeps its own copy current so the same run sees what it just learned. Tastes:
+  a picked look ("The look 'Quiet stone': …") is a like, a round's feedback and the brief's
+  `avoid` are dislikes. Settings › Projects shows "What Fitts remembers" under each project with
+  Forget per rule and "Forget everything about this project".
+- **Report an issue.** The decider's `report_issue({ ref?, route?, text })` turns the owner's
+  words into a finding through one Spark call (`docs/prompts/report-issue.md`; without a model,
+  the words themselves, title = the first nine words, severity 3 unless the words say
+  minor/blocking): `owner: true`, `agreement.who: ['You']`, lane shown, posted and pinned, with
+  its element's source chain and an `is-a-problem` rule. The reviewers' opinion as notes is left
+  for U4's repro job, where the finding gets its evidence anyway; it never vetoes. Owner
+  findings are fixable only with approval and "Checked by review" (U6).
+- **Severity override** is `answerQuestion(projectId, findingId, 'more' | 'less')`: the item id
+  is the finding's, so no new engine method; the mock engine does the same.
+- **`why` on every decider tool** (SPEC §6A's "Thinking: …" line) is parsed and kept on the
+  Decision now; the log shows it in U5b.
+- **Tests that waited for Done** now wait for the proposal and answer it as the owner
+  (`finished()` in run.test.ts), which is also how the demo/chat e2e ends: "Keep going", a
+  second proposal, Finish, Done.

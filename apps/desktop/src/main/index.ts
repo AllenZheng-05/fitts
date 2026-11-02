@@ -17,6 +17,7 @@ import { githubPages, recheck, registerVerify } from './verify-site';
 import { createGitHub, registerGitHub } from './github';
 import { SiteManager } from './site/manager';
 import { UnderstandHost } from './understand';
+import { MemoryStore } from './store/memory';
 import { ProjectStore } from './store/projects';
 import { SAFE_ID } from './store/run-log';
 import { APP_ID, createMainWindow, ICON_PATH } from './window';
@@ -87,7 +88,22 @@ void app.whenReady().then(() => {
     (id) => projects.get(id),
     (ask) => host.understand(ask),
   );
-  sites.onOpen = (projectId) => void understand.start(projectId).catch(() => undefined);
+  // Project memory (SPEC-phase4 §4.3): what the owner has said, to the agent on every open.
+  const memory = new MemoryStore(userData);
+  memory.register((projectId, m) => host.memory(projectId, m));
+  host.onMemory = (m) => {
+    const next =
+      m.kind === 'memoryRule'
+        ? memory.addRule(m.projectId, m.rule)
+        : m.kind === 'memoryForget'
+          ? memory.deleteRule(m.projectId, m.ruleId)
+          : memory.addTaste(m.projectId, m.taste, m.text);
+    host.memory(m.projectId, next);
+  };
+  sites.onOpen = (projectId) => {
+    host.memory(projectId, memory.get(projectId));
+    void understand.start(projectId).catch(() => undefined);
+  };
   host.onAppModel = (projectId, model, hashes, modeled) =>
     understand.store(projectId, model, hashes, modeled);
   host.onAppModelPatch = (projectId, patches) => understand.addPatches(projectId, patches);

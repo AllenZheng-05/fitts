@@ -4,6 +4,8 @@ import type {
   AppModel,
   AppModelPatch,
   EngineCall,
+  MemoryRule,
+  ProjectMemory,
   EngineEvents,
   KeyName,
   ProbeItem,
@@ -260,6 +262,8 @@ export interface UnderstandAsk {
 export type MainMessage =
   | { kind: 'call'; call: EngineCall }
   | { kind: 'understand'; ask: UnderstandAsk }
+  /** SPEC-phase4 §4.3: a project's memory (on open, and after Settings changes it). */
+  | { kind: 'memory'; projectId: string; memory: ProjectMemory }
   /** The current API keys (from safeStorage, or .env.local in dev builds). */
   | { kind: 'keys'; keys: Partial<Record<KeyName, string>> }
   | { kind: 'testKey'; id: number; name: KeyName; value: string }
@@ -290,6 +294,10 @@ export type AgentMessage =
     }
   /** The owner corrected the model: main keeps the patches beside the cache. */
   | { kind: 'appModelPatch'; projectId: string; patches: AppModelPatch[] }
+  /** SPEC-phase4 §4.3: the owner told Fitts something (a rule, a taste); main keeps it. */
+  | { kind: 'memoryRule'; projectId: string; rule: MemoryRule }
+  | { kind: 'memoryForget'; projectId: string; ruleId: string }
+  | { kind: 'memoryTaste'; projectId: string; taste: 'likes' | 'dislikes'; text: string }
   | { kind: 'events'; batch: EngineEvents }
   | { kind: 'keyResult'; id: number; ok: boolean; message: string }
   | { kind: 'verifyResult'; id: number; ok: boolean; message: string }

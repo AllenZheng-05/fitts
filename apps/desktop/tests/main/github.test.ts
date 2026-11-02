@@ -76,8 +76,11 @@ describe('Sign in with GitHub', () => {
   });
 
   it('says it isn’t set up without a GitHub App', () => {
+    // The Fitts app is registered now (Nov 1); a build with no client id still says so.
+    process.env['FITTS_GITHUB_CLIENT_ID'] = '';
     const gh = fakeGitHub([]);
     expect(new GitHubAuth(gh.store, gh.fetchFn).status()).toEqual({ state: 'unavailable' });
+    delete process.env['FITTS_GITHUB_CLIENT_ID'];
   });
 
   it('finds the repository from origin, and keeps the token out of the command line', () => {

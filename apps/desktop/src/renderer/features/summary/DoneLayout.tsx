@@ -383,12 +383,22 @@ function FindingList({ run }: { run: RunState }) {
   const titleId = useId();
   const suggestionsId = useId();
   if (run.findings.length === 0) return null;
-  const shown = run.findings.filter((f) => f.lane !== 'suggestion').sort(bySeverity);
+  const shown = run.findings.filter((f) => (f.lane ?? 'shown') === 'shown').sort(bySeverity);
   const suggestions = run.findings.filter((f) => f.lane === 'suggestion').sort(bySeverity);
+  const ownerOk = run.findings.filter((f) => f.lane === 'owner-ok').sort(bySeverity);
   const rows = (list: Finding[]) =>
     list.map((f) => <FindingRow key={f.id} finding={f} open={f.id === openId} />);
   return (
     <div className="flex flex-col gap-[7px]">
+      {ownerOk.length > 0 && (
+        <>
+          <h3 className="font-display text-[17px] font-bold">
+            {format(copy.done.ownerOkTitle, { n: ownerOk.length })}
+          </h3>
+          <p className="text-[13px] text-muted">{copy.done.ownerOkHint}</p>
+          <ul className="flex flex-col gap-1.5">{rows(ownerOk)}</ul>
+        </>
+      )}
       {shown.length > 0 && (
         <>
           <h3 id={titleId} className="font-display text-[17px] font-bold">
@@ -435,7 +445,10 @@ function FindingRow({ finding, open }: { finding: Finding; open: boolean }) {
             {format(copy.done.findingMeta, {
               where: finding.heuristic ?? copy.audit.lens[finding.lens],
               route: finding.route,
-              status: copy.done.report.findingStatus[finding.status],
+              status:
+                finding.lane === 'owner-ok'
+                  ? `${copy.done.report.ownerOk}${finding.ownerReason ? ` · ${finding.ownerReason}` : ''}`
+                  : copy.done.report.findingStatus[finding.status],
             })}
           </span>
         </span>

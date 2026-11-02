@@ -38,9 +38,11 @@ macOS should show its own prompt ("Fitts listens when you talk to it."), and the
 mint only after you allow it. Blocked, it should say "Microphone blocked" with "Open settings".
 On Windows the same button reads the system setting and opens the mic for a second.
 
-## P4-4. Register the Fitts GitHub App (10 min)
+## P4-4. Register the Fitts GitHub App — done (Nov 1)
 
-As 4b below; send the Client ID.
+The Client ID (`Iv23liD21TTmPmSLjqPW`) and the app name (`fitts-by-allen`) are in
+`src/main/github/auth.ts`. What's left is yours: Settings › Keys › GitHub › **Sign in with
+GitHub**, then **Choose which repositories Fitts may use**.
 
 ## P4-5. Push (2 min)
 
@@ -135,7 +137,7 @@ paste it in Settings › Voice & appearance › ElevenLabs voice ID. Listening n
 1. Optional: `pnpm tsx scripts/verify/p11-tts.ts` should print `ok: true` (one short line).
 4. Follow `scripts/voice-check.md`: mic, speakers, barge-in, always listening, fallback.
 
-## 4b. Register the Fitts GitHub App (10 min) — Sign in with GitHub
+## 4b. Register the Fitts GitHub App — done (see P4-4)
 
 **Why:** Fitts now signs you in to GitHub itself (Settings › Keys › GitHub) instead of quietly
 using `gh`. That needs a GitHub App, which only you can register. Until then Settings says

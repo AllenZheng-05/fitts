@@ -99,6 +99,9 @@ export function ChatItemView({ item, run }: { item: ChatItem; run: RunState }) {
     case 'understanding':
       body = <Understanding item={item} run={run} />;
       break;
+    case 'finish-proposal':
+      body = <FinishProposal item={item} run={run} />;
+      break;
   }
   if (body === null) return null;
   return (
@@ -798,6 +801,104 @@ function Understanding({ item, run }: { item: Item<'understanding'>; run: RunSta
             }}
           >
             {u.change}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "I think I'm done. Your call." (SPEC-phase4 §4.1): what was covered, found, fixed and left,
+ * the PR to come, and the owner's three answers. Only Finish leads to Done.
+ */
+function FinishProposal({ item, run }: { item: Item<'finish-proposal'>; run: RunState }) {
+  const p = copy.items.proposal;
+  const shown = run.findings.filter((f) => (f.lane ?? 'shown') === 'shown');
+  const ownerOk = run.findings.filter((f) => f.lane === 'owner-ok').length;
+  const fixed = run.changes.filter((c) => c.status === 'verified' && c.kind !== 'wording');
+  const rolled = run.changes.filter((c) => c.status === 'rolled-back').length;
+  const open = shown.filter((f) => f.status === 'open').length;
+  const reached = run.routes.filter((r) => r.status === 'done').map((r) => r.path);
+  const model = run.appModel;
+  const known = model?.pages.map((pg) => pg.route) ?? [];
+  const unreached = model?.pages.filter((pg) => !reached.includes(pg.route)) ?? [];
+  const journeys = model?.journeys.filter((j) => j.enabled !== false) ?? [];
+  const done = run.journeys?.filter((j) => j.status === 'done').length ?? 0;
+  const failed =
+    run.journeys?.filter((j) => j.status === 'failed' || j.status === 'blocked').length ?? 0;
+  const branch = fixed.find((c) => c.branch)?.branch;
+  const redesign = fixed.find((c) => c.kind === 'redesign');
+  const fixes = fixed.filter((c) => c.kind === 'fix').length;
+  const prTitle = redesign
+    ? fixes
+      ? `${redesign.title} and ${fixes} ${fixes === 1 ? 'fix' : 'fixes'}`
+      : redesign.title
+    : `Fitts: ${fixes} ${fixes === 1 ? 'fix' : 'fixes'}`;
+  const answer = (a: string) => getEngine().answerQuestion(run.projectId, item.id, a);
+  return (
+    <div className={cx(CARD, 'gap-2 bg-sun-tint')}>
+      <span className="font-display text-[16px] font-bold">
+        {shown.length === 0 && fixed.length === 0 ? p.titleNothing : p.title}
+      </span>
+      <ul className="flex flex-col gap-0.5 text-[13px]">
+        <li>
+          {known.length
+            ? format(p.pages, { reached: reached.length, known: known.length })
+            : format(p.pagesNoCode, { reached: reached.length })}
+        </li>
+        {journeys.length > 0 && (
+          <li>
+            {format(p.journeys, { done, planned: journeys.length })}
+            {failed > 0 && format(p.journeysFailed, { n: failed })}
+          </li>
+        )}
+        {run.cells && run.cells.length > 0 && <li>{format(p.cells, { n: run.cells.length })}</li>}
+        <li>
+          {format(p.findings, { shown: shown.length, fixed: fixed.length, rolled, open })}
+          {ownerOk > 0 && format(p.ownerOk, { n: ownerOk })}
+        </li>
+        {unreached.length > 0 && (
+          <li>
+            {p.notCovered}:{' '}
+            {unreached
+              .slice(0, 6)
+              .map(
+                (pg) =>
+                  `${pg.route} (${p.why[pg.gate === 'login' ? 'login' : pg.gate === 'data' ? 'data' : 'unknown']})`,
+              )
+              .join(', ')}
+            {unreached.length > 6 ? ', …' : ''}
+          </li>
+        )}
+        <li>
+          {fixed.length > 0 && branch
+            ? format(p.pr, { title: prTitle, n: fixed.length, branch })
+            : p.noPr}
+        </li>
+      </ul>
+      {item.answer !== undefined ? (
+        <Chip className="self-start">
+          {p.answered[item.answer as keyof typeof p.answered] ?? p.answered.continue}
+        </Chip>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" size="sm" onClick={() => answer('finish')}>
+            {p.finish}
+          </Button>
+          {open > 0 && (
+            <Button size="sm" onClick={() => answer('fix-rest')}>
+              {format(p.fixRest, { n: open })}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={() => {
+              useUi.getState().set({ draft: p.keepGoingPrefill });
+              document.getElementById(MESSAGE_BOX_ID)?.focus();
+            }}
+          >
+            {p.keepGoing}
           </Button>
         </div>
       )}

@@ -9,6 +9,7 @@ import {
   type AppModel,
   type AppModelPatch,
   type EngineCall,
+  type ProjectMemory,
   type EngineEvents,
   type KeyName,
   type RunState,
@@ -78,6 +79,15 @@ export class RunHost {
       ) => void)
     | undefined;
   onAppModelPatch: ((projectId: string, patches: AppModelPatch[]) => void) | undefined;
+  /** SPEC-phase4 §4.3: the owner told Fitts something during a run; main keeps it. */
+  onMemory:
+    | ((m: Extract<AgentMessage, { kind: 'memoryRule' | 'memoryForget' | 'memoryTaste' }>) => void)
+    | undefined;
+
+  /** A project's memory, to the agent (on open and after Settings changes it). */
+  memory(projectId: string, memory: ProjectMemory): void {
+    this.send({ kind: 'memory', projectId, memory });
+  }
 
   /** Speech in and out, for the cost ledger (§11). */
   voiceUsage(
@@ -206,6 +216,11 @@ export class RunHost {
         return;
       case 'appModelPatch':
         if (SAFE_ID.test(m.projectId)) this.onAppModelPatch?.(m.projectId, m.patches);
+        return;
+      case 'memoryRule':
+      case 'memoryForget':
+      case 'memoryTaste':
+        if (SAFE_ID.test(m.projectId)) this.onMemory?.(m);
         return;
     }
   }

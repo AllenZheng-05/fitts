@@ -12,6 +12,7 @@ import {
   STUB_ENGINE_METHODS,
   type AppModel,
   type Brief,
+  type ProjectMemory,
   type EngineCall,
   type KeyName,
   type RunEvent,
@@ -41,6 +42,7 @@ import { domainOf, verifyDns, verifyFile } from './verify-site/verify';
 import type { AgentMessage, MainMessage, UnderstandAsk } from './protocol';
 import { patchFromMessage, summaryOf } from './understand/understand';
 import { applyPatches, applyUnchecked, buildModel } from './understand/runner';
+import { draftReport } from './orchestrator/report';
 import { SiteRpc } from './site-client';
 
 const port = process.parentPort;
@@ -84,6 +86,8 @@ const online = () => Boolean(keys.meta) && process.env['FITTS_OFFLINE'] !== '1';
 const realRuns = new Map<string, RealRun>();
 /** What Fitts understands of each project (SPEC-phase4 §3), once main has asked. */
 const models = new Map<string, { model: AppModel; modeled: boolean }>();
+/** What the owner told Fitts about each project on earlier runs (SPEC-phase4 §4.3), from main. */
+const memories = new Map<string, ProjectMemory>();
 /** The card's "Change the map: " prefix (copy.items.understanding.changePrefill). */
 const CHANGE_MAP = /^change the map:\s*/i;
 const siteRpc = new SiteRpc(send);
@@ -326,6 +330,40 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       ...(converse ? { converse } : {}),
       ...(set?.name ? { ownerName: set.name } : {}),
       ...(models.get(projectId) ? { appModel: models.get(projectId)?.model } : {}),
+      memory: {
+        get: () => memories.get(projectId),
+        add: (rule) => {
+          const m = memories.get(projectId) ?? { rules: [], likes: [], dislikes: [] };
+          memories.set(projectId, {
+            ...m,
+            rules: [...m.rules.filter((r) => r.id !== rule.id), rule],
+          });
+          send({ kind: 'memoryRule', projectId, rule });
+        },
+        forget: (ruleId) => {
+          const m = memories.get(projectId);
+          if (m) memories.set(projectId, { ...m, rules: m.rules.filter((r) => r.id !== ruleId) });
+          send({ kind: 'memoryForget', projectId, ruleId });
+        },
+        taste: (kind, text) => {
+          const m = memories.get(projectId) ?? { rules: [], likes: [], dislikes: [] };
+          if (!m[kind].includes(text))
+            memories.set(projectId, { ...m, [kind]: [...m[kind], text] });
+          send({ kind: 'memoryTaste', projectId, taste: kind, text });
+        },
+      },
+      ...(online()
+        ? {
+            reportIssue: (input: Parameters<typeof draftReport>[3], signal?: AbortSignal) =>
+              draftReport(
+                runCaller,
+                callCtx(),
+                modelFor('chat', profile(), modelOpts).model,
+                input,
+                signal,
+              ),
+          }
+        : {}),
       ...(online() && keys.meta && process.env['FITTS_NO_MEDIA'] !== '1'
         ? { media: new Media(keys.meta, ledger) }
         : {}),
@@ -506,7 +544,10 @@ function callReal(projectId: string, method: string, args: unknown[]): boolean {
       run.approveFixes(Array.isArray(args[0]) ? (args[0] as string[]) : []);
       return true;
     case 'dismissFinding':
-      run.dismissFinding(String(args[0]));
+      run.dismissFinding(
+        String(args[0]),
+        typeof args[1] === 'string' ? args[1].trim().slice(0, 200) : undefined,
+      );
       return true;
     case 'reopenFinding':
       run.reopenFinding(String(args[0]));
@@ -658,6 +699,7 @@ port.on('message', (e: { data: MainMessage }) => {
   const message = e.data;
   try {
     if (message.kind === 'call') call(message.call);
+    else if (message.kind === 'memory') memories.set(message.projectId, message.memory);
     else if (message.kind === 'understand') {
       void understandProject(message.ask).catch((e: unknown) =>
         send({ kind: 'error', message: e instanceof Error ? e.message : String(e) }),

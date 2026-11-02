@@ -45,11 +45,21 @@ export function startReview(batch: Batch): void {
  * Records (or changes) your call on one fix and moves to the next undecided one. Nothing is
  * sent until you press Go ahead, so every call can be changed until then.
  */
-export function decide(batch: Batch, findingId: string, decision: Decision): void {
+export function decide(
+  batch: Batch,
+  findingId: string,
+  decision: Decision,
+  /** SPEC-phase4 §4.2: why it isn't a problem, sent with the dismissal. */
+  reason?: string,
+): void {
   const decisions = { ...decisionsFor(batch), [findingId]: decision };
+  const review = useUi.getState().review;
+  const reasons = { ...(review?.itemId === batch.id ? review.reasons : {}) };
+  if (decision === 'dismiss' && reason) reasons[findingId] = reason;
+  else delete reasons[findingId];
   const next = nextUndecided(batch, decisions, findingId);
   useUi.getState().set({
-    review: { itemId: batch.id, decisions },
+    review: { itemId: batch.id, decisions, reasons },
     openFindingId: next ?? findingId,
   });
 }
@@ -60,9 +70,11 @@ export function decide(batch: Batch, findingId: string, decision: Decision): voi
  */
 export function finishReview(run: RunState, batch: Batch): void {
   const decisions = decisionsFor(batch);
+  const review = useUi.getState().review;
+  const reasons = review?.itemId === batch.id ? (review.reasons ?? {}) : {};
   const engine = getEngine();
   for (const id of batch.findingIds)
-    if (decisions[id] === 'dismiss') engine.dismissFinding(run.projectId, id);
+    if (decisions[id] === 'dismiss') engine.dismissFinding(run.projectId, id, reasons[id]);
   useUi.getState().set({ review: null, openFindingId: null });
   engine.approveFixes(
     run.projectId,

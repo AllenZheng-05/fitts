@@ -6,6 +6,7 @@ import type { CallContext, LlmCaller } from '../llm/call';
 import type { AbilityName, Decider, Decision, Situation } from './abilities';
 
 const say = { type: 'string', description: 'One line to the owner, or empty.' };
+const why = { type: 'string', description: 'Why this, in under 12 words (for the log).' };
 
 const tool = (name: string, description: string, extra: Record<string, unknown> = {}) => ({
   type: 'function',
@@ -13,8 +14,8 @@ const tool = (name: string, description: string, extra: Record<string, unknown> 
   description,
   parameters: {
     type: 'object',
-    properties: { ...extra, say },
-    required: [...Object.keys(extra), 'say'],
+    properties: { ...extra, say, why },
+    required: [...Object.keys(extra), 'say', 'why'],
     additionalProperties: false,
   },
   strict: true,
@@ -30,7 +31,15 @@ const TOOLS = [
   tool('check_theme', 'Judge whether the look fits the brief.'),
   tool('looks', 'Pick and apply a new look, when directions exist.'),
   tool('fix', 'Fix the findings, per the mode.'),
-  tool('finish', 'End the audit.'),
+  tool(
+    'propose_finish',
+    'Say the audit is done and ask the owner to finish; only they can end the run.',
+  ),
+  tool('report_issue', 'The owner says something is a problem: make it a finding, theirs.', {
+    ref: { type: 'string', description: 'The element they point at, or empty.' },
+    route: { type: 'string', description: 'The page they mean, or empty for the current one.' },
+    text: { type: 'string', description: 'What they said, in their words.' },
+  }),
   tool('skip_pages', 'Skip pages the owner asked to skip.', {
     paths: { type: 'array', items: { type: 'string' } },
   }),
@@ -63,6 +72,8 @@ export function parseDecision(name: string, args: string): Decision {
     ref?: string;
     findingId?: string;
     hint?: string;
+    text?: string;
+    why?: string;
   };
   return {
     ability: name as AbilityName,
@@ -73,6 +84,8 @@ export function parseDecision(name: string, args: string): Decision {
     ...(a.ref?.trim() ? { ref: a.ref.trim() } : {}),
     ...(a.findingId?.trim() ? { findingId: a.findingId.trim() } : {}),
     ...(a.hint?.trim() ? { hint: a.hint.trim().slice(0, 300) } : {}),
+    ...(a.text?.trim() ? { text: a.text.trim().slice(0, 600) } : {}),
+    ...(a.why?.trim() ? { why: a.why.trim().slice(0, 160) } : {}),
   };
 }
 

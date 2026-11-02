@@ -133,8 +133,8 @@ export class IpcRunEngine implements RunEngine {
   approveFixes(projectId: string, findingIds: string[]) {
     this.call(projectId, 'approveFixes', findingIds);
   }
-  dismissFinding(projectId: string, findingId: string) {
-    this.call(projectId, 'dismissFinding', findingId);
+  dismissFinding(projectId: string, findingId: string, reason?: string) {
+    this.call(projectId, 'dismissFinding', findingId, ...(reason ? [reason] : []));
   }
   respondGate(projectId: string, gateId: string, decision: 'deny' | 'other' | 'allow') {
     this.call(projectId, 'respondGate', gateId, decision);

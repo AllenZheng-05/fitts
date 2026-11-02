@@ -8,9 +8,9 @@ import type { GitHubStatus } from '@fitts/schema';
 /** The registered GitHub App's client id (public: device flow has no secret). */
 export const clientId = () => process.env['FITTS_GITHUB_CLIENT_ID'] ?? GITHUB_CLIENT_ID;
 /** Filled in once the Fitts GitHub App is registered (NEEDS-ALLEN). */
-export const GITHUB_CLIENT_ID = '';
+export const GITHUB_CLIENT_ID = 'Iv23liD21TTmPmSLjqPW';
 /** The app's name in its github.com/apps/<slug> URL, for "Choose repositories". */
-export const GITHUB_APP_SLUG = '';
+export const GITHUB_APP_SLUG = 'fitts-by-allen';
 const appSlug = () => process.env['FITTS_GITHUB_APP_SLUG'] ?? GITHUB_APP_SLUG;
 
 const DEVICE_URL = 'https://github.com/login/device/code';

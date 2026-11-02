@@ -51,10 +51,14 @@ test('Finding panel (Ask): open, change the fix, not a problem, Esc', async () =
     'Paused',
   );
 
+  // SPEC-phase4 §4.2: "Not a problem" asks why; the reason is remembered for the project.
   await card.click();
   await panel.getByRole('button', { name: 'Not a problem' }).click();
+  await panel.getByRole('menuitem', { name: 'Intentional' }).click();
   await expect(panel).toBeHidden();
-  await expect(chat(page)).toContainText('Want to tell me why? It helps next time.');
+  await expect(chat(page)).toContainText(
+    'Noted: intentional. I’ll remember that for this project.',
+  );
   await expect(card).toContainText('Not a problem');
 
   // Changed your mind: it's open again, ready to fix.
@@ -155,6 +159,7 @@ test('batch approval: review each steps through every fix, then answers the batc
   await panel.getByRole('button', { name: 'Skip' }).click();
   await expect(panel).toContainText('Fix 3 of 3');
   await panel.getByRole('button', { name: 'Not a problem' }).click();
+  await panel.getByRole('menuitem', { name: 'Won’t fix' }).click();
   await expect(panel).toContainText('0 left to decide');
   await expect(panel).toBeVisible();
   // Changed my mind: approve it instead.

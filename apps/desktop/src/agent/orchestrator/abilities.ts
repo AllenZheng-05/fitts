@@ -10,7 +10,10 @@ export type AbilityName =
   | 'check_theme'
   | 'looks'
   | 'fix'
-  | 'finish'
+  /** SPEC-phase4 §4.1: proposes the end; only the owner ends a run. */
+  | 'propose_finish'
+  /** SPEC-phase4 §4.2: the owner says something is a problem. */
+  | 'report_issue'
   // The owner's pivots (§1.4).
   | 'skip_pages'
   | 'stop_exploring'
@@ -28,8 +31,12 @@ export interface Decision {
   paths?: string[];
   /** `new_look`: what the owner wants; `revise_looks`: what they said about the looks. */
   wish?: string;
-  /** `dismiss`: the element the owner pointed at. */
+  /** `dismiss`, `report_issue`: the element the owner pointed at. */
   ref?: string;
+  /** `report_issue`: the owner's words, and the page they mean. */
+  text?: string;
+  /** SPEC-phase4 §6A: one short line on why this ability, for the "Every detail" log. */
+  why?: string;
   /** `retry_fix`: the finding whose fix was rolled back, and what to do differently. */
   findingId?: string;
   hint?: string;
@@ -82,6 +89,8 @@ export interface Situation {
   budget: { spentUsd: number; capUsd: number };
   /** SPEC-phase4 §3: what the code says the app is, when Fitts read it. */
   app?: { summary: string; pages: string[]; journeys: string[] };
+  /** SPEC-phase4 §4.3: what the owner told Fitts on earlier runs, in one line. */
+  memory?: string;
 }
 
 export interface Decider {
@@ -90,7 +99,7 @@ export interface Decider {
 
 /**
  * Phase 2's order, as a decider (§1.2's fallback): explore until the crawl ends, then the phone
- * pass, links, the review, the theme, a look if there is one, fixes, and finish.
+ * pass, links, the review, the theme, a look if there is one, fixes, and the finish proposal.
  */
 export class ScriptedDecider implements Decider {
   next(s: Situation): Promise<Decision> {
@@ -104,5 +113,5 @@ export function scriptedNext(s: Situation): AbilityName {
   for (const a of order) if (!s.ran[a]) return a;
   if (!s.live && !s.ran.looks) return 'looks';
   if (!s.live && !s.ran.fix) return 'fix';
-  return 'finish';
+  return 'propose_finish';
 }

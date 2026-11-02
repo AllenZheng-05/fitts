@@ -18,6 +18,7 @@ test.afterEach(async () => {
   await launched.close();
 });
 
+const chat = (page: Page) => page.getByRole('log', { name: 'Conversation with Fitts' });
 const canvas = (page: Page) => page.locator('[data-site-canvas] canvas');
 const address = (page: Page) => page.getByLabel('Address');
 
@@ -155,6 +156,7 @@ async function runState(page: Page) {
       overlays: { attention?: { ref: string } };
       chat: { type: string; stateKind?: string; text?: string }[];
       step: number;
+      waitingFor?: string;
       gate?: { id: string; action: string; heldRequest: string };
       findings: Finding[];
     };
@@ -197,11 +199,8 @@ test('the real crawl reaches every route and tries every primary control (covera
           gates.push({ ...now.gate, sentBeforeAnswer: res.status !== 200 });
           await page.getByRole('button', { name: "Don't do it" }).click();
         }
-        return now.chat.some(
-          (c) =>
-            c.stateKind === 'nothing-found' ||
-            (c.type === 'fitts.message' && /All done/.test(c.text ?? '')),
-        );
+        // SPEC-phase4 §4.1: the run proposes finishing and waits; only the owner ends it.
+        return now.waitingFor === 'finish-proposal';
       },
       {
         timeout: 200_000,
@@ -218,6 +217,17 @@ test('the real crawl reaches every route and tries every primary control (covera
     }),
   ]);
   expect((await fetch(`http://localhost:${PORT}/api/conversations/12`)).status).toBe(200);
+  // The proposal says what was covered; "Keep going" hands back to Fitts, which (with nothing
+  // left) proposes again; Finish is the owner's, and the only way to Done.
+  const proposal = chat(page).getByRole('listitem').filter({ hasText: 'Your call.' });
+  await expect(proposal.first()).toContainText(/Pages: \d+ reached of 8 the code names/);
+  await expect(proposal.first()).toContainText(/Findings: \d+ shown/);
+  await proposal.first().getByRole('button', { name: 'Keep going' }).click();
+  await page.getByLabel('Message Fitts').press('Enter');
+  await expect(proposal.first()).toContainText('You kept going');
+  await expect(proposal).toHaveCount(2, { timeout: 60_000 });
+  await proposal.last().getByRole('button', { name: 'Finish' }).click();
+  await expect.poll(async () => (await runState(page)).phase, { timeout: 60_000 }).toBe('done');
   const s = await runState(page);
   const paths = s.routes.map((r) => r.path);
   for (const p of [

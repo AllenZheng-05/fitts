@@ -49,6 +49,8 @@ export interface FittsBridge {
   requestMic?: () => Promise<MicAccess>;
   /** Opens the OS's microphone privacy settings (after a denial). */
   openMicSettings?: () => void;
+  /** SPEC-phase4 §4.3: Settings › Projects › "What Fitts remembers". */
+  memory?: MemoryBridge;
   /** What's installed on this computer, for Welcome's chips (each null when missing). */
   tools?: () => Promise<ToolsStatus>;
   /** Sign in with GitHub (the Fitts GitHub App, device flow): PRs, pushes, Pages. */
@@ -88,6 +90,12 @@ export interface MicAccess {
   ok: boolean;
   probe?: boolean;
   reason?: 'denied' | 'no-device' | 'error';
+}
+
+export interface MemoryBridge {
+  get(projectId: string): Promise<ProjectMemory>;
+  delete(projectId: string, ruleId: string): Promise<ProjectMemory>;
+  clear(projectId: string): Promise<ProjectMemory>;
 }
 
 export interface ToolsStatus {
@@ -408,6 +416,9 @@ export const IPC = {
   openLink: 'fitts:open-link',
   micRequest: 'fitts:mic-request',
   micSettings: 'fitts:mic-settings',
+  memoryGet: 'fitts:memory-get',
+  memoryDelete: 'fitts:memory-delete',
+  memoryClear: 'fitts:memory-clear',
   runFinish: 'fitts:run-finish',
   siteOpenInBrowser: 'fitts:site-open-in-browser',
   engineCall: 'fitts:engine-call',
@@ -538,8 +549,16 @@ export interface Finding {
   costUsd?: number;
 
   // SPEC-phase2 §12.2 additions (all optional).
-  /** `suggestion`: not enough evidence to show; counted on Done and listed in the report. */
-  lane?: 'shown' | 'suggestion';
+  /**
+   * `suggestion`: not enough evidence to show; counted on Done and listed in the report.
+   * `owner-ok` (SPEC-phase4 §4.3): the owner said this isn't a problem on an earlier run; never
+   * posted, pinned or fixed, listed under "You said this is fine".
+   */
+  lane?: 'shown' | 'suggestion' | 'owner-ok';
+  /** SPEC-phase4 §4.2: why the owner dismissed it (a menu choice or their words). */
+  ownerReason?: string;
+  /** SPEC-phase4 §4.2: the owner reported it ("this is a problem"); always shown and offered. */
+  owner?: boolean;
   /** Same issue on several screens. */
   locations?: { route: string; elementRef?: string; stepIndex: number }[];
   /**
@@ -674,6 +693,27 @@ export interface Journey {
   enabled?: boolean;
 }
 
+/** SPEC-phase4 §4.3: what the owner has told Fitts about a project, kept across runs. */
+export interface MemoryRule {
+  id: string;
+  kind: 'not-a-problem' | 'is-a-problem' | 'severity';
+  match: { probe?: ProbeName; titleKey?: string; route?: string; src?: string; text?: string };
+  /** The owner's words or the menu choice. */
+  reason: string;
+  /** Severity rules: the shift. */
+  delta?: 1 | -1;
+  at: string;
+  runId: string;
+}
+
+export interface ProjectMemory {
+  rules: MemoryRule[];
+  /** Design and wording preferences in the owner's words. */
+  likes: string[];
+  /** "Nothing cutesy" from the brief's avoid, rejected looks. */
+  dislikes: string[];
+}
+
 /** The owner's corrections to the model (§3.3), kept across cache refreshes. */
 export type AppModelPatch =
   | { op: 'addJourney'; journey: Journey }
@@ -787,7 +827,12 @@ export type ChatItem =
    * before the audit. Answers: `looks-right` (with the unchecked journey ids after a colon), or
    * `change` (the owner is typing a correction).
    */
-  | { id: string; type: 'understanding'; answer?: string };
+  | { id: string; type: 'understanding'; answer?: string }
+  /**
+   * SPEC-phase4 §4.1: Fitts thinks it's done; only the owner ends the run. Answers: `finish`,
+   * `fix-rest` (the open fixable findings), `continue` (any message or Keep going).
+   */
+  | { id: string; type: 'finish-proposal'; answer?: string };
 
 export type ChatItemType = ChatItem['type'];
 
@@ -889,6 +934,31 @@ export interface RunState {
   // SPEC-phase4 additions (all optional, so earlier UI and logs still work).
   /** What Fitts understands from the code (§3): the summary fields the UI needs. */
   appModel?: AppModelSummary;
+  /** SPEC-phase4 §6.1: each journey's status as the run tries it. */
+  journeys?: {
+    id: string;
+    name: string;
+    status: 'planned' | 'running' | 'done' | 'failed' | 'blocked';
+    reason?: string;
+    steps?: number;
+  }[];
+  /** SPEC-phase4 §6.3: the device cells this run checked. */
+  cells?: DeviceCell[];
+}
+
+/** SPEC-phase4 §6.3: a screen to check a page at, with what else it emulates. */
+export interface DeviceCell {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  mobile: boolean;
+  touch: boolean;
+  zoom?: number;
+  textSpacing?: boolean;
+  orientation?: 'portrait' | 'landscape';
+  scheme?: 'light' | 'dark';
+  motion?: 'no-preference' | 'reduce';
 }
 
 /** SPEC §9.2: the UI talks only to this interface. Phase 2 implements it over IPC. */
@@ -917,7 +987,8 @@ export interface RunEngine {
   /** Answers a question card or an edge-state card. */
   answerQuestion(projectId: string, itemId: string, answer: string): void;
   approveFixes(projectId: string, findingIds: string[]): void;
-  dismissFinding(projectId: string, findingId: string): void;
+  /** SPEC-phase4 §4.2: `reason` is the menu choice or the owner's words; remembered. */
+  dismissFinding(projectId: string, findingId: string, reason?: string): void;
   /** Addition (Phase 2 feedback): "It is a problem": a dismissed finding is open again. */
   reopenFinding(projectId: string, findingId: string): void;
   respondGate(projectId: string, gateId: string, decision: 'deny' | 'other' | 'allow'): void;

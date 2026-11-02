@@ -26,6 +26,7 @@ import type { Decision } from '../../state/ui';
 import { decide, finishReview, pendingBatchFor, type Batch } from './review';
 import { Replay } from './Replay';
 import { Evidence } from './Evidence';
+import { DismissMenu } from './DismissMenu';
 
 /**
  * Where the Finding panel opens (Allen's feedback, round 5): a layout puts this id on the large
@@ -104,6 +105,11 @@ function Panel({ run, finding, wide }: { run: RunState; finding: Finding; wide: 
             {finding.agreement.measured && (
               <Chip tone="cobalt" className="px-[9px] py-[3px]">
                 {copy.finding.measuredChip}
+              </Chip>
+            )}
+            {finding.owner && (
+              <Chip tone="coral" className="px-[9px] py-[3px]">
+                {copy.finding.ownerChip}
               </Chip>
             )}
           </div>
@@ -429,11 +435,13 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
       </div>
     );
   }
-  if (finding.status === 'dismissed') {
+  if (finding.status === 'dismissed' || finding.lane === 'owner-ok') {
     return (
       <div className={`${bar} bg-neutral-tint`}>
         <span className="flex-[1_1_180px] font-semibold text-neutral-ink">
-          {copy.finding.dismissed}
+          {finding.ownerReason
+            ? format(copy.finding.dismissedWhy, { reason: finding.ownerReason })
+            : copy.finding.dismissed}
         </span>
         {/* Changed your mind: it's open again, to fix or review. */}
         <Button size="md" onClick={() => engine.reopenFinding(run.projectId, finding.id)}>
@@ -523,22 +531,42 @@ ${copy.finding.fixPrefix} ${finding.fix}`,
       >
         {copy.finding.changeFix}
       </Button>
-      <Button
-        size="md"
-        variant={decision === 'dismiss' ? 'dark' : 'secondary'}
-        aria-pressed={batch ? decision === 'dismiss' : undefined}
-        className="min-h-11 flex-[1_1_100px]"
-        onClick={() => {
-          // In a batch review it's a call like the others, sent with Go ahead.
-          if (batch) decide(batch, finding.id, 'dismiss');
+      <DismissMenu
+        className="flex-[1_1_100px]"
+        pressed={batch ? decision === 'dismiss' : undefined}
+        onDismiss={(reason) => {
+          // In a batch review it's a call like the others, sent with Go ahead (with its reason).
+          if (batch) decide(batch, finding.id, 'dismiss', reason);
           else {
-            engine.dismissFinding(run.projectId, finding.id);
+            engine.dismissFinding(run.projectId, finding.id, reason);
             useUi.getState().set({ openFindingId: null });
           }
         }}
-      >
-        {copy.finding.notProblem}
-      </Button>
+      />
+      <Weigh run={run} finding={finding} />
     </div>
+  );
+}
+
+/** "This matters more / less" (SPEC-phase4 §4.2): the owner's severity, remembered. */
+function Weigh({ run, finding }: { run: RunState; finding: Finding }) {
+  const engine = getEngine();
+  return (
+    <span className="flex basis-full gap-2">
+      <Button
+        size="sm"
+        disabled={finding.severity >= 4}
+        onClick={() => engine.answerQuestion(run.projectId, finding.id, 'more')}
+      >
+        {copy.finding.mattersMore}
+      </Button>
+      <Button
+        size="sm"
+        disabled={finding.severity <= 1}
+        onClick={() => engine.answerQuestion(run.projectId, finding.id, 'less')}
+      >
+        {copy.finding.mattersLess}
+      </Button>
+    </span>
   );
 }

@@ -9,7 +9,9 @@ import {
   type ChatItem,
   type Finding,
   type EdgeStateKind,
+  type MemoryRule,
   type Mode,
+  type ProjectMemory,
   type RunEvent,
   type RunState,
   type SourceFrame,
@@ -32,6 +34,8 @@ import { outlineSvg, type Media } from '../llm/media';
 import { buildBoard, specFonts } from '@fitts/styles';
 import { boardWords, solidPng } from './board-art';
 import type { Converse } from './decider';
+import { applyRules, memoryForReviewers, memoryLine, ruleFor } from '../memory/rules';
+import { ownerFinding, plainDraft, type ReportDraft, type ReportInput } from './report';
 import {
   ScriptedDecider,
   type AbilityName,
@@ -81,6 +85,15 @@ export interface RunDeps {
   ownerName?: string;
   /** SPEC-phase4 §3: what Fitts understands from the code, when the project has one. */
   appModel?: AppModel;
+  /** SPEC-phase4 §4.3: what the owner told Fitts on earlier runs, and how to add to it. */
+  memory?: {
+    get(): ProjectMemory | undefined;
+    add(rule: MemoryRule): void;
+    forget(ruleId: string): void;
+    taste(kind: 'likes' | 'dislikes', text: string): void;
+  };
+  /** SPEC-phase4 §4.2: the owner's words as a finding draft (a model); the plain draft without. */
+  reportIssue?: (input: ReportInput, signal?: AbortSignal) => Promise<ReportDraft>;
   /** The reviewer panel (§8). Without one (no key, offline), probe findings stand alone. */
   panel?: ReviewerPanel;
   /** SAM outlines and Muse Image mockups (§10). Without it, the UI keeps DOM boxes. */
@@ -202,6 +215,12 @@ export class RealRun {
   private readonly deciderRetries = new Set<string>();
   /** FINALIZE has begun: the run's PR is opening, then Done. */
   private finishing = false;
+  /** The finish proposal waiting on the owner (SPEC-phase4 §4.1), if one is open. */
+  private proposalId: string | undefined;
+  /** Fixes settled: the loop proposes finishing next (never finishes on its own). */
+  private wantsProposal = false;
+  /** Owner findings so far (their ids are numbered apart from the review's). */
+  private ownerFindings = 0;
   /** The open "Can I …?" question (Ask every action), resolved false if the run moves on. */
   private pendingAsk: ((ok: boolean) => void) | undefined;
   /** Ask every action: "Allow everything this run", and the pages where you allowed it all. */
@@ -319,6 +338,9 @@ export class RealRun {
   start(): void {
     this.emit([{ type: 'run.started', state: this.state }]);
     this.say('Looking around your site now. I’ll try every control on every page I can reach.');
+    const remembered = memoryLine(this.deps.memory?.get());
+    if (remembered) this.say(format(copy.fitts.remembered, { what: remembered }));
+    if (this.state.brief.avoid) this.deps.memory?.taste('dislikes', this.state.brief.avoid);
     this.clock = setInterval(() => {
       if (this.state.activity === 'acting' || this.state.activity === 'redesigning')
         this.emit([{ type: 'clock.tick', elapsedMs: this.state.elapsedMs + 1000 }]);
@@ -402,10 +424,19 @@ export class RealRun {
       // gets a decision, so "another round of looks" happens instead of being noted
       // (Allen's feedback, round 6), and so does a rolled-back fix (Allen's feedback, run 1:
       // a failed check is a reason to think, not to give up). Otherwise there's nothing to decide.
-      const news = this.inbox.length > 0 || this.nudged;
+      const news = this.inbox.length > 0 || this.nudged || this.wantsProposal;
       const listening = this.fixPhase && news && this.state.activity !== 'paused';
       if ((this.blocked() && !listening) || (this.fixPhase && !news)) {
         await this.sleepUntilKicked();
+        continue;
+      }
+      // Fixes settled (or a card was answered with nothing to do): propose finishing. The
+      // proposal is the loop's, not the decider's: a decider may never end a run (§4.1).
+      if (this.wantsProposal && this.inbox.length === 0 && !this.nudged) {
+        this.wantsProposal = false;
+        const outcome = await this.use({ ability: 'propose_finish' });
+        this.recent.push(outcome);
+        if (this.recent.length > RECENT) this.recent.shift();
         continue;
       }
       this.deliverQueued();
@@ -443,7 +474,6 @@ export class RealRun {
       refused = outcome.result === 'refused';
       this.recent.push(outcome);
       if (this.recent.length > RECENT) this.recent.shift();
-      if (outcome.result === 'done' && outcome.ability === 'finish') return;
       // A decision after a rollback that didn't start anything: the fixes have settled.
       if (this.fixPhase) this.fixesSettled();
     }
@@ -559,7 +589,7 @@ export class RealRun {
           (x) => x.status === 'open' && d.ref !== undefined && x.elementRef === d.ref,
         );
         if (!f) return outcome('refused', 'no finding on that element');
-        this.dismissFinding(f.id);
+        this.dismissFinding(f.id, copy.finding.dismissMenu.reasons.wrong);
         return outcome('done', f.title);
       }
       case 'retry_fix': {
@@ -587,24 +617,140 @@ export class RealRun {
         await this.pipeline?.retry(change.id, d.hint);
         return outcome('done', change.title);
       }
-      case 'finish':
-        // Fixes still running or waiting on the owner end the run themselves when they settle.
+      case 'propose_finish':
+        // Fixes still running or waiting on the owner: the proposal comes when they settle.
         if (this.fixPhase && (this.approvalId !== undefined || this.pipeline?.busy))
-          return outcome('refused', 'fixes are still going; the run ends when they settle');
-        // Fixes have settled: FINALIZE (the run's PR), then Done.
-        if (this.fixPhase) {
-          this.finish();
-          return outcome('done');
+          return outcome('refused', 'fixes are still going; propose once they settle');
+        if (this.proposalId) return outcome('refused', 'already proposed; the owner decides');
+        if (!this.fixPhase) {
+          // Every page and control is tried or skipped first, unless the crawl can't go on.
+          if (!this.coverage.complete() && !this.crawlEnded)
+            return outcome('refused', 'pages and controls are left to try');
+          // And the audit's own checks have run: a run never ends unreviewed.
+          for (const owed of ['phone_pass', 'check_links', 'review'] as const)
+            if (!this.ran[owed]) return outcome('refused', `${owed} hasn’t run yet`);
+          this.crawlComplete();
         }
-        // Every page and control is tried or skipped first, unless the crawl can't go on.
-        if (!this.coverage.complete() && !this.crawlEnded)
-          return outcome('refused', 'pages and controls are left to try');
-        // And the audit's own checks have run: a run never ends unreviewed.
-        for (const owed of ['phone_pass', 'check_links', 'review'] as const)
-          if (!this.ran[owed]) return outcome('refused', `${owed} hasn’t run yet`);
-        this.crawlComplete();
-        return outcome('done');
+        this.propose();
+        return outcome('done', 'proposed');
+      case 'report_issue':
+        return this.reportIssue(d);
+      default:
+        // A fake or broken decider naming something that isn't an ability: refused, never a crash.
+        return outcome('refused', `unknown ability ${String(d.ability)}`);
     }
+  }
+
+  /**
+   * The finish proposal (SPEC-phase4 §4.1): Fitts thinks it's done and says what it covered,
+   * found, fixed and left; the owner's Finish is the only way to Done from here (Stop and the
+   * budget card's Stop are the others). Any message closes it and goes to the decider.
+   */
+  private propose(): void {
+    if (this.proposalId || this.finished) return;
+    const id = this.id();
+    this.proposalId = id;
+    this.emit([
+      { type: 'chat.item', item: { id, type: 'finish-proposal' } },
+      { type: 'waiting.changed', waitingFor: 'finish-proposal' },
+      { type: 'now.changed', nowText: copy.fitts.proposalWaiting },
+    ]);
+    this.setActivity('waiting-on-user');
+  }
+
+  /** The proposal's answer: finish, fix the rest, or carry on. */
+  private answerProposal(
+    item: Extract<ChatItem, { type: 'finish-proposal' }>,
+    answer: string,
+  ): void {
+    if (this.proposalId !== item.id) return;
+    const a = answer === 'finish' || answer === 'fix-rest' ? answer : 'continue';
+    this.proposalId = undefined;
+    this.emit([{ type: 'chat.item.updated', item: { ...item, answer: a } }]);
+    if (this.state.waitingFor === 'finish-proposal') this.emit([{ type: 'waiting.changed' }]);
+    this.emit([{ type: 'now.changed' }]);
+    if (a === 'finish') {
+      this.finish();
+      return;
+    }
+    if (!this.finished) this.setActivity('acting');
+    if (a === 'fix-rest') this.approveFixes(this.openFixable());
+    else this.kick();
+  }
+
+  /** Open, fixable findings (what "Fix the rest" starts). */
+  private openFixable(): string[] {
+    const open = this.state.findings
+      .filter((f) => (f.lane ?? 'shown') === 'shown' && f.status === 'open')
+      .map((f) => f.id);
+    return this.pipeline ? this.pipeline.fixable(open) : [];
+  }
+
+  /**
+   * The owner reports an issue (SPEC-phase4 §4.2): their words become a finding of theirs,
+   * shown, pinned, with the element's source and a memory rule. Never argued down.
+   */
+  private async reportIssue(d: Decision): Promise<Outcome> {
+    const outcome = (result: Outcome['result'], note?: string): Outcome => ({
+      ability: 'report_issue',
+      result,
+      ...(note ? { note } : {}),
+    });
+    const text = (d.text ?? this.heard.at(-1) ?? '')
+      .replace(/\s*\[pointing at ref[^\]]*\]\s*$/, '')
+      .trim();
+    if (!text) return outcome('refused', 'nothing to report: the owner said nothing');
+    let route = d.route ? routeOf(d.route) : undefined;
+    if (!route) {
+      const snap = await this.deps.site.snapshot().catch(() => undefined);
+      route = snap
+        ? routeOf(snap.path)
+        : (this.state.routes.find((r) => r.status === 'testing')?.path ?? '/');
+    }
+    const node = d.ref
+      ? [...this.pages.values()]
+          .flatMap((p) => p.evidence.snapshot.nodes)
+          .find((n) => n.ref === d.ref)
+      : undefined;
+    const input: ReportInput = {
+      text,
+      route,
+      ...(d.ref
+        ? { element: { ref: d.ref, role: node?.role ?? 'element', name: node?.name ?? '' } }
+        : {}),
+      brief: { ...this.state.brief },
+    };
+    this.emit([{ type: 'now.changed', nowText: 'Writing up what you reported' }]);
+    let draft: ReportDraft;
+    try {
+      draft = this.deps.reportIssue
+        ? await this.deps.reportIssue(input, this.abort.signal)
+        : plainDraft(input);
+    } catch {
+      draft = plainDraft(input);
+    }
+    if (this.finished) return outcome('nothing');
+    this.ownerFindings += 1;
+    const page = this.pages.get(route);
+    let finding = ownerFinding(
+      `${this.state.runId}-o${this.ownerFindings}`,
+      this.state.runId,
+      draft,
+      input,
+      {
+        stepIndex: page?.stepIndex ?? this.state.step,
+        atMs: page?.atMs ?? this.state.elapsedMs,
+      },
+    );
+    finding = await this.withSource(finding);
+    this.post([finding]);
+    void this.evidence([finding]);
+    this.deps.memory?.add(
+      ruleFor('is-a-problem', finding, undefined, text.slice(0, 200), this.state.runId),
+    );
+    this.say(format(copy.fitts.reported, { title: finding.title }));
+    this.emit([{ type: 'now.changed' }]);
+    return outcome('done', finding.title);
   }
 
   /** What the decider sees (§1.2). */
@@ -654,6 +800,11 @@ export class RealRun {
       messages: [...this.inbox],
       earlier: this.heard.slice(-10),
       budget: { spentUsd: this.state.cost.spentUsd, capUsd: this.state.cost.capUsd },
+      ...(memoryLine(this.deps.memory?.get())
+        ? {
+            memory: `The owner told you on earlier runs: ${memoryLine(this.deps.memory?.get()) ?? ''}`,
+          }
+        : {}),
       ...(this.deps.appModel
         ? {
             app: {
@@ -766,7 +917,7 @@ export class RealRun {
    */
   private async offerFixes(): Promise<boolean> {
     const shown = this.state.findings
-      .filter((f) => f.lane !== 'suggestion' && f.status === 'open')
+      .filter((f) => (f.lane ?? 'shown') === 'shown' && f.status === 'open')
       .map((f) => f.id);
     if (!(await this.ensurePipeline()) || !this.pipeline) return false;
     const fixable = this.pipeline.fixable(shown);
@@ -801,6 +952,10 @@ export class RealRun {
   /** Approve the batch, or "Fix it" on one finding (§9.3: approving covers its PR). */
   approveFixes(findingIds: string[]): void {
     if (!this.pipeline) return;
+    // §14: what the owner said is fine (owner-ok) is never fixed, whoever asks.
+    findingIds = findingIds.filter(
+      (id) => (this.state.findings.find((f) => f.id === id)?.lane ?? 'shown') === 'shown',
+    );
     const item = this.state.chat.find((c) => c.id === this.approvalId);
     // Only the batch's own answer closes it. "Fix it" on another finding while the batch waits
     // is that one finding, not an answer for the rest (Allen's feedback, round 5).
@@ -829,10 +984,17 @@ export class RealRun {
   /** "It is a problem": a dismissed finding is open again, with its pin back on the page. */
   reopenFinding(findingId: string): void {
     const f = this.state.findings.find((x) => x.id === findingId);
-    if (f?.status !== 'dismissed') return;
+    if (!f || (f.status !== 'dismissed' && f.lane !== 'owner-ok')) return;
+    // The rule that kept it out (or the reason just given) goes; it's a finding again.
+    this.deps.memory?.forget(
+      ruleFor('not-a-problem', f, this.checks.get(f.id)?.probe, '', this.state.runId).id,
+    );
     const pin = this.state.overlays.problems.length + 1;
+    const reopened: Finding = { ...f, status: 'open' };
+    delete reopened.ownerReason;
+    if (reopened.lane === 'owner-ok') reopened.lane = 'shown';
     this.emit([
-      { type: 'finding.updated', finding: { ...f, status: 'open' } },
+      { type: 'finding.updated', finding: reopened },
       ...(f.elementRef && !this.state.overlays.problems.some((p) => p.ref === f.elementRef)
         ? [
             {
@@ -847,11 +1009,19 @@ export class RealRun {
     ]);
   }
 
-  dismissFinding(findingId: string): void {
+  /**
+   * Not a problem (SPEC-phase4 §4.2): with the owner's reason it's remembered for this project,
+   * so the same finding stays out of the shown lane on later runs (§4.3).
+   */
+  dismissFinding(findingId: string, reason?: string): void {
     const f = this.state.findings.find((x) => x.id === findingId);
     if (!f) return;
+    const why = reason?.trim().slice(0, 200);
     this.emit([
-      { type: 'finding.updated', finding: { ...f, status: 'dismissed' } },
+      {
+        type: 'finding.updated',
+        finding: { ...f, status: 'dismissed', ...(why ? { ownerReason: why } : {}) },
+      },
       {
         type: 'overlay.set',
         overlays: {
@@ -860,7 +1030,30 @@ export class RealRun {
         },
       },
     ]);
-    this.say(copy.fitts.dismissFollowUp);
+    if (why) {
+      this.deps.memory?.add(
+        ruleFor('not-a-problem', f, this.checks.get(f.id)?.probe, why, this.state.runId),
+      );
+      this.say(format(copy.fitts.dismissNoted, { reason: why.toLowerCase() }));
+    } else this.say(copy.fitts.dismissFollowUp);
+  }
+
+  /** "This matters more/less": the owner's severity, remembered (§4.2). */
+  private weigh(f: Finding, delta: 1 | -1): void {
+    const severity = Math.max(1, Math.min(4, f.severity + delta)) as Finding['severity'];
+    if (severity === f.severity) return;
+    this.emit([{ type: 'finding.updated', finding: { ...f, severity } }]);
+    this.deps.memory?.add(
+      ruleFor(
+        'severity',
+        f,
+        this.checks.get(f.id)?.probe,
+        delta > 0 ? 'This matters more' : 'This matters less',
+        this.state.runId,
+        delta,
+      ),
+    );
+    this.say(format(copy.fitts.severityNoted, { title: f.title, n: severity }));
   }
 
   retryChange(changeId: string, hint?: string): void {
@@ -879,7 +1072,9 @@ export class RealRun {
    */
   private fixesSettled(): void {
     if (this.approvalId || this.pipeline?.busy || this.nudged || !this.fixPhase) return;
-    this.finish();
+    if (this.proposalId || this.finished) return;
+    this.wantsProposal = true;
+    this.kick();
   }
 
   /**
@@ -1300,6 +1495,7 @@ export class RealRun {
       return;
     }
     this.picked = picked;
+    this.deps.memory?.taste('likes', `The look “${picked.name}”: ${picked.notes}`);
     this.emit([{ type: 'chat.item.updated', item: { ...item, selectedId: directionId } }]);
     // Without a redesigner (offline), or once the run is over, a pick is only acknowledged.
     if (!this.deps.redesigner || this.finished) {
@@ -1444,6 +1640,7 @@ export class RealRun {
     });
     if (!revise) return outcome('refused', 'no directions to revise yet');
     const n = this.round + 1;
+    this.deps.memory?.taste('dislikes', feedback);
     this.emit([{ type: 'now.changed', nowText: `Making round ${n} of the looks` }]);
     const pages = [...this.pages.values()].slice(0, THEME_ROUTES);
     let next: Direction[];
@@ -1643,6 +1840,7 @@ export class RealRun {
                 },
                 this.state.brief,
                 this.abort.signal,
+                memoryForReviewers(this.deps.memory?.get()),
               ),
             ),
           );
@@ -1662,9 +1860,11 @@ export class RealRun {
       },
     });
     this.checks = checks;
-    const withReplay = await this.withSources(findings.map((f) => this.withReplay(f)));
+    // The owner's rules first (§4.3): what they said is fine goes to the owner-ok lane.
+    const ruled = applyRules(findings, this.deps.memory?.get(), (f) => checks.get(f.id)?.probe);
+    const withReplay = await this.withSources(ruled.map((f) => this.withReplay(f)));
     this.post(withReplay);
-    const shown = withReplay.filter((f) => f.lane !== 'suggestion');
+    const shown = withReplay.filter((f) => (f.lane ?? 'shown') === 'shown');
     void this.evidence(shown).then(() => this.media(shown));
   }
 
@@ -1677,7 +1877,7 @@ export class RealRun {
     const out: Finding[] = [];
     for (const f of findings) {
       if (this.finished) return [...out, ...findings.slice(out.length)];
-      out.push(f.lane === 'suggestion' ? f : await this.withSource(f));
+      out.push((f.lane ?? 'shown') === 'shown' ? await this.withSource(f) : f);
     }
     return out;
   }
@@ -1921,7 +2121,7 @@ export class RealRun {
     const events: RunEvent[] = [];
     for (const f of findings) {
       events.push({ type: 'finding.created', finding: f });
-      if (f.lane === 'suggestion') continue;
+      if (f.lane === 'suggestion' || f.lane === 'owner-ok') continue;
       events.push({ type: 'chat.item', item: { id: this.id(), type: 'finding', findingId: f.id } });
       if (f.elementRef) problems.push({ ref: f.elementRef, pin: problems.length + 1 });
     }
@@ -2135,38 +2335,24 @@ export class RealRun {
     ]);
     for (const r of this.coverage.stateRoutes()) this.coverage.setStatus(r.path, 'done', r.label);
     this.syncCoverage();
+    // What was checked, for a run that found nothing (the proposal says so; §4.1).
     const { done } = this.coverage.controlsTried();
     const pages = this.coverage.stateRoutes().length;
-    const redesigned = this.state.changes.some(
-      (c) => c.kind === 'redesign' && c.status === 'verified',
-    );
-    if (!redesigned && this.state.findings.filter((f) => f.lane !== 'suggestion').length === 0) {
-      this.setActivity('idle');
-      this.card(
-        'nothing-found',
-        (a) => {
-          if (a === 'finish') return this.finish();
-          this.emit([
-            {
-              type: 'chat.item',
-              item: {
-                id: this.id(),
-                type: 'steps',
-                steps: [
-                  { label: `Opened ${pages} pages`, costUsd: 0 },
-                  { label: `Tried ${done} controls`, costUsd: 0 },
-                  ...this.history.slice(-12).map((h) => ({ label: h, costUsd: 0 })),
-                ],
-              },
-            },
-          ]);
-          this.say('That’s everything I checked.');
+    if (this.state.findings.filter((f) => (f.lane ?? 'shown') === 'shown').length === 0)
+      this.emit([
+        {
+          type: 'chat.item',
+          item: {
+            id: this.id(),
+            type: 'steps',
+            steps: [
+              { label: `Opened ${pages} pages`, costUsd: 0 },
+              { label: `Tried ${done} controls`, costUsd: 0 },
+              ...this.history.slice(-12).map((h) => ({ label: h, costUsd: 0 })),
+            ],
+          },
         },
-        false,
-      );
-      return;
-    }
-    this.finish();
+      ]);
   }
 
   /**
@@ -2196,6 +2382,7 @@ export class RealRun {
     this.abort.abort();
     this.pickWaiter?.(undefined);
     const { done } = this.coverage.controlsTried();
+    this.proposalId = undefined;
     this.emit([
       { type: 'now.changed' },
       { type: 'waiting.changed' },
@@ -2358,6 +2545,9 @@ export class RealRun {
       void this.pipeline.adjust(text);
       return;
     }
+    // An open finish proposal closes: the message is what to do next (§4.1).
+    const proposal = this.state.chat.find((c) => c.id === this.proposalId);
+    if (proposal?.type === 'finish-proposal') this.answerProposal(proposal, 'continue');
     // The next decision hears it (§1.4); while Fitts acts, it shows as queued until then.
     const pointing = opts?.pointingAt
       ? ` [pointing at ref ${opts.pointingAt}${opts.pointingLabel ? `: ${opts.pointingLabel}` : ''}]`
@@ -2461,6 +2651,16 @@ export class RealRun {
     const item = this.state.chat.find((c) => c.id === itemId);
     if (item?.type === 'review' && item.answer === undefined) {
       this.answerReview(item, answer);
+      return;
+    }
+    if (item?.type === 'finish-proposal') {
+      if (item.answer === undefined) this.answerProposal(item, answer);
+      return;
+    }
+    // "This matters more/less" on a finding (§4.2): the item id is the finding's.
+    const finding = this.state.findings.find((f) => f.id === itemId);
+    if (finding && (answer === 'more' || answer === 'less')) {
+      this.weigh(finding, answer === 'more' ? 1 : -1);
       return;
     }
     if (!item || (item.type !== 'state' && item.type !== 'question') || item.answer !== undefined)

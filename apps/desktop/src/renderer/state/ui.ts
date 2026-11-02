@@ -77,6 +77,8 @@ export interface BatchReview {
   itemId: string;
   /** Your call on each fix so far; nothing happens until you press Go ahead. */
   decisions: Record<string, Decision>;
+  /** SPEC-phase4 §4.2: why each dismissed one isn't a problem. */
+  reasons?: Record<string, string>;
 }
 
 type UiFields = Omit<

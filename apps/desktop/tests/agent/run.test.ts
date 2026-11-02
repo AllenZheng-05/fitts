@@ -2,6 +2,8 @@
 import {
   replay,
   type CostEvent,
+  type MemoryRule,
+  type ProjectMemory,
   type RunEvent,
   type RunState,
   type SourceFrame,
@@ -147,6 +149,8 @@ function setup({
   media,
   fixer,
   redesigner,
+  memory,
+  reportIssue,
 }: {
   site?: ReturnType<typeof fakeSite>;
   brain?: Brain;
@@ -161,6 +165,8 @@ function setup({
   media?: RunDeps['media'];
   fixer?: RunDeps['fixer'];
   redesigner?: RunDeps['redesigner'];
+  memory?: RunDeps['memory'];
+  reportIssue?: RunDeps['reportIssue'];
 } = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
@@ -170,6 +176,8 @@ function setup({
       ...(themeFit ? { themeFit } : {}),
       ...(media ? { media } : {}),
       ...(fixer ? { fixer } : {}),
+      ...(memory ? { memory } : {}),
+      ...(reportIssue ? { reportIssue } : {}),
       ...(redesigner ? { redesigner } : {}),
       ...(maxSteps ? { maxSteps } : {}),
       ...(decider ? { decider } : {}),
@@ -195,6 +203,18 @@ const until = async (cond: () => boolean, ms = 3000) => {
   }
 };
 
+/** The open finish proposal (SPEC-phase4 §4.1), if Fitts has made one. */
+const proposal = (s: RunState | undefined) =>
+  s?.chat.find((c) => c.type === 'finish-proposal' && c.answer === undefined);
+
+/** Waits for Fitts to propose finishing, answers Finish as the owner, and waits for Done. */
+async function finished(state: () => RunState | undefined, run: RealRun, ms = 3000) {
+  await until(() => state()?.phase === 'done' || proposal(state()) !== undefined, ms);
+  const p = proposal(state());
+  if (p) run.answer(p.id, 'finish');
+  await until(() => state()?.phase === 'done', ms);
+}
+
 const card = (s: RunState | undefined, kind: string) =>
   s?.chat.find((c) => c.type === 'state' && c.stateKind === kind && c.answer === undefined);
 
@@ -205,7 +225,7 @@ describe('RealRun crawl (coverage gate)', () => {
     await until(() => Boolean(card(state(), 'login-wall')));
     run.answer(card(state(), 'login-wall')?.id ?? '', 'skip');
     // With probe findings (here: no back or cancel control on /c) the run ends on its own.
-    await until(() => state()?.phase === 'done');
+    await finished(state, run);
     const s = state();
     expect(s?.routes.map((r) => r.path)).toEqual(['/', '/b', '/c', '/login']);
     expect(s?.routes.every((r) => r.status === 'done')).toBe(true);
@@ -521,7 +541,7 @@ describe('theme-fit (§8.3)', () => {
     });
     fits.run.start();
     await skipLogin(fits.state, fits.run);
-    await until(() => fits.state()?.phase === 'done');
+    await finished(fits.state, fits.run);
     expect(fits.state()?.chat.some((c) => c.type === 'lookfeel')).toBe(false);
     fits.run.dispose();
   });
@@ -548,7 +568,7 @@ describe('theme-fit (§8.3)', () => {
     expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBeUndefined();
     expect(state()?.waitingFor).toBe(`question:${review(state())?.id ?? ''}`);
     run.answer(review(state())?.id ?? '', 'ok');
-    await until(() => state()?.phase === 'done');
+    await finished(state, run);
     expect(review(state())?.answer).toBe('ok');
     const change = state()?.changes.find((c) => c.kind === 'redesign');
     expect(change).toMatchObject({
@@ -581,7 +601,7 @@ describe('theme-fit (§8.3)', () => {
       .state()
       ?.chat.find((c) => c.type === 'question' && c.text === copy.fitts.whichLook);
     keep.run.answer(q?.id ?? '', copy.fitts.keepLook);
-    await until(() => keep.state()?.phase === 'done');
+    await finished(keep.state, keep.run);
     expect(r.calls).not.toContain('prepare');
     keep.run.dispose();
   });
@@ -814,8 +834,9 @@ describe('Done: replays and the step cap (Allen’s feedback, round 4)', () => {
     expect(state()?.controlsTried).toEqual({ done: 2, total: 2 });
     await until(() => lines().some((t) => t.startsWith('I’ve stopped finding anything new')));
     // Nothing was found on this fake, so Fitts asks whether to finish; the run ends on "finish".
-    await until(() => Boolean(card(state(), 'nothing-found')));
-    run.answer(card(state(), 'nothing-found')?.id ?? '', 'finish');
+    // Nothing found: the proposal says so; the owner finishes (§4.1).
+    await until(() => proposal(state()) !== undefined);
+    run.answer(proposal(state())?.id ?? '', 'finish');
     await until(() => state()?.phase === 'done');
     run.dispose();
   });
@@ -841,14 +862,14 @@ describe('the guarantees hold against a hostile decider (SPEC-phase3 §1.6)', ()
   };
 
   it('finish is refused while pages and controls are left; the run still covers everything', async () => {
-    const decider = always('finish');
+    const decider = always('propose_finish');
     const { run, state } = setup({ decider: decider });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     const s = state();
     expect(s?.controlsTried.done).toBe(s?.controlsTried.total);
-    expect(decider.seen.some((x) => x.recent.includes('finish:refused'))).toBe(true);
+    expect(decider.seen.some((x) => x.recent.includes('propose_finish:refused'))).toBe(true);
     run.dispose();
   });
 
@@ -857,7 +878,7 @@ describe('the guarantees hold against a hostile decider (SPEC-phase3 §1.6)', ()
     const { run, state } = setup({ decider: decider, origin: 'https://example.com' });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     expect(decider.seen.some((x) => x.recent.includes('fix:refused'))).toBe(true);
     expect(state()?.chat.some((c) => c.type === 'approval.batch')).toBe(false);
     run.dispose();
@@ -869,7 +890,7 @@ describe('the guarantees hold against a hostile decider (SPEC-phase3 §1.6)', ()
     });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     expect(state()?.controlsTried.done).toBe(state()?.controlsTried.total);
     run.dispose();
   });
@@ -914,7 +935,7 @@ describe('the owner steers (SPEC-phase3 §1.3, §1.4)', () => {
     run.start();
     run.sendMessage('please skip /c');
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     expect(state()?.routes.find((r) => r.path === '/c')).toMatchObject({
       status: 'done',
       label: 'skipped',
@@ -1016,7 +1037,7 @@ describe('the owner steers (SPEC-phase3 §1.3, §1.4)', () => {
     const { run, state } = setup({ decider: spy, origin: 'https://example.com' });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     expect(outcomes).toContain('new_look:refused');
     expect(state()?.brief.look).toBeUndefined();
     run.dispose();
@@ -1117,7 +1138,7 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
     run.pickDirection('r2-Warmb');
     await until(() => Boolean(review(state())), 10_000);
     run.answer(review(state())?.id ?? '', 'ok');
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     expect(state()?.changes.find((c) => c.kind === 'redesign')?.title).toBe('Redesign: Warm linen');
     run.dispose();
   });
@@ -1152,7 +1173,7 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
     expect(r.calls.filter((c) => c === 'verifyPages').length).toBe(before + 1);
     expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBeUndefined();
     run.answer(review(state())?.id ?? '', 'ok');
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBe(7);
     run.dispose();
   });
@@ -1212,7 +1233,7 @@ describe('rounds and the final review (SPEC-phase3 §2.3, §2.4)', () => {
     });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     expect(state()?.changes.find((c) => c.kind === 'redesign')?.prNumber).toBe(7);
     expect(review(state())).toMatchObject({ autonomous: true });
     run.answer(review(state())?.id ?? '', 'back');
@@ -1333,7 +1354,7 @@ describe('a rolled-back fix wakes the decider (Allen’s feedback, run 1)', () =
     });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     // The decider saw the rollback, with its reason and how many passes the fixer took.
     expect(
       situations.some((s) =>
@@ -1541,7 +1562,7 @@ describe('this run, replayed (Allen’s feedback, round 7)', () => {
     const { run, state } = setup({ site, decider });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done' || Boolean(card(state(), 'nothing-found')), 10_000);
+    await until(() => state()?.phase === 'done' || proposal(state()) !== undefined, 10_000);
     const said = state()?.chat.flatMap((c) => (c.type === 'fitts.message' ? [c.text] : [])) ?? [];
     // The checks that would have run on nothing were refused, so none announced itself...
     for (const a of ['looks', 'phone_pass', 'check_links', 'review'])
@@ -1580,7 +1601,7 @@ describe('every finding gets a source (SPEC-phase4 §2.2)', () => {
     const { run, state } = setup({ site });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
     expect(f?.source).toEqual({ file: 'src/B.tsx', line: 4, col: 5, confidence: 'plugin' });
     expect(f?.sourceChain?.map((x) => x.component ?? x.kind)).toEqual(['host', 'SaveButton']);
@@ -1604,7 +1625,7 @@ describe('every finding gets a source (SPEC-phase4 §2.2)', () => {
     const { run, state } = setup({ site });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
     // The element's name first; the page-level finding (no element) searches for its route.
     expect(greps).toEqual(['Save', "'/b'"]);
@@ -1628,9 +1649,223 @@ describe('every finding gets a source (SPEC-phase4 §2.2)', () => {
     const { run, state } = setup({ site, origin: 'https://openteamsheets.com' });
     run.start();
     await skipLogin(state, run);
-    await until(() => state()?.phase === 'done', 10_000);
+    await finished(state, run, 10_000);
     const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
     expect(f?.source).toEqual({ file: 'src/B.tsx', line: 4, col: 5, confidence: 'source-map' });
+    run.dispose();
+  });
+});
+
+describe('the owner decides (SPEC-phase4 §4)', () => {
+  const smallTarget = () =>
+    Promise.resolve([
+      {
+        probe: 'target-size' as const,
+        pass: false,
+        items: [{ ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' }],
+      },
+    ]);
+  /** A memory the run can read and add to; what it added is kept for the asserts. */
+  const fakeMemory = (memory?: ProjectMemory) => {
+    const added: MemoryRule[] = [];
+    const forgotten: string[] = [];
+    const tastes: string[] = [];
+    return {
+      added,
+      forgotten,
+      tastes,
+      dep: {
+        get: () => memory,
+        add: (rule: MemoryRule) => void added.push(rule),
+        forget: (id: string) => void forgotten.push(id),
+        taste: (kind: 'likes' | 'dislikes', text: string) => void tastes.push(`${kind}: ${text}`),
+      },
+    };
+  };
+
+  it('only the owner ends a run: a decider that only proposes (or babbles) never reaches Done', async () => {
+    let n = 0;
+    const decider = {
+      next: () => {
+        n += 1;
+        return Promise.resolve({ ability: n % 2 ? 'propose_finish' : 'make_coffee' } as never);
+      },
+    };
+    const { run, state } = setup({ decider });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => proposal(state()) !== undefined, 10_000);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(state()?.phase).toBe('audit');
+    expect(state()?.activity).toBe('waiting-on-user');
+    expect(state()?.waitingFor).toBe('finish-proposal');
+    // Only one proposal, however often the decider asks.
+    expect(state()?.chat.filter((c) => c.type === 'finish-proposal')).toHaveLength(1);
+    // The owner: Finish.
+    run.answer(proposal(state())?.id ?? '', 'finish');
+    await until(() => state()?.phase === 'done');
+    run.dispose();
+  });
+
+  it('Keep going (any message) closes the proposal, and Fitts proposes again when it’s done', async () => {
+    const { run, state } = setup();
+    run.start();
+    await skipLogin(state, run);
+    await until(() => proposal(state()) !== undefined, 10_000);
+    const first = proposal(state())?.id ?? '';
+    run.sendMessage('Keep going: look at /c again');
+    await until(
+      () =>
+        state()?.chat.find((c) => c.id === first)?.type === 'finish-proposal' &&
+        proposal(state())?.id !== first,
+    );
+    expect(state()?.chat.find((c) => c.id === first)).toMatchObject({ answer: 'continue' });
+    expect(state()?.phase).toBe('audit');
+    // The scripted decider has nothing left to do, so it proposes again.
+    await until(() => proposal(state()) !== undefined, 10_000);
+    expect(proposal(state())?.id).not.toBe(first);
+    run.answer(proposal(state())?.id ?? '', 'finish');
+    await until(() => state()?.phase === 'done');
+    run.dispose();
+  });
+
+  it('fixes that settle propose finishing instead of ending the run', async () => {
+    const r = redesignable();
+    r.site.probes = smallTarget;
+    const fixer: RunDeps['fixer'] = () =>
+      Promise.resolve({ patched: 0, summary: 'no safe fix in CSS' });
+    const { run, state } = setup({
+      site: r.site,
+      fixer,
+      redesigner: r.redesigner,
+      mode: 'autonomous',
+    });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => proposal(state()) !== undefined, 10_000);
+    expect(state()?.phase).toBe('audit');
+    expect(state()?.changes.some((c) => c.status === 'rolled-back')).toBe(true);
+    run.answer(proposal(state())?.id ?? '', 'finish');
+    await until(() => state()?.phase === 'done');
+    run.dispose();
+  });
+
+  it('the owner reports an issue: a finding of theirs, shown and pinned, remembered', async () => {
+    const mem = fakeMemory();
+    let reported = false;
+    const decider = {
+      next: (s: Situation) => {
+        if (!reported && s.coverage.ended) {
+          reported = true;
+          return Promise.resolve<Decision>({
+            ability: 'report_issue',
+            ref: 'go-b',
+            route: '/',
+            text: 'Open B is confusing, people never find it',
+          });
+        }
+        return Promise.resolve<Decision>({ ability: scriptedNext(s) });
+      },
+    };
+    const { run, state } = setup({ decider, memory: mem.dep });
+    run.start();
+    await skipLogin(state, run);
+    await finished(state, run, 10_000);
+    const f = state()?.findings.find((x) => x.owner);
+    expect(f).toMatchObject({
+      lane: 'shown',
+      status: 'open',
+      route: '/',
+      elementRef: 'go-b',
+      severity: 3,
+      agreement: { agreeing: 1, total: 1, who: ['You'] },
+    });
+    expect(f?.title).toBe('Open B is confusing, people never find it');
+    expect(state()?.chat.some((c) => c.type === 'finding' && c.findingId === f?.id)).toBe(true);
+    expect(state()?.overlays.problems.some((p) => p.ref === 'go-b')).toBe(true);
+    expect(mem.added.map((r) => r.kind)).toContain('is-a-problem');
+    expect(
+      state()?.chat.some((c) => c.type === 'fitts.message' && c.text.includes('as yours')),
+    ).toBe(true);
+    run.dispose();
+  });
+
+  it('Not a problem with a reason is remembered; It is a problem forgets it; more/less re-weighs', async () => {
+    const mem = fakeMemory();
+    const site = fakeSite({ probes: smallTarget });
+    const { run, state } = setup({ site, memory: mem.dep });
+    run.start();
+    await skipLogin(state, run);
+    await until(() => proposal(state()) !== undefined, 10_000);
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    expect(f).toBeTruthy();
+    run.dismissFinding(f?.id ?? '', 'Intentional');
+    expect(state()?.findings.find((x) => x.id === f?.id)).toMatchObject({
+      status: 'dismissed',
+      ownerReason: 'Intentional',
+    });
+    expect(mem.added[0]).toMatchObject({
+      kind: 'not-a-problem',
+      reason: 'Intentional',
+      match: { probe: 'target-size', route: '/' },
+    });
+    expect(
+      state()?.chat.some(
+        (c) => c.type === 'fitts.message' && c.text.startsWith('Noted: intentional'),
+      ),
+    ).toBe(true);
+    run.reopenFinding(f?.id ?? '');
+    expect(mem.forgotten).toEqual([mem.added[0]?.id]);
+    expect(state()?.findings.find((x) => x.id === f?.id)).toMatchObject({ status: 'open' });
+    expect(state()?.findings.find((x) => x.id === f?.id)?.ownerReason).toBeUndefined();
+    const before = state()?.findings.find((x) => x.id === f?.id)?.severity ?? 0;
+    run.answer(f?.id ?? '', 'more');
+    expect(state()?.findings.find((x) => x.id === f?.id)?.severity).toBe(before + 1);
+    expect(mem.added.at(-1)).toMatchObject({ kind: 'severity', delta: 1 });
+    run.answer(proposal(state())?.id ?? '', 'finish');
+    await until(() => state()?.phase === 'done');
+    run.dispose();
+  });
+
+  it('a remembered rule keeps the finding out: owner-ok, never posted, pinned or fixed; the run says it remembers', async () => {
+    const rule: MemoryRule = {
+      id: 'not-a-problem:target-size|tap target is too small@/',
+      kind: 'not-a-problem',
+      match: { probe: 'target-size', titleKey: 'target-size|tap target is too small', route: '/' },
+      reason: 'Intentional',
+      at: '2026-11-01T00:00:00.000Z',
+      runId: 'run-0',
+    };
+    const mem = fakeMemory({ rules: [rule], likes: [], dislikes: [] });
+    const r = redesignable();
+    r.site.probes = smallTarget;
+    const { run, state } = setup({
+      site: r.site,
+      fixer: r.fixer,
+      redesigner: r.redesigner,
+      memory: mem.dep,
+    });
+    run.start();
+    expect(
+      state()?.chat.some(
+        (c) =>
+          c.type === 'fitts.message' && /I remember 1 thing you said isn’t a problem/.test(c.text),
+      ),
+    ).toBe(true);
+    await skipLogin(state, run);
+    await until(() => proposal(state()) !== undefined, 10_000);
+    const f = state()?.findings.find((x) => x.title === 'Tap target is too small');
+    expect(f).toMatchObject({ lane: 'owner-ok', ownerReason: 'Intentional', status: 'open' });
+    expect(state()?.chat.some((c) => c.type === 'finding' && c.findingId === f?.id)).toBe(false);
+    expect(state()?.overlays.problems.some((p) => p.ref === 'go-b')).toBe(false);
+    expect(state()?.chat.some((c) => c.type === 'approval.batch')).toBe(false);
+    // Asked for by id, it still isn't fixed (§14).
+    run.approveFixes([f?.id ?? '']);
+    await new Promise((res) => setTimeout(res, 100));
+    expect(state()?.findings.find((x) => x.id === f?.id)?.status).toBe('open');
+    expect(state()?.changes).toHaveLength(0);
+    run.answer(proposal(state())?.id ?? '', 'finish');
+    await until(() => state()?.phase === 'done');
     run.dispose();
   });
 });

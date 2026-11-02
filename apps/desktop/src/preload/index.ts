@@ -10,6 +10,7 @@ import {
   type KeyName,
   type MicAccess,
   type Platform,
+  type ProjectMemory,
   type RunState,
   type PointedElement,
   type SiteRect,
@@ -104,6 +105,12 @@ const bridge: FittsBridge = {
   },
   openLink: (url) => ipcRenderer.send(IPC.openLink, url),
   requestMic: () => ipcRenderer.invoke(IPC.micRequest) as Promise<MicAccess>,
+  memory: {
+    get: (projectId) => ipcRenderer.invoke(IPC.memoryGet, projectId) as Promise<ProjectMemory>,
+    delete: (projectId, ruleId) =>
+      ipcRenderer.invoke(IPC.memoryDelete, projectId, ruleId) as Promise<ProjectMemory>,
+    clear: (projectId) => ipcRenderer.invoke(IPC.memoryClear, projectId) as Promise<ProjectMemory>,
+  },
   openMicSettings: () => ipcRenderer.send(IPC.micSettings),
   github: {
     status: () => ipcRenderer.invoke(IPC.githubStatus) as Promise<GitHubStatus>,

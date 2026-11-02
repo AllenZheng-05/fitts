@@ -126,8 +126,14 @@ export class ReviewerPanel {
   ) {}
 
   /** All five personas on one route, in parallel. A persona that fails returns nothing. */
-  async review(ev: RouteEvidence, brief: Brief, signal?: AbortSignal): Promise<PersonaReview[]> {
-    const text = reviewInput(ev, brief);
+  async review(
+    ev: RouteEvidence,
+    brief: Brief,
+    signal?: AbortSignal,
+    /** SPEC-phase4 §4.3: the owner's rules and tastes, as calibration (never a veto). */
+    calibration: string[] = [],
+  ): Promise<PersonaReview[]> {
+    const text = [reviewInput(ev, brief), ...calibration].join('\n');
     const roster = this.roster();
     return Promise.all(
       PERSONAS.map(async (persona, i) => {
