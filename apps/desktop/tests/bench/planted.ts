@@ -12,6 +12,8 @@ export interface Planted {
   refs: string[];
   /** Words a finding about this issue uses (title, finding, evidence; lowercase). */
   words: RegExp;
+  /** How the report names it ("A9"); "#n" when absent. */
+  label?: string;
 }
 
 export const PLANTED: Planted[] = [
@@ -243,7 +245,11 @@ export function matches(f: Finding, p: Planted): boolean {
   const placed =
     p.routes === 'all' ||
     p.routes.some((r) => routes.has(r)) ||
-    (f.elementRef !== undefined && p.refs.includes(f.elementRef));
+    (f.elementRef !== undefined &&
+      f.elementRef !== null &&
+      p.refs.some((r) =>
+        r.endsWith('*') ? (f.elementRef ?? '').startsWith(r.slice(0, -1)) : r === f.elementRef,
+      ));
   return placed && p.words.test(textOf(f));
 }
 
@@ -257,13 +263,13 @@ export interface BenchScore {
 }
 
 /** Maximum one-to-one matching of shown findings to planted issues (augmenting paths). */
-export function score(findings: Finding[]): BenchScore {
+export function score(findings: Finding[], planted: Planted[] = PLANTED): BenchScore {
   const shown = findings.filter((f) => f.lane !== 'suggestion');
   const owner = new Map<number, number>(); // planted n → finding index
   const tryAssign = (fi: number, seen: Set<number>): boolean => {
     const f = shown[fi];
     if (!f) return false;
-    for (const p of PLANTED) {
+    for (const p of planted) {
       if (seen.has(p.n) || !matches(f, p)) continue;
       seen.add(p.n);
       const current = owner.get(p.n);
@@ -276,15 +282,17 @@ export function score(findings: Finding[]): BenchScore {
   };
   shown.forEach((_, i) => tryAssign(i, new Set()));
   const used = new Set(owner.values());
-  const matched = PLANTED.filter((p) => owner.has(p.n)).map((p) => ({
-    planted: p,
-    finding: shown[owner.get(p.n) ?? 0] as Finding,
-  }));
+  const matched = planted
+    .filter((p) => owner.has(p.n))
+    .map((p) => ({
+      planted: p,
+      finding: shown[owner.get(p.n) ?? 0] as Finding,
+    }));
   return {
     matched,
-    missed: PLANTED.filter((p) => !owner.has(p.n)),
+    missed: planted.filter((p) => !owner.has(p.n)),
     falsePositives: shown.filter((f, i) => !used.has(i) && f.severity >= 2),
-    recall: matched.length / PLANTED.length,
+    recall: matched.length / planted.length,
     shown: shown.length,
     suggestions: findings.length - shown.length,
   };
@@ -292,8 +300,8 @@ export function score(findings: Finding[]): BenchScore {
 
 export function report(s: BenchScore): string {
   const lines = [
-    `Recall ${s.matched.length}/${PLANTED.length} (${Math.round(s.recall * 100)}%) · false positives at severity ≥2: ${s.falsePositives.length} · shown ${s.shown}, suggestions ${s.suggestions}`,
-    ...s.missed.map((p) => `  missed #${p.n}: ${p.issue}`),
+    `Recall ${s.matched.length}/${s.matched.length + s.missed.length} (${Math.round(s.recall * 100)}%) · false positives at severity ≥2: ${s.falsePositives.length} · shown ${s.shown}, suggestions ${s.suggestions}`,
+    ...s.missed.map((p) => `  missed ${p.label ?? `#${p.n}`}: ${p.issue}`),
     ...s.falsePositives.map(
       (f) =>
         `  false positive: [${f.severity}] ${f.title} (${f.route}${f.elementRef ? ` #${f.elementRef}` : ''})`,

@@ -4,6 +4,7 @@ import { IPC, type ToolsStatus } from '@fitts/schema';
 import { ipcMain } from 'electron';
 import { homedir } from 'node:os';
 import { run } from './spawn';
+import { findTool } from './android/adb';
 
 const version = (text: string) => /(\d+(?:\.\d+)*)/.exec(text)?.[1] ?? null;
 
@@ -23,6 +24,7 @@ export async function checkTools(githubLogin?: () => string | undefined): Promis
     git: git.code === 0 ? version(git.stdout) : null,
     gh: signedIn ?? (gh.code === 0 ? gh.stdout.trim() || null : null),
     node: node.code === 0 ? (version(node.stdout)?.split('.')[0] ?? null) : null,
+    ...(findTool('adb') ? { android: { adb: true, emulator: Boolean(findTool('emulator')) } } : {}),
   };
 }
 

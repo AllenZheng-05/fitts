@@ -263,6 +263,27 @@ const SAMPLE: Record<ProbeName, [string, string]> = {
     'the main content shows after 3.4 s on a mid-range phone on Slow 4G (dev build)',
     'under 2.5 s',
   ],
+  'android-target': ['"Remove Margherita" is 36×36dp', 'at least 48×48dp'],
+  'android-label': [
+    'the ViewGroup header-cart-button has no label a screen reader can read',
+    'a content description',
+  ],
+  'android-duplicate-label': [
+    '2 controls are all called "Add to order"',
+    'each control named for what it does',
+  ],
+  'android-duplicate-bounds': [
+    '"Margherita" and the ViewGroup menu-row-favorite-margherita are two tap targets in exactly the same place',
+    'one control per place on the screen',
+  ],
+  'android-editable-desc': [
+    'the field pickup-name has a content description ("Your name")',
+    'a hint or label instead',
+  ],
+  'android-contrast': [
+    '"Wood-fired" is about 2.1:1 (estimate from the screen\'s pixels)',
+    'at least 4.5:1',
+  ],
 };
 
 describe('noticeProbe: every probe has a template (§6A.2)', () => {

@@ -360,6 +360,16 @@ function toolChips(tools: ToolsStatus | null): { text: string; ok: boolean }[] {
       text: tools.node ? format(c.node, { n: tools.node }) : c.nodeMissing,
       ok: Boolean(tools.node),
     },
+    // SPEC-phase4 §9.2: shown when the Android SDK is here (web-only users don't need it).
+    ...(tools.android
+      ? [
+          { text: c.androidSdk, ok: true },
+          {
+            text: tools.android.emulator ? c.emulator : c.emulatorMissing,
+            ok: tools.android.emulator,
+          },
+        ]
+      : []),
   ];
 }
 

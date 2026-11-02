@@ -319,3 +319,49 @@ describe('the judge’s moment joins the probe finding for the same thing (bench
     expect(f).toHaveLength(1);
   });
 });
+
+describe('a judged jump doesn’t join another problem on the same row (bench:android, Nov 2)', () => {
+  it('stays its own finding beside the overlapping-rows probe finding', () => {
+    const jump = {
+      ...judgeDraft(
+        {
+          kind: 'jumped',
+          measured: '"Margherita" jumped 290 px down',
+          ref: 'menu-row-favorite-margherita',
+        },
+        {
+          expected: false,
+          why: 'The menu shifts as a banner lands.',
+          severity: 3,
+          heuristic: 'H3',
+        },
+        'obs-48',
+      ),
+    };
+    const f = aggregate({
+      runId: 'run-1',
+      probes: [
+        {
+          evidenceId: 'e1',
+          probe: 'android-duplicate-bounds',
+          route: '/',
+          pass: false,
+          items: [
+            {
+              ref: 'menu-row-favorite-margherita',
+              selector: 'ViewGroup',
+              measured: 'two tap targets in exactly the same place',
+              expected: '',
+            },
+          ],
+        },
+      ],
+      reviews: [{ route: '/', persona: JUDGE_PERSONA, drafts: [jump] }],
+      stepOf: () => ({ stepIndex: 1, atMs: 0 }),
+    });
+    expect(f.map((x) => x.title).sort()).toEqual([
+      'The page jumps while you use it',
+      'Two controls sit in the same place',
+    ]);
+  });
+});

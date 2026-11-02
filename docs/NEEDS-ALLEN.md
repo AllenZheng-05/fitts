@@ -22,7 +22,24 @@ Fitts audits it as a standalone project, so the demo run uses a clone outside th
    then `npm install` there, and open that folder in Fitts for the demo run (its dev server
    runs on port 5176).
 
-## P4-0b. Publish the Android app's mirror and build it on the emulator (15 min, mostly Gradle)
+## P4-0a. ✓ Done (Nov 2): long paths and CMake 3.31.6
+
+The Android dev build fails on Windows' 260-character path limit. React Native's C++ build repeats
+the project path inside its own folders; the SDK's CMake 3.22.1 ships ninja 1.10, which can't do
+long paths, and `LongPathsEnabled` is 0. Fitts tried short folders and a `subst` drive (Gradle
+resolves real paths, so that fails too) and removed the mapping afterwards.
+
+1. In an admin PowerShell:
+   `New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force`
+2. Android Studio → SDK Manager → SDK Tools → check "Show Package Details" → CMake → install
+   **3.31.x** (its ninja handles long paths).
+3. Tell Fitts; it builds the app from C:/Users/Plasm/bea with `cmake.dir` pointing at the new
+   CMake (set in the generated android/local.properties, which isn't committed).
+
+Done by Allen on Nov 2 (LongPathsEnabled = 1, CMake 3.31.6 with ninja 1.12.1); Fitts built the dev
+client from C:/Users/Plasm/bea and it opens on Fitts_Pixel.
+
+## P4-0b. Publish the Android app's mirror (2 min; the clone and the build are done)
 
 demo/basil-ember-android is Basil & Ember's ordering app (Expo SDK 58, a development build); its
 issues are planted (PLANTED.md).
@@ -30,11 +47,18 @@ issues are planted (PLANTED.md).
 1. `gh repo create AllenZheng-05/fitts-demo-basil-ember-android --public`, then
    `pnpm demo:mirror --push` from the monorepo root (a local export is already committed under
    `.fitts-dev/mirror/`).
-2. Clone it outside the monorepo, e.g.
-   `git clone https://github.com/AllenZheng-05/fitts-demo-basil-ember-android C:/Users/Plasm/Projects/basil-ember-android-demo`,
-   then `npm install` there (its .npmrc sets legacy-peer-deps).
+2. Clone it to a **short path**, e.g.
+   `git clone https://github.com/AllenZheng-05/fitts-demo-basil-ember-android C:/Users/Plasm/bea`,
+   then `npm install` there (its .npmrc sets legacy-peer-deps). React Native's C++ build repeats
+   the project path inside its own folders and hits Windows' 260-character limit from a deeper
+   folder (the monorepo's demo/basil-ember-android fails). Fitts built it from C:/Users/Plasm/bea.
 3. With Fitts_Pixel running: `npx expo run:android` once (builds and installs the dev client),
    then open that folder in Fitts for the Android demo run.
+
+Steps 2 and 3 are done (Nov 2): C:/Users/Plasm/bea is a clone of the local mirror export, built and
+installed on Fitts_Pixel. Only step 1 (create the GitHub repo and push) is yours; afterwards, in
+C:/Users/Plasm/bea, `git remote set-url origin https://github.com/AllenZheng-05/fitts-demo-basil-ember-android`
+so it pulls from GitHub instead of the local export.
 
 ## P4-1. Android SDK and emulator — DONE Nov 1 (Fitts_Pixel, API 37, emulator-5554; Expo SDK 58 dev build verified)
 

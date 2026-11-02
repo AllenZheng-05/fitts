@@ -54,6 +54,7 @@ import { briefFromSummary, interviewTurn } from './interview/interview';
 import { runFixer, type MuseRun } from './fix/fixer';
 import { reviewCheck } from './fix/review-check';
 import { judgeSurprise, type JudgeInput } from './review/judge';
+import { brandFit } from './review/brandfit';
 import { PHASE_OF } from './ledger/ledger';
 import { PRICE_TABLE, tokenUsd } from './llm/pricing';
 import { runRedesigner } from './fix/redesign';
@@ -305,7 +306,11 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
   const from = raw.get(projectId);
   if (site?.status !== 'running' || !site.url || !from) return false;
   realRuns.get(projectId)?.dispose();
-  const origin = new URL(site.url).origin;
+  // An Android app's screens are android://<app>/<route> (no web origin: it would be "null"); its
+  // routes resolve against the local Metro server it's served from.
+  const origin = site.url.startsWith('android:')
+    ? 'http://localhost:8081'
+    : new URL(site.url).origin;
   const runRef: { current?: RealRun } = {};
   const contributor = contributorFor(projectId, set?.contributorMode ?? false);
   const runCaller = new LlmCaller(clientFor, ledger, { waitForModels });
@@ -530,6 +535,15 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
                 opts,
               );
             },
+            brandFit: (input: Parameters<typeof brandFit>[3], signal?: AbortSignal) =>
+              brandFit(
+                runCaller,
+                callCtx(),
+                modelFor('themefit', profile(), { contributor, baseten: Boolean(keys.baseten) })
+                  .model,
+                input,
+                signal,
+              ),
             reviewCheck: (input: Parameters<typeof reviewCheck>[3]) =>
               reviewCheck(runCaller, callCtx(), WONDER, input),
             redesigner: (

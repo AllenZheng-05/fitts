@@ -233,6 +233,8 @@ export interface TaskContext {
   tokens: { file: string; names: string[] }[];
   /** The files the fix may change without asking (§7.3). */
   allowed: string[];
+  /** A9: a brand fix: the theme files to restore, and the files that carry the brand. */
+  brand?: { theme: string[]; cues: string[] };
 }
 
 /** The project files a finding's fix may change by default (§7.3): chain, page, tokens. */
@@ -282,7 +284,16 @@ function contextLines(c: TaskContext): string[] {
       (t) =>
         `Use the design tokens in ${t.file}${t.names.length ? ` (${t.names.join(', ')})` : ''} rather than new values.`,
     ),
-    `Files you may change: ${[...c.allowed, "the app's own component and style files under src/"].join(', ')}. Dependencies, config, CI, auth and API files need the owner's answer (request_scope).`,
+    c.brand
+      ? `Files you may change: ${c.allowed.join(', ')}, and nothing else (no packages: the fonts are already loaded where the app loads them).`
+      : `Files you may change: ${[...c.allowed, "the app's own component and style files under src/"].join(', ')}. Dependencies, config, CI, auth and API files need the owner's answer (request_scope).`,
+    ...(c.brand
+      ? [
+          '',
+          '## The brand',
+          `This fix brings the app's theme back to its own brand. The brand lives where it can't drift: ${[...c.brand.cues, 'the splash and icon colors in app.json', 'the fonts the root layout loads'].join(', ')}. Read them, then set the theme's colors and font tokens in ${c.brand.theme.join(', ') || 'the theme file'} to that brand (its ink, accent, cream and the serif and sans it loads), keeping every token name.`,
+        ]
+      : []),
   ];
 }
 

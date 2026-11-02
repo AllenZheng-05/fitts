@@ -102,3 +102,15 @@ describe('request_scope', () => {
     expect(mayEdit('package.json', s, 'autonomous')).toEqual({ ok: true });
   });
 });
+
+describe('a strict scope (A9’s brand fix: the theme and the wordmark only)', () => {
+  it('allows its own files and refuses every other UI file, in every mode', () => {
+    const s = newScope(['src/lib/theme.ts', 'src/components/Wordmark.tsx'], true);
+    expect(mayEdit('src/lib/theme.ts', s, 'autonomous').ok).toBe(true);
+    expect(mayEdit('src/components/Wordmark.tsx', s, 'dangerous').ok).toBe(true);
+    const other = mayEdit('app/(tabs)/index.tsx', s, 'autonomous');
+    expect(other.ok).toBe(false);
+    expect(!other.ok && other.error).toContain('outside this fix');
+    expect(mayEdit('src/index.css', s, 'autonomous').ok).toBe(false);
+  });
+});

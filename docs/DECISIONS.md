@@ -3441,3 +3441,89 @@ cuts.
 - **The mirror** exports it as AllenZheng-05/fitts-demo-basil-ember-android. A demo with its own
   package-lock.json keeps it instead of getting a pnpm lockfile. Publishing, cloning and the
   first emulator build are Allen's (NEEDS-ALLEN P4-0b).
+
+## Phase 4 — U8: Android audit
+
+- **Building React Native on Windows: CMake 3.31.6, not 4.x.** The SDK's CMake 3.22.1 ships
+  ninja 1.10, which can't handle long paths, and React Native's C++ build repeats the project
+  path inside its own folders. Allen turned on `LongPathsEnabled` and installed CMake 3.31.6
+  (its ninja is 1.12.1). CMake 4 drops support for the old `cmake_minimum_required` that some
+  native libraries still declare. The build points at it with `cmake.dir` in the generated
+  `android/local.properties`, which is never committed. Fitts builds from C:/Users/Plasm/bea, a
+  clone of the mirror. Short folders and a `subst` drive were tried first: Gradle resolves real
+  paths, so `subst` gives "different roots". The mapping was removed.
+- **Development build, not Expo Go** (§9.2's choice): the app uses expo-dev-client, as Allen's
+  emulator setup does. Fitts opens it with
+  `exp+<slug>://expo-development-client/?url=<Metro>` after `adb reverse`. The URL is quoted
+  for the device's shell, because adb joins shell arguments into one remote command.
+- **No XML dependency:** a uiautomator dump is flat and regular, so a small tokenizer reads it
+  (`main/android/dump.ts`). Nodes without a resource-id (React Native's testID) get `a<n>` in
+  document order.
+- **Screens are named from their header text,** matched against the App Model's screens. Pass 1
+  now reads Expo Router titles from the layouts' `<Tabs.Screen>`/`<Stack.Screen options={{
+  title }}>`. With no match, the screen is named from its slug. The snapshot URL is
+  `android://<package>/<route>`: the package is the host, so the agent knows it's on Android
+  and has the app ID for the Maestro repro.
+- **What a phone has no equivalent of answers empty:** focus and viewport sweeps, links,
+  network, breakpoints, cells, the surprise detector and perf. The replayer and the worktree
+  rechecks aren't available on Android yet, so Android repros are "observed", never
+  "replayed".
+- **The gate on Android holds the tap:** there's no network to intercept. A destructive-named
+  control's tap waits for the owner's answer in every mode except Dangerous (where the agent
+  allows it, as on localhost). The modal says it's the tap that's held.
+- **Probes, as §9.3 lists:**
+  - The pixel contrast estimate uses the two dominant colors of each TextView's box, quantized
+    to 16 levels per channel.
+  - A box with more than six colors of 5% or more is "busy" and isn't measured; SAM on busy
+    boxes is left for later (§13 #9).
+  - "Large" text is a box at least 30dp tall.
+  - placeholder-leak runs on the hierarchy's text.
+  - The Android probes map to the same WCAG criteria as their web twins.
+- **A9's detection:**
+  - On Android the theme check is a brand check: the brief, the phone screenshots (the
+    wordmark is in the header) and the App Model's theme token names.
+  - A misfit is one finding, "Doesn't match your brand", from a "Brand check" voice citing
+    the screens. The aggregator shows it on that one vote, like the judge.
+  - No directions card on Android.
+  - It keeps the theme check's guards: enough screens first, the caller's wait while the
+    models are unreachable, and the ledger.
+- **Benches:** `bench:android` runs the audit on the emulator and scores A1–A9 with the same
+  matcher, now taking a planted list and prefix refs like `cart-remove-*`. `bench:chat` now
+  runs only the chat bench; it used to run every bench file.
+
+## Phase 4: A10 and the Wonder judge on Android
+
+- **A10 is planted as its own commit:** a "Tonight's special" banner (`menu-special-banner`) on
+  Menu, about 1.2 s after every focus of the screen. It's a timer standing in for a kitchen feed,
+  with no network. It's inserted in the list header with no reserved space, so every row moves
+  down about 96 dp. Its colors come from the theme tokens, so A9's fix recolors it with
+  everything else. A1–A9 are unchanged.
+- **Android surprises come from the dumps the audit already takes** (`main/android/surprise.ts`,
+  pure). Each dump of a screen is compared with that screen's previous one:
+  - **"jumped":** an element with its own id (testID or resource-id; a<n> refs aren't stable)
+    moved more than 24 dp. If there was an input between the two dumps, it's marked as a recent
+    input, and the analysis drops it, as the browser's layout-shift entries do.
+  - **"popped up":** a new node whose class or id says dialog, sheet, modal, popup, toast or
+    snackbar, or that covers a quarter of the screen.
+
+  Both are emitted as the web detector's events, on the window's own clock with its input
+  times. So the same analysis, Noticed lines, observation kinds, judge, cap and aggregation rules
+  apply, filed under the Android screen. The move's time is the midpoint between the two dumps
+  when they're under 2 s apart.
+- **The frame ring on Android:** the window's screencaps (now about every 300 ms, 150 ms right
+  after an action) feed the same 4-second ring as the web's. The `frames` call returns up to 8
+  frames 2 s each side. When fewer than 3 frames are around the moment, it returns the last frame
+  before it plus three fresh shots after (now, +1 s, +2.5 s). No new dependency: screencap PNGs
+  become JPEGs through Electron's nativeImage, as the canvas frames already do.
+- **The judge itself is unchanged:** the same muse-wonder-1.0 call and prompt, the last action
+  and the brief; 12 per run; the U5a wait; an unreadable answer stays a note; the ledger. SAM's
+  box prompt is the element's bounds from the last dump, and the moment's box falls back to them.
+  An unexpected verdict joins the probe finding for the same element.
+- **Screen names need words:** a badge's count ("1" on the cart button) was naming screens
+  `/1`. Deep links go only to the app's own static routes; a screen named from its text is
+  reached by tapping, not linking.
+- **Fixes and the recorded fixture:**
+  - Fixes for judged findings stay "Checked by review", as on the web.
+  - The recorded judge answer for A10 comes from a paid bench:android run with recording on.
+  - The offline e2e can't drive an emulator, so A10's offline check is a unit test on that
+    recorded answer and the dump fixtures.

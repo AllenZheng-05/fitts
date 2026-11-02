@@ -159,3 +159,22 @@ describe('the repo map', () => {
     expect(resolveImport('src/x.tsx', 'react', files)).toBeUndefined();
   });
 });
+
+describe('Expo Router on Android (U8)', () => {
+  it('reads the app/ routes, their header titles from the layouts, and the theme tokens', () => {
+    const x = extract(resolve(__dirname, '../../../../demo/basil-ember-android'), 'android');
+    expect(x.stack.router).toBe('expo-router');
+    expect(x.pages.map((p) => [p.route, p.title ?? ''])).toEqual([
+      ['/', 'Basil & Ember'],
+      ['/cart', 'Your bag'],
+      ['/checkout', 'Pickup details'],
+      ['/item/:id', ''],
+      ['/order/:id', 'Your order'],
+      ['/orders', 'Orders'],
+    ]);
+    expect(x.tokens[0]).toMatchObject({ file: 'src/lib/theme.ts', kind: 'theme-object' });
+    expect(x.tokens[0]?.names).toEqual(
+      expect.arrayContaining(['ember', 'cream', 'display', 'body']),
+    );
+  });
+});

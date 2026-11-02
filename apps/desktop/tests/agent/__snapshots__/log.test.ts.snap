@@ -2,6 +2,12 @@
 
 exports[`noticeProbe: every probe has a template (§6A.2) > writes one noticed line per failing item, in Fitts’s words, never "problem" 1`] = `
 {
+  "android-contrast": "Noticed text that’s hard to read: "Wood-fired" is about 2.1:1 (estimate from the screen's pixels) (needs at least 4.5:1)",
+  "android-duplicate-bounds": "Noticed "Margherita" and the ViewGroup menu-row-favorite-margherita are two tap targets in exactly the same place",
+  "android-duplicate-label": "Noticed 2 controls are all called "Add to order"",
+  "android-editable-desc": "Noticed the field pickup-name has a content description ("Your name")",
+  "android-label": "Noticed the ViewGroup header-cart-button has no label a screen reader can read",
+  "android-target": "Noticed "Remove Margherita" is 36×36dp (needs at least 48×48dp)",
   "axe": "Noticed Images must have alternate text (axe)",
   "back-mid-flow": "Noticed going back lost what I typed: Message was empty after Back",
   "button-name": "Noticed this button has no name a screen reader can say",

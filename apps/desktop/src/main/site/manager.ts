@@ -23,6 +23,9 @@ import { DevServer, responds } from './dev-server';
 import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
 import { EVENT_SIDE_MS, FrameRing } from './frames';
+import { Adb, adbRunner, bootEmulator, findTool, readAppJson } from '../android/adb';
+import { AndroidWindow } from '../android/window';
+import { extract } from '../understand/extract';
 import { replay } from './replayer';
 import { measurePerf } from './perf';
 import { mapDebugSrc } from './source-chain';
@@ -31,6 +34,8 @@ import { hostOf, SITE_TAB, TabSet } from './tabs';
 interface Live {
   server: DevServer;
   window?: SiteWindow;
+  /** SPEC-phase4 §9.2: an Android project's device, in place of the window. */
+  android?: AndroidWindow;
   status: SiteStatus;
   health?: ReturnType<typeof setInterval>;
   /** A version (not the project's own site): frees its port when it closes. */
@@ -204,6 +209,7 @@ export class SiteManager {
       return;
     }
     const detection = await detectProject(folder);
+    if (detection?.platform === 'android') return this.openAndroid(projectId, folder);
     const forced = Number(process.env['FITTS_SITE_PORT'] ?? '');
     const port = forced || detection?.port || 5173;
     // The detected command is made to serve on `port`; one the user typed is used as written.
@@ -232,6 +238,57 @@ export class SiteManager {
     live.window = win;
     this.attachTabs(projectId, live, win, new URL(server.url).origin);
     await win.load(project.startPath ?? detection?.startPath ?? '/').catch(() => undefined);
+    this.status(projectId, { status: 'running' });
+    this.watch(projectId, live);
+  }
+
+  /**
+   * SPEC-phase4 §9.2: an Expo app on Android. adb and a device (the first AVD is booted when none
+   * is running), Metro on its port, `adb reverse` so the device reaches it, then the dev client
+   * opened on Metro's URL. Every site operation for the project goes to the AndroidWindow.
+   */
+  private async openAndroid(projectId: string, folder: string): Promise<void> {
+    const fail = (line: string) => this.status(projectId, { status: 'failed', log: [line] });
+    const adbPath = findTool('adb');
+    if (!adbPath)
+      return fail('The Android SDK isn’t installed here (no adb on ANDROID_HOME or PATH).');
+    let serial = (await new Adb(adbRunner(adbPath)).devices())[0];
+    if (!serial) {
+      this.status(projectId, { status: 'starting', url: 'android:emulator' });
+      serial = await bootEmulator(adbPath);
+      if (!serial) return fail('No Android emulator is running and none could be started.');
+    }
+    const adb = new Adb(adbRunner(adbPath, serial));
+    const app = readAppJson(folder);
+    const port = Number(process.env['FITTS_SITE_PORT'] ?? '') || 8081;
+    const server = new DevServer(folder, `npx expo start --dev-client --port ${port}`, port);
+    const live: Live = { server, status: { projectId, status: 'starting' } };
+    this.live.set(projectId, live);
+    this.status(projectId, { status: 'starting', url: `android:${serial}` });
+    if (!(await server.start(120_000)) || this.live.get(projectId) !== live) {
+      this.status(projectId, { status: 'failed', log: server.log });
+      return;
+    }
+    await adb.reverse(port);
+    const metro = encodeURIComponent(`http://127.0.0.1:${port}`);
+    await adb.open(`exp+${app.slug}://expo-development-client/?url=${metro}`);
+    const win = new AndroidWindow(
+      adb,
+      (jpeg, w, h) => this.siteFrame(projectId, jpeg, w, h),
+      (patch) => this.sitePatch(projectId, patch),
+      (held) => this.onHeld?.(projectId, held),
+      {
+        ...(app.scheme ? { scheme: app.scheme } : {}),
+        ...(app.appId ? { appId: app.appId } : {}),
+        // The screens and their header titles (Pass 1 reads them from the layouts).
+        screens: extract(folder, 'android').pages.map((p) => ({
+          route: p.route,
+          ...(p.title ? { title: p.title } : {}),
+        })),
+      },
+    );
+    live.android = win;
+    await win.start();
     this.status(projectId, { status: 'running' });
     this.watch(projectId, live);
   }
@@ -283,6 +340,7 @@ export class SiteManager {
     if (request.op === 'png' || request.op === 'saveAsset') return this.media(projectId, request);
     if (request.op === 'reference')
       return { op: 'reference', ...(await captureReference(request.url)) };
+    if (live?.android && request.op !== 'board') return live.android.run(request);
     // Boards need the font store: main/index answers them before they get here.
     if (request.op === 'board') throw new Error('boards are saved by main');
     const win = live?.window;
@@ -482,6 +540,7 @@ export class SiteManager {
     if (live.health) clearInterval(live.health);
     live.tabs?.destroy();
     live.window?.destroy();
+    live.android?.stop();
     live.server.stop();
     live.release?.();
     this.live.delete(projectId);
@@ -692,11 +751,16 @@ export class SiteManager {
       if (typeof id !== 'string' || !input || typeof input !== 'object') return;
       const tab = this.live.get(id)?.tabs?.activeWc();
       if (tab) tabInput(tab, input);
+      else if (this.live.get(id)?.android) void this.live.get(id)?.android?.input(input);
       else this.window(id)?.input(input);
     });
     ipcMain.on(IPC.siteNav, (_e, id: unknown, nav: SiteNav) => {
       if (typeof id !== 'string' || !nav || typeof nav !== 'object') return;
       const tab = this.live.get(id)?.tabs?.activeWc();
+      const android = this.live.get(id)?.android;
+      // SPEC-phase4 §9.2: on Android, Back is the system Back; the rest has no equivalent.
+      if (android)
+        return void (nav.kind === 'back' ? android.back().catch(() => undefined) : undefined);
       if (!tab) return this.window(id)?.nav(nav);
       const h = tab.navigationHistory;
       if (nav.kind === 'back' && h.canGoBack()) h.goBack();

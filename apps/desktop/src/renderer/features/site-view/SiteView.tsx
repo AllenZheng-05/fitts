@@ -177,8 +177,15 @@ export function SiteView({
     if (browsing && !interactive && onNeedsWheel) onNeedsWheel(go);
     else go();
   };
-  const liveHost = live?.url ? new URL(live.url).host : undefined;
-  const shownPath = live ? (livePath(live) ?? route) : route;
+  // SPEC-phase4 §9.2: an Android app shows its screen, not an address; Back is the system's.
+  const android = Boolean(live?.url?.startsWith('android:'));
+  const liveHost = live?.url && !android ? new URL(live.url).host : undefined;
+  // An Android screen URL (android://<app>/<route>) isn't split into a host by Chromium.
+  const shownPath = android
+    ? (live?.url ?? '').replace(/^android:(\/\/[^/]*)?/, '') || '/'
+    : live
+      ? (livePath(live) ?? route)
+      : route;
 
   return (
     <section
@@ -196,31 +203,39 @@ export function SiteView({
             <IconButton
               size="sm"
               aria-label={copy.site.back}
-              disabled={live ? !live.canBack : !canBack}
+              disabled={android ? false : live ? !live.canBack : !canBack}
               onClick={() => nav('back')}
               icon={<ArrowLeft size={16} aria-hidden="true" />}
             />
-            <IconButton
-              size="sm"
-              aria-label={copy.site.forward}
-              disabled={live ? !live.canForward : !canForward}
-              onClick={() => nav('forward')}
-              icon={<ArrowRight size={16} aria-hidden="true" />}
-            />
-            <IconButton
-              size="sm"
-              aria-label={copy.site.reload}
-              onClick={() => nav('reload')}
-              icon={<RotateCw size={16} aria-hidden="true" />}
-            />
+            {!android && (
+              <>
+                <IconButton
+                  size="sm"
+                  aria-label={copy.site.forward}
+                  disabled={live ? !live.canForward : !canForward}
+                  onClick={() => nav('forward')}
+                  icon={<ArrowRight size={16} aria-hidden="true" />}
+                />
+                <IconButton
+                  size="sm"
+                  aria-label={copy.site.reload}
+                  onClick={() => nav('reload')}
+                  icon={<RotateCw size={16} aria-hidden="true" />}
+                />
+              </>
+            )}
           </div>
           <input
             readOnly
-            aria-label={copy.site.url}
-            value={`${addressHost ?? liveHost ?? project?.url ?? 'localhost'}${shownPath}`}
+            aria-label={android ? copy.site.screen : copy.site.url}
+            value={
+              android
+                ? shownPath
+                : `${addressHost ?? liveHost ?? project?.url ?? 'localhost'}${shownPath}`
+            }
             className="min-w-0 flex-[1_1_180px] truncate rounded-row bg-surface-2 px-3 py-[9px] font-mono text-[12px]"
           />
-          {live && <DevicePicker projectId={sid} />}
+          {live && !android && <DevicePicker projectId={sid} />}
           {toolbarEnd}
         </div>
         {header}

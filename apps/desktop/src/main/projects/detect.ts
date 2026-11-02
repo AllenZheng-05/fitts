@@ -28,6 +28,9 @@ const major = (range: string | undefined) => /\d+/.exec(range ?? '')?.[0];
 export function detectFramework(pkg: Pkg): { framework: string; port: number } {
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const react = deps['react'] ? ` + React ${major(deps['react']) ?? ''}`.trimEnd() : '';
+  // SPEC-phase4 §9.2: Expo and React Native apps run on Android through Metro (8081).
+  if (deps['expo']) return { framework: `Expo ${major(deps['expo']) ?? ''}`.trim(), port: 8081 };
+  if (deps['react-native']) return { framework: 'React Native', port: 8081 };
   if (deps['next']) return { framework: `Next.js ${major(deps['next']) ?? ''}`.trim(), port: 3000 };
   if (deps['@sveltejs/kit']) return { framework: 'SvelteKit', port: 5173 };
   if (deps['astro']) return { framework: `Astro ${major(deps['astro']) ?? ''}`.trim(), port: 4321 };
@@ -142,5 +145,6 @@ export async function detectProject(folder: string): Promise<Detection | null> {
     ...(pkg.fitts?.startPath?.startsWith('/') ? { startPath: pkg.fitts.startPath } : {}),
     ghReady: gh.code === 0,
     ...(repo ? { repo } : {}),
+    ...(deps['expo'] || deps['react-native'] ? { platform: 'android' as const } : {}),
   };
 }

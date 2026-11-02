@@ -22,7 +22,7 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U5c | Detect more (§6B)                        | done        | `4650f2b` |
 | U6  | Code-aware fixer (§7)                    | done        |           |
 | U7  | App Map (§8)                             | done        |           |
-| U8  | Android audit (§9.1–9.3)                 | in progress |           |
+| U8  | Android audit (§9.1–9.3)                 | done        |           |
 | U9  | Android fix (§9.4)                       | todo        |           |
 | U10 | Release polish                           | todo        |           |
 
@@ -48,9 +48,44 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
   The first two groups (6) are Fitts noise worth fixing.
 
+**bench:android, Nov 2 ~13:00 CST (paid, Fitts_Pixel, Economy, $2 cap): spent $1.07.** Found **6/10** (passes U8's ≥ 6): A1, A2, A3, A7, A9 ("Doesn't match your brand", Brand check) and A10 ("Menu jumps after loading", **judged**, with the moment's frames). Missed A4 (found in the run before, on the menu's quick-add), A5 and A8 (the order status screen wasn't reached: it needs an order placed), and A6. 5 unplanted at severity ≥ 2, mostly plausible: duplicate +/− names, a text field with a content description, no back or cancel on checkout, size options with no feedback, empty orders with no shortcut. The earlier runs that day found 0, 0, 3 and 4 while the Android bugs were being fixed.
+
 **bench:chat, Nov 2 ~06:55 (paid; judge committed, routing fixes in): spent $0.193.** Recall **29/33 (88%)**, missing #15, #18, #21 (14 ungrouped toggles) and #33. Shown 48. Precision: 29/48 (**60%** strict). At severity ≥ 2, 29/37 (**78%**): 8 unplanted. Two of the 8 are the judge's own findings for #29 and #30, duplicates of the probe findings that matched them, so the judge's draft now joins the probe finding for the same moment. The rest are the U5 cells (3), the /settings phone tap target, and two plausible /compose state findings.
 
 **bench:chat, Nov 2 ~04:35 (paid; judge and noise fixes in; recorded fixtures): spent $0.135.** Recall **27/33 (82%)**. Missed #15, #16 (Delete conversation deletes instantly), #18, #25 (no empty state on Contacts), #29 and #33. Shown 48. Precision: 27/48 (**56%** strict). At severity ≥ 2, 27/37 (**73%**): 10 unplanted. The noise fixes worked (no /help findings, one phone tap finding). The judge judged #30 correctly ("a tip box appears above the Send Text link and pushes it 58px down") but filed it under / instead of /compose/confirm, so it counted as a false positive. #29 never showed during the audit: the sheet shows once a session and appeared during the interview. Both are fixed since (events carry their page; the detector is read before the audit's first load). One run varies: #16 and #25 were found in the run before. Next paid run after the judge commit.
+
+**A10 and the Wonder judge on Android (Allen, Nov 2), inside U8, after A9's detection, before U9; it comes before U9 if the freeze is at risk (say so here):**
+1. **Plant (own commit):**
+   - A "Tonight's special" banner (`menu-special-banner`) on Menu, about 1.2 s after the screen
+     opens: a timer, no network.
+   - Inserted above the list with no reserved space, so every row jumps about 96 dp.
+   - Shown on every visit to Menu.
+   - A1–A9 keep measuring the same (A7's overlap, A3's contrast).
+   - A10 row in PLANTED.md: content jumps after load, so a tap meant for one pizza lands on
+     another; Menu; the Android surprise check plus the judge; severity 2.
+   - bench:android counts it.
+2. **Android surprise (main/android), from the dumps and shots the audit takes:**
+   - "jumped": the same element (testID or resource-id) moves more than 24 dp with no input in
+     between, or within 1 s of load.
+   - "popped up": a new dialog, sheet or overlay appears with no input for 1 s.
+   - The same observation kinds and Noticed lines as the web, under the Android screen.
+3. **Frames:**
+   - A rolling buffer of screencaps on a screen, about 2–4 a second, capped at 4 s.
+   - Up to 8 frames around an event, saved as assets. If the buffer is thin, a before shot plus
+     shots at about 0.5, 1.5 and 3 s.
+   - No new dependencies.
+   - SAM on the first and last frames, with the dump's bounds as the box (and the fallback).
+   - The same Wonder call, prompt and rules: 12 per run counted together with the web's, the
+     U5a wait, an unreadable answer stays a note, the ledger, the Judge draft joins a probe
+     finding for the same element, the See it yourself strip, fixes "Checked by review".
+4. **Tests:**
+   - The dump-diff detector on fixture dumps: a jump, a pop-up, and a normal tap's response
+     that isn't flagged.
+   - The frame buffer and its fallback over a fake adb.
+   - A recorded judge fixture for A10 in the offline e2e.
+   - bench:android finds A10, judged.
+
+Log as "Phase 4: A10 and the Wonder judge on Android". Never call the Android app AI-generated.
 
 **A9, brand drift on the Android demo (Allen, Nov 2), folded into U8 and U9; doesn't interrupt U7:**
 1. **Plant (U8), as its own commit after the "as built" commit.**

@@ -6,3 +6,4 @@ export * from './keyboard';
 export * from './surprise';
 export * from './faults';
 export * from './perf';
+export * from './android';

@@ -231,6 +231,12 @@ export const PROBE_NOTE: Record<
   surprise: { kind: 'focus-moved', hint: 3 },
   state: { kind: 'state', hint: 3 },
   perf: { kind: 'perf', hint: 2 },
+  'android-target': { kind: 'too-small', hint: 2 },
+  'android-label': { kind: 'missing-name', hint: 3 },
+  'android-duplicate-label': { kind: 'inconsistent', hint: 2 },
+  'android-duplicate-bounds': { kind: 'missing-detail', hint: 2 },
+  'android-editable-desc': { kind: 'missing-name', hint: 2 },
+  'android-contrast': { kind: 'hard-to-read', hint: 3 },
 };
 
 /** The dedupe key of a probe item's note: one per route, probe and element (and what it measured). */

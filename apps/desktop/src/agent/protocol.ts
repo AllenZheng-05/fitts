@@ -198,7 +198,7 @@ export type FixCall =
       device?: DeviceCell | null;
     }
   /** SPEC-phase4 §7.3: the finding's own files, which the fix may change (sensitive ones never). */
-  | { fn: 'scope'; job: string; files: string[] }
+  | { fn: 'scope'; job: string; files: string[]; only?: boolean }
   /**
    * request_scope's answer: a file the fix may change from now on. Sensitive files (and any
    * file in the ask modes) need `itemId`: the question the owner answered "Go ahead" to.

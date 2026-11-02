@@ -107,6 +107,8 @@ export interface ToolsStatus {
   gh: string | null;
   /** Node's major version. */
   node: string | null;
+  /** SPEC-phase4 §9.2: the Android SDK's adb and emulator, when installed (local tools only). */
+  android?: { adb: boolean; emulator: boolean };
 }
 
 /** Push to talk for the mic button; endpointing for "Always listening" (V5). */
@@ -160,6 +162,8 @@ export interface Detection {
   port?: number;
   startPath?: string;
   ghReady?: boolean;
+  /** SPEC-phase4 §9.2: an Expo or React Native app runs on Android (the emulator), not in a window. */
+  platform?: 'web' | 'android';
 }
 
 export interface SiteRect {
@@ -1237,7 +1241,14 @@ export type ProbeName =
   | 'navigation'
   | 'surprise'
   | 'state'
-  | 'perf';
+  | 'perf'
+  // SPEC-phase4 §9.3: Android, over the uiautomator dump and the screen's pixels.
+  | 'android-target'
+  | 'android-label'
+  | 'android-duplicate-label'
+  | 'android-duplicate-bounds'
+  | 'android-editable-desc'
+  | 'android-contrast';
 
 /** One element (or request) a probe measured. `measured` and `expected` are plain language. */
 export interface ProbeItem {

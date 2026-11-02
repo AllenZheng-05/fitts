@@ -17,6 +17,7 @@
     "test": "pnpm --filter @fitts/desktop test && pnpm --filter @fitts/vite-plugin test && pnpm --filter @fitts/probes test && pnpm --filter @fitts/styles test",
     "test:e2e": "pnpm --filter @fitts/desktop test:e2e",
     "bench:chat": "pnpm --filter @fitts/desktop bench:chat",
+    "bench:android": "pnpm --filter @fitts/desktop bench:android",
     "verify:keys": "tsx scripts/verify/keys.ts",
     "verify:v6": "tsx scripts/verify/v6-muse.ts",
     "verify:v6:echo": "tsx scripts/verify/v6-muse.ts --echo",

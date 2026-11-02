@@ -92,6 +92,10 @@ export const MAX_REPAIRS = 3;
  * or the owner's approval and "Checked by review": no fix is "verified" without proof.
  */
 const VERIFIABLE = new Set<ProbeName>([...PAGE_PROBES, 'focus-visible', 'viewport-sweep', 'links']);
+/** A9's finding: the brand check's "Doesn't match your brand". */
+export const isBrandFinding = (f: Finding) =>
+  f.agreement.who.includes('Brand check') || /match your brand/i.test(f.title);
+
 /** Checks re-run on the worktree by the replayer (Allen, Nov 2): verified, not reviewed. */
 const RECHECKED = new Set<ProbeName>(['navigation', 'keyboard']);
 const TRACE = new Set<ProbeName>([
@@ -675,6 +679,23 @@ export class FixPipeline {
   }
 
   /**
+   * A9: the files a brand fix works on: the App Model's theme token files, and the files that
+   * carry the brand where it can't drift (the wordmark or logo), found by name in the project.
+   */
+  private async brandFiles(
+    model: AppModel | undefined,
+  ): Promise<{ theme: string[]; cues: string[] }> {
+    const theme = (model?.tokens ?? []).map((t) => t.file);
+    const hits = (
+      (await this.site.fix({ fn: 'grep', text: 'wordmark' }).catch(() => [])) as { path: string }[]
+    ).map((h) => h.path);
+    const cues = [...new Set(hits)].filter(
+      (p) => /\.(tsx|jsx)$/.test(p) && /(wordmark|logo|brand)/i.test(p) && !theme.includes(p),
+    );
+    return { theme, cues };
+  }
+
+  /**
    * request_scope (§7.3): main grants what the mode allows; otherwise the owner is asked, and
    * main grants it only on their own "Go ahead" to the question that names the file.
    */
@@ -814,7 +835,14 @@ export class FixPipeline {
       const baseline = await this.baselineChecks(run.job);
       const model = this.host.appModel?.();
       // SPEC-phase4 §7.3: this finding's own files are what the fix may change (main enforces it).
-      await this.site.fix({ fn: 'scope', job: run.job, files: scopeFiles(f, model) });
+      // A9's brand fix may change the theme and the wordmark, nothing else.
+      const brand = isBrandFinding(f) ? await this.brandFiles(model) : undefined;
+      await this.site.fix({
+        fn: 'scope',
+        job: run.job,
+        files: brand ? [...brand.theme, ...brand.cues] : scopeFiles(f, model),
+        ...(brand ? { only: true } : {}),
+      });
       const tools = this.fixTools(run.job);
       const budget = fixBudget(f, check);
       let failure: Verdict | null = null;
@@ -827,7 +855,9 @@ export class FixPipeline {
             ...(p.hint ? { hint: p.hint } : {}),
             ...this.checksFor(baseline),
             ...(failure ? { failure: failure.detail } : {}),
-            context: taskContext(f, model),
+            context: brand
+              ? { ...taskContext(f, model), allowed: [...brand.theme, ...brand.cues], brand }
+              : taskContext(f, model),
           }),
           tools,
           {

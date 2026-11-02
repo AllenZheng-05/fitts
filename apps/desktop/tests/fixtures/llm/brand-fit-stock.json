@@ -1,0 +1,31 @@
+{
+  "name": "brand-fit",
+  "model": "muse-spark-1.3",
+  "recordedAt": "2026-11-02T17:41:21.209Z",
+  "response": {
+    "outputText": "{\"fits\": false, \"offBrand\": \"Purple primary buttons, purple tab highlights and blue refresh bar look like stock defaults against the ember palette.\", \"onBrand\": \"The charcoal header with cream serif wordmark and burnt-orange accents carries a wood-fired identity.\", \"tokens\": [], \"why\": \"The logo and menu use warm ember tones, while key actions use unrelated purple and blue that feel like defaults. Swapping them to ember restores cohesion.\"}",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_4f8c015e-f3c2-4bf2-886c-91a60b7035f9",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "{\"fits\": false, \"offBrand\": \"Purple primary buttons, purple tab highlights and blue refresh bar look like stock defaults against the ember palette.\", \"onBrand\": \"The charcoal header with cream serif wordmark and burnt-orange accents carries a wood-fired identity.\", \"tokens\": [], \"why\": \"The logo and menu use warm ember tones, while key actions use unrelated purple and blue that feel like defaults. Swapping them to ember restores cohesion.\"}",
+            "annotations": [],
+            "logprobs": []
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "model": "muse-spark-1.3",
+    "usage": {
+      "input": 10135,
+      "cached": 0,
+      "output": 618,
+      "reasoning": 516
+    }
+  }
+}

@@ -72,6 +72,14 @@ import { ownerFinding, plainDraft, type ReportDraft, type ReportInput } from './
 import { buildRepro, oracleFor, pruneTrail, type TrailStep } from '../repro/repro';
 import { confirm as confirmRepro, replaySteps, traceReplay } from '../repro/replay';
 import { recheckFor, type Recheck } from '../fix/recheck';
+import { maestroFlow } from '../repro/maestro';
+import { BRAND_PERSONA, brandDraft, type BrandFit } from '../review/brandfit';
+
+/** The Android app's id from a snapshot URL ("android://com.basilandember.order/menu"). */
+const androidApp = (url: string | undefined) =>
+  url?.startsWith('android://')
+    ? url.slice('android://'.length).split('/')[0] || undefined
+    : undefined;
 import { playwrightTest } from '../repro/playwright';
 import { titleOf } from '../review/aggregate';
 import {
@@ -158,6 +166,11 @@ export interface RunDeps {
     signal?: AbortSignal,
   ) => Promise<Direction[]>;
   /** Theme-fit (§8.3), asked once after the first 3 routes. */
+  /** A9 (Nov 2): the theme check on Android, against the brand cues in the screens. */
+  brandFit?: (
+    input: { brief: RunState['brief']; shots: string[]; tokens: string[] },
+    signal?: AbortSignal,
+  ) => Promise<BrandFit | null>;
   themeFit?: (
     input: {
       brief: RunState['brief'];
@@ -250,6 +263,8 @@ export class RealRun {
   /** SPEC-phase4 §6B.5: the judge's pending looks, its votes and the moments it saw. */
   private readonly judging: Promise<void>[] = [];
   private readonly judgeReviews: PersonaReview[] = [];
+  /** A9: the brand check's finding on Android, when the theme drifts from the brand. */
+  private readonly brandReviews: PersonaReview[] = [];
   private readonly moments = new Map<string, NonNullable<Finding['moment']>>();
   private judged = 0;
   /** "Tapped “Send”": the last thing Fitts did, for the judge. */
@@ -780,7 +795,7 @@ export class RealRun {
         return outcome('done');
       case 'check_theme':
         // A site with fewer than 3 pages still gets theme-fit, on what there is (§8.3).
-        if (!this.themeAsked && this.deps.themeFit && this.pages.size > 0) {
+        if (!this.themeAsked && (this.deps.themeFit || this.deps.brandFit) && this.pages.size > 0) {
           this.themeAsked = true;
           this.themeCheck = this.checkTheme();
         }
@@ -1130,7 +1145,11 @@ export class RealRun {
       if (this.loginWall(snap)) continue;
       await this.probes.onPage(snap);
       await this.remember(snap);
-      if (this.pages.size >= THEME_ROUTES && !this.themeAsked && this.deps.themeFit) {
+      if (
+        this.pages.size >= THEME_ROUTES &&
+        !this.themeAsked &&
+        (this.deps.themeFit || this.deps.brandFit)
+      ) {
         this.themeAsked = true;
         this.themeCheck = this.checkTheme();
       }
@@ -1787,7 +1806,8 @@ export class RealRun {
           route:
             this.acting?.route ??
             routeOf(this.state.routes.find((r) => r.status === 'testing')?.path ?? '/'),
-          heldRequest: `${held.method} ${path}`,
+          // SPEC-phase4 §9.2: a phone's tap is held, not a request.
+          heldRequest: held.method === 'TAP' ? copy.gate.tapOnly : `${held.method} ${path}`,
           testing: 'H3 user control and H5 error prevention',
         },
       },
@@ -1818,10 +1838,37 @@ export class RealRun {
    * lookfeel card and 3 directions (§8.3). Autonomous picks the first (closest to the brief).
    */
   private async checkTheme(): Promise<void> {
-    const ask = this.deps.themeFit;
-    if (!ask) return;
     const pages = [...this.pages.values()].slice(0, THEME_ROUTES);
     const shots = pages.flatMap((p) => (p.evidence.shot ? [p.evidence.shot.jpegBase64] : []));
+    // A9: on Android the question is whether the theme carries the app's own brand. A misfit is
+    // one finding (the Brand check's), never a redesign card.
+    if (androidApp(this.lastSnap?.url)) {
+      const brand = this.deps.brandFit;
+      if (!brand || shots.length === 0) return;
+      const v = await brand(
+        {
+          brief: this.state.brief,
+          shots,
+          tokens: (this.deps.appModel?.tokens ?? []).flatMap((t) => t.names).slice(0, 40),
+        },
+        this.abort.signal,
+      ).catch(() => null);
+      if (!v || v.fits || this.finished) return;
+      const route = pages[0]?.evidence.route ?? '/';
+      this.brandReviews.push({
+        route,
+        persona: BRAND_PERSONA,
+        drafts: [
+          brandDraft(
+            v,
+            pages.map((p) => `${p.evidence.route}#snapshot`),
+          ),
+        ],
+      });
+      return;
+    }
+    const ask = this.deps.themeFit;
+    if (!ask) return;
     const inventory = this.probes.results
       .filter((r) => r.probe === 'font-inventory' && r.summary)
       .slice(0, THEME_ROUTES)
@@ -2533,9 +2580,11 @@ export class RealRun {
     }
     for (const r of reviews.filter((x) => x.unusable))
       this.say(format(copy.fitts.reviewerUnreadable, { persona: r.persona, route: r.route }));
-    // The judge's looks finish first: its votes count like one reviewer (§6B.5).
+    // The judge's looks finish first: its votes count like one reviewer (§6B.5). So does the
+    // brand check on Android (A9).
     await Promise.all(this.judging);
-    reviews.push(...this.judgeReviews);
+    await this.themeCheck;
+    reviews.push(...this.judgeReviews, ...this.brandReviews);
     const { findings: aggregated, checks } = aggregateWithChecks({
       runId: this.state.runId,
       probes: this.probes.results,
@@ -3234,7 +3283,15 @@ export class RealRun {
       const oracle = oracleFor(f, check);
       if (confirmed === 'replayed' && oracle.kind === 'trace')
         this.traceReplays.set(f.id, traceReplay(oracle, f, start, steps));
-      repro.playwright = playwrightTest(f, repro, { probe: check?.probe, item, cell });
+      // SPEC-phase4 §9.3: on Android the repro is a Maestro flow on the app, not a browser test.
+      const app = androidApp(this.lastSnap?.url);
+      if (app)
+        repro = {
+          ...repro,
+          environment: 'Android emulator · development build',
+          maestro: maestroFlow(f, repro, app),
+        };
+      else repro.playwright = playwrightTest(f, repro, { probe: check?.probe, item, cell });
     }
     const now = this.state.findings.find((x) => x.id === f.id);
     if (now && !this.finished) this.emit([{ type: 'finding.updated', finding: { ...now, repro } }]);

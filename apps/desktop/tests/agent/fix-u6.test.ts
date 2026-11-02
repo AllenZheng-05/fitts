@@ -491,3 +491,47 @@ describe('reviewCheck (§7.5)', () => {
     });
   });
 });
+
+describe('A9: the brand fix (U9)', () => {
+  it('is scoped to the theme and the wordmark only, with the brand cues in its task', async () => {
+    const brandFinding = finding({
+      id: 'b1',
+      title: 'Doesn’t match your brand',
+      source: undefined,
+      elementRef: undefined,
+      agreement: { agreeing: 1, total: 5, who: ['Brand check'] },
+    });
+    const h = harness({
+      findings: [brandFinding],
+      checks: [],
+      review: { fixed: true, why: 'On brand now.' },
+    });
+    // The project grep finds the wordmark component.
+    const site = (h.pipeline as unknown as { site: { fix: (c: FixCall) => Promise<unknown> } })
+      .site;
+    const base = site.fix.bind(site);
+    site.fix = (c: FixCall) =>
+      c.fn === 'grep'
+        ? Promise.resolve([
+            { path: 'src/components/Wordmark.tsx', line: 9, text: 'testID="header-wordmark"' },
+          ])
+        : base(c);
+    (h.pipeline as unknown as { host: { appModel: () => unknown } }).host.appModel = () => ({
+      tokens: [{ file: 'src/lib/theme.ts', kind: 'theme-object', names: ['ember', 'display'] }],
+      pages: [],
+      stack: { framework: 'Expo', styling: [] },
+    });
+    h.pipeline.start(['b1'], { owner: true });
+    await h.wait();
+    expect(h.calls.find((c) => c.fn === 'scope')).toMatchObject({
+      fn: 'scope',
+      files: ['src/lib/theme.ts', 'src/components/Wordmark.tsx'],
+      only: true,
+    });
+    expect(h.tasks[0]).toContain(
+      'Files you may change: src/lib/theme.ts, src/components/Wordmark.tsx, and nothing else',
+    );
+    expect(h.tasks[0]).toContain('## The brand');
+    expect(h.state().changes[0]).toMatchObject({ status: 'verified', checked: 'review' });
+  });
+});

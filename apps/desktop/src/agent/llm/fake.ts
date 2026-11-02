@@ -1,6 +1,6 @@
 // Recorded model responses for tests (SPEC-phase2 §18): tests never call the network. A fixture
 // is tests/fixtures/llm/<name>.json, recorded once from a real call.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LlmClient, LlmRequest, LlmResponse } from './call';
 import { LlmError } from './call';
@@ -58,6 +58,10 @@ export function recording(client: LlmClient, dir: string): LlmClient {
       };
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, `${name}.json`), JSON.stringify(fixture, null, 2));
+      // Every answer too, numbered, so a run's several judge or review calls are all kept.
+      let n = 1;
+      while (existsSync(join(dir, `${name}-${n}.json`))) n += 1;
+      writeFileSync(join(dir, `${name}-${n}.json`), JSON.stringify(fixture, null, 2));
       return response;
     },
   };

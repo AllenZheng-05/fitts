@@ -37,6 +37,20 @@ import { prBackend, type PrBackend } from './pr';
 import { grant, mayEdit, newScope, type FixMode, type Scope } from './allowlist';
 import { museExec, museStatus, type MuseStatus } from './muse';
 import { replay } from '../site/replayer';
+import { Adb, adbRunner, findTool, readAppJson } from '../android/adb';
+import { nativeImage } from 'electron';
+
+/** An Expo (or React Native) app: it's verified on the Android device, not in a window. */
+function isExpo(dir: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+    };
+    return Boolean(pkg.dependencies?.['expo'] || pkg.dependencies?.['react-native']);
+  } catch {
+    return false;
+  }
+}
 import type { DeviceCell } from '@fitts/schema';
 import type { ReplayAsk } from '../../agent/protocol';
 
@@ -105,7 +119,7 @@ export class FixHost {
     switch (call.fn) {
       case 'scope': {
         const job = this.job(call.job);
-        job.scope = newScope(call.files);
+        job.scope = newScope(call.files, call.only ?? false);
         return { ok: true };
       }
       case 'grant': {
@@ -480,6 +494,69 @@ export class FixHost {
     return res.stdout.slice(0, 20_000);
   }
 
+  /**
+   * SPEC-phase4 §9.4 on Android: the worktree gets its own Metro on a free port; the dev client
+   * is re-pointed at it (reopening its URL: deterministic, unlike Fast Refresh), each route is
+   * shot, then the app is pointed back at the live Metro (8081).
+   */
+  private async androidPages(job: Job, routes: string[]): Promise<VerifyPagesResult> {
+    const adbPath = findTool('adb');
+    if (!adbPath) return { ok: false, error: 'the Android SDK isn’t installed here', pages: [] };
+    const serial = (await new Adb(adbRunner(adbPath)).devices())[0];
+    if (!serial) return { ok: false, error: 'no Android device is running', pages: [] };
+    const adb = new Adb(adbRunner(adbPath, serial));
+    const app = readAppJson(job.dir);
+    const port = await this.freePort();
+    const server = new DevServer(job.dir, `npx expo start --dev-client --port ${port}`, port);
+    const openOn = (p: number) =>
+      adb.open(
+        `exp+${app.slug}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${p}`)}`,
+      );
+    const ready = async (timeoutMs: number) => {
+      for (const end = Date.now() + timeoutMs; Date.now() < end;) {
+        if (/clickable="true"/.test(await adb.dump())) return true;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      return false;
+    };
+    try {
+      if (!(await server.start(180_000)))
+        return {
+          ok: false,
+          error: `the worktree's Metro didn't start: ${server.log.slice(-3).join(' ')}`,
+          pages: [],
+        };
+      await adb.reverse(port);
+      await openOn(port);
+      // The first bundle from a new Metro takes a while.
+      if (!(await ready(120_000)))
+        return { ok: false, error: 'the app didn’t open on the fixed branch', pages: [] };
+      const pages: VerifyPagesResult['pages'] = [];
+      for (const route of routes) {
+        if (route !== '/' && app.scheme) {
+          await adb.open(`${app.scheme}://${route.replace(/^\//, '')}`);
+          await ready(15_000);
+        }
+        await new Promise((r) => setTimeout(r, 1200));
+        const img = nativeImage.createFromBuffer(await adb.screencap());
+        pages.push({
+          route,
+          loaded: !img.isEmpty(),
+          results: [],
+          focus: [],
+          viewport: [],
+          ...(img.isEmpty() ? {} : { jpegBase64: img.toJPEG(80).toString('base64') }),
+        });
+      }
+      return { ok: true, pages };
+    } finally {
+      // Back to the live app, whatever happened.
+      await openOn(8081).catch(() => false);
+      server.stop();
+      this.ports.delete(port);
+    }
+  }
+
   /** The worktree's dev server, a hidden window on the route, and the page probes (§9.2). */
   /** SPEC-phase4 §7.5: a repro replayed on the job's own dev server (trace verification). */
   private async replayOn(id: string, ask: ReplayAsk, device: DeviceCell | null) {
@@ -575,6 +652,7 @@ export class FixHost {
     size: { width: number; height: number } = SHOT_SIZE,
   ): Promise<VerifyPagesResult> {
     const job = this.job(id);
+    if (isExpo(job.dir)) return this.androidPages(job, routes);
     const port = await this.freePort();
     const server = new DevServer(
       job.dir,

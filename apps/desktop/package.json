@@ -14,7 +14,8 @@
     "test:e2e": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test",
     "dist:dir": "pnpm build && node ../../scripts/check-release-bundle.mjs && electron-builder --dir --publish never",
     "dist:win": "pnpm build && node ../../scripts/check-release-bundle.mjs && electron-builder --win --publish never",
-    "bench:chat": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test -c playwright.bench.config.ts"
+    "bench:chat": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test -c playwright.bench.config.ts tests/bench/chat.bench.ts",
+    "bench:android": "pnpm --filter @fitts/probes build && cross-env FITTS_DEV_TOOLS=1 electron-vite build && playwright test -c playwright.bench.config.ts tests/bench/android.bench.ts"
   },
   "dependencies": {
     "@babel/parser": "8.0.10",

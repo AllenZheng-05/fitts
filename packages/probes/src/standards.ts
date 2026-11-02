@@ -165,6 +165,13 @@ export const PROBE_STANDARDS: Record<ProbeName, string[] | null> = {
   surprise: ['3.2.1', '3.2.2', '2.2.1', '1.4.2'],
   state: null,
   perf: null,
+  // SPEC-phase4 §9.3: the same criteria as their web twins.
+  'android-target': ['2.5.8'],
+  'android-label': ['4.1.2'],
+  'android-duplicate-label': ['2.4.6'],
+  'android-duplicate-bounds': ['4.1.2'],
+  'android-editable-desc': ['4.1.2'],
+  'android-contrast': ['1.4.3'],
 };
 
 /** The criteria for a probe's finding (empty for a usability check). */

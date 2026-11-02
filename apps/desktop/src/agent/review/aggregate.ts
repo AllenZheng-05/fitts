@@ -16,6 +16,10 @@ import {
 } from '@fitts/schema';
 import { keyboardKind, surpriseKind } from '@fitts/probes';
 import { JUDGE_PERSONA } from './judge';
+import { BRAND_PERSONA } from './brandfit';
+
+/** The judge's titles for moving content (jumped, scrolled). */
+const JUMPY = /jumps|scrolls by itself/i;
 import { navigationKind } from '../crawler/navigation';
 import type { PersonaReview } from './reviewers';
 
@@ -58,6 +62,57 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
         fix: 'Give it at least 44×44px of tappable area (padding counts).',
         heuristic: 'H7',
         lens: 'ergonomics',
+        severity: 2,
+      };
+    // SPEC-phase4 §9.3: Android, from the dump and the screen's pixels.
+    case 'android-target':
+      return {
+        title: 'Tap target is too small',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}, under Android's 48×48dp minimum, so it's easy to miss.`,
+        fix: 'Make it at least 48×48dp, or add hitSlop around the icon.',
+        heuristic: 'H7',
+        lens: 'ergonomics',
+        severity: 2,
+      };
+    case 'android-label':
+      return {
+        title: 'Icon buttons have no accessible name',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}: TalkBack announces it as just "button".`,
+        fix: 'Give it an accessibilityLabel that says what it does.',
+        lens: 'accessibility',
+        severity: 3,
+      };
+    case 'android-duplicate-label':
+      return {
+        title: 'Different controls have the same name',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}, so a screen reader can't tell them apart.`,
+        fix: 'Name each control for what it does.',
+        heuristic: 'H4',
+        lens: 'accessibility',
+        severity: 2,
+      };
+    case 'android-duplicate-bounds':
+      return {
+        title: 'Two controls sit in the same place',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}: one hides the other from touch and from TalkBack.`,
+        fix: 'Keep one tap target per place; move the second action somewhere it can be reached.',
+        lens: 'accessibility',
+        severity: 2,
+      };
+    case 'android-editable-desc':
+      return {
+        title: 'A text field reads its description, not its value',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}, which TalkBack reads instead of what was typed.`,
+        fix: 'Use a hint or a visible label instead of a content description.',
+        lens: 'accessibility',
+        severity: 2,
+      };
+    case 'android-contrast':
+      return {
+        title: 'Text is hard to read',
+        finding: `${m.charAt(0).toUpperCase()}${m.slice(1)}.`,
+        fix: 'Darken the text (or lighten its background) to at least 4.5:1.',
+        lens: 'accessibility',
         severity: 2,
       };
     case 'button-name':
@@ -618,11 +673,14 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
       // The judge's moment is the same thing a probe measured there (bench:chat, Nov 2: #29's
       // sheet is also a keyboard finding on its element, #30's tip a surprise finding): one
       // finding, with the judge's vote and the moment, not a duplicate.
+      // A jump joins only a surprise finding: the row that jumped can carry another problem of
+      // its own (A7's overlapping rows), which isn't the jump (bench:android, Nov 2).
       if (persona === JUDGE_PERSONA)
         c ??=
           clusters.find(
             (x) =>
               x.probe &&
+              (x.probe === 'surprise' || !JUMPY.test(draft.title)) &&
               x.routes.has(route) &&
               draft.elementRef !== null &&
               x.refs.includes(draft.elementRef),
@@ -743,8 +801,11 @@ function toFinding(
   // SPEC-phase4 §6B.5: the judge's vote on a surprise event Fitts measured (an observation it
   // cites) counts as one reviewer, and the event itself as measured evidence.
   const judged =
-    c.drafts.some((d) => d.persona === JUDGE_PERSONA) &&
-    [...c.evidenceIds].some((id) => id.startsWith('obs-'));
+    (c.drafts.some((d) => d.persona === JUDGE_PERSONA) &&
+      [...c.evidenceIds].some((id) => id.startsWith('obs-'))) ||
+    // A9: the brand check's one vote on the screens it looked at (Android's theme check).
+    (c.drafts.some((d) => d.persona === BRAND_PERSONA) &&
+      [...c.evidenceIds].some((id) => id.endsWith('#snapshot')));
   const grounded =
     Boolean(c.probe) ||
     judged ||

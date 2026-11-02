@@ -280,6 +280,20 @@ export function extract(root: string, projectKind: 'web' | 'android' = 'web'): E
         continue;
       page(fileRoute(parts), f);
     }
+    // Screen titles from the layouts' <Tabs.Screen>/<Stack.Screen name="…" options={{ title }}>:
+    // what the header shows, so the Android target can name the screen it's on (§9.2).
+    for (const f of files) {
+      const m = /^(?:src\/)?app\/(?:(.*)\/)?_layout\.(tsx|jsx|ts|js)$/.exec(f);
+      if (!m) continue;
+      const dir = m[1] ? m[1].split('/') : [];
+      for (const s of readText(root, f).matchAll(
+        /<(?:Tabs|Stack|Drawer)\.Screen\s+name="([^"]+)"[\s\S]*?title:\s*(['"])([^'"]*)\2/g,
+      )) {
+        const route = fileRoute([...dir, ...(s[1] ?? '').split('/')]);
+        const p = pages.get(route.replace(/\/+$/, '') || '/');
+        if (p && s[3]) p.title = s[3];
+      }
+    }
   } else if (has('@tanstack/react-router') || has('@tanstack/router')) {
     router = 'tanstack';
     for (const f of files) {

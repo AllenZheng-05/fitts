@@ -36,12 +36,18 @@ export interface Scope {
   defaults: Set<string>;
   /** Files the owner (or the mode) allowed through request_scope. */
   granted: Set<string>;
+  /**
+   * Only the defaults (and grants), not every UI file: A9's brand fix may change the theme and
+   * the wordmark, nothing else (Nov 2).
+   */
+  only?: boolean;
 }
 
-export const newScope = (files: string[] = []): Scope => ({
+export const newScope = (files: string[] = [], only = false): Scope => ({
   // Sensitive files never come in as defaults, whoever asks.
   defaults: new Set(files.map(norm).filter((f) => !isSensitive(f))),
   granted: new Set(),
+  ...(only ? { only: true } : {}),
 });
 
 export type Verdict = { ok: true } | { ok: false; error: string };
@@ -56,7 +62,13 @@ export function mayEdit(path: string, scope: Scope, mode: FixMode): Verdict {
       ok: false,
       error: `${p} is a sensitive file (dependencies, config, auth, API or CI). Call request_scope("${p}", why) to ask the owner; it changes only with their "Go ahead".`,
     };
-  if (scope.defaults.has(p) || UI_FILE.test(p) || GLOBAL_CSS.test(p)) return { ok: true };
+  if (scope.defaults.has(p)) return { ok: true };
+  if (scope.only)
+    return {
+      ok: false,
+      error: `${p} is outside this fix's files (${[...scope.defaults].join(', ')}). Call request_scope("${p}", why) if you really need it.`,
+    };
+  if (UI_FILE.test(p) || GLOBAL_CSS.test(p)) return { ok: true };
   return {
     ok: false,
     error: `${p} is outside the files this fix may change (the finding's components, its page, their styles and the app's own UI files). Call request_scope("${p}", why) if you really need it.`,
