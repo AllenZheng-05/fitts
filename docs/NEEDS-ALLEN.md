@@ -9,7 +9,7 @@ stand-ins, device sizes, the test gate, the website) is committed locally and no
 
 # Phase 4 (do these first; they're in priority order)
 
-## P4-1. Android SDK and emulator (30–45 min) — unblocks the Android demo
+## P4-1. Android SDK and emulator — DONE Nov 1 (Fitts_Pixel, API 37, emulator-5554; Expo SDK 58 dev build verified)
 
 **Why:** installing system software and a Windows feature. Without it the Android audit (U8)
 is built against a fake adb and fixture dumps, and the live emulator bench waits for you.

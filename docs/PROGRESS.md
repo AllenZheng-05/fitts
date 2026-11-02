@@ -77,6 +77,8 @@ Total so far: **$0.03** of $15.
 
 ## Notes for the next context
 
+- **Android (Allen, Nov 1), for U8:** the emulator is set up and verified. The Fitts_Pixel AVD (API 37, x86_64, 4 GB) runs on WHPX and adb sees it as emulator-5554. ANDROID_HOME and JAVA_HOME are set and the SDK licenses are accepted. A create-expo-app@latest smoke app (C:/Users/Plasm/code/expo-smoke: expo ~58.0.22, react 19.3.0, react-native 0.88.1) built with `npx expo run:android` (Gradle 9.4.1, NDK 27.1, build tools 36/37, compileSdk 37, targetSdk 36) and ran as a development build with Metro on localhost:8081. demo/android-chat uses the same Expo SDK and a development build (expo-dev-client), not Expo Go. Allen will have the emulator running at U8, so the U8 bench runs on the real emulator, not only fake adb.
+
 - **Muse Code (Allen, Nov 1):** 1.4.14 in WSL is installed and has `--api-key-stdin` (no login).
   It also has `--disable-web-tools`, `--disable-request-user-input`, `--no-session-log` (use all
   three on every Fitts `muse exec`), `--output-schema <file>` (use it for Understand's
