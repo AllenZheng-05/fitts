@@ -122,6 +122,67 @@ export const demoChatAudit: Scenario = {
       atMs: 14 * S,
       label: '14s · Finding: "(null)" shown as a name',
       apply: (s, ctx) => {
+        // SPEC-phase4 §6A: the step's timing and what Fitts noticed, linked to the finding.
+        s.actions = [
+          ...(s.actions ?? []),
+          {
+            id: 'act-5',
+            step: 5,
+            at: 12_000,
+            kind: 'click',
+            target: { name: 'NEXT', role: 'button', ref: 'compose-next-1' },
+            from: '/compose',
+            to: '/compose/recipient',
+            ms: { firstChange: 1800, busy: null, settled: 2100, navigation: 1800 },
+            requests: {
+              count: 1,
+              failed: 0,
+              slowest: { method: 'GET', path: '/api/contacts/grandma', ms: 1700, status: 200 },
+            },
+            console: { errors: 1, first: 'TypeError: cannot read properties of null' },
+            observations: ['obs-1', 'obs-2'],
+          },
+        ];
+        s.observations = [
+          ...(s.observations ?? []),
+          {
+            id: 'obs-1',
+            step: 5,
+            route: '/compose',
+            kind: 'no-feedback',
+            text: 'Tapped **NEXT** · the page changed in 1.8 s, with nothing on screen for the first 1.8 s',
+            ref: 'compose-next-1',
+            severityHint: 2,
+          },
+          {
+            id: 'obs-2',
+            step: 5,
+            route: '/compose/recipient',
+            kind: 'leaked',
+            text: 'Noticed the page shows "(null)"',
+            ref: 'compose-to',
+            evidenceId: 'run-7-ev3',
+            severityHint: 3,
+            findingId: F.nullName.id,
+          },
+        ];
+        ctx.post({
+          type: 'steps',
+          steps: [
+            { label: 'Started exploring', costUsd: 0, detail: 'pass' },
+            { label: 'the compose flow is where people get stuck', costUsd: 0, detail: 'thinking' },
+            { label: 'Tapped “Grandma”', costUsd: 0, ms: 120 },
+            {
+              label: 'Tapped “NEXT” → /compose/recipient',
+              costUsd: 0.01,
+              ms: 1800,
+              slow: true,
+              noticed: ['obs-1', 'obs-2'],
+              findingIds: [F.nullName.id],
+              step: 5,
+            },
+          ],
+        });
         report(s, ctx, F.nullName);
         setRoute(s, '/compose/recipient', 'testing', 1);
         act(s, 'Tapping NEXT and timing the response', 'compose-next', 'Fitts · tapping NEXT');

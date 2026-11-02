@@ -118,6 +118,22 @@ export class SiteWindow {
     });
     wc.on('did-navigate', pushHistory);
     wc.on('did-navigate-in-page', pushHistory);
+    // SPEC-phase4 §6A: what the page logged, when it loaded and where it bounced, per action.
+    wc.on('did-finish-load', () => (this.loadedAt = Date.now()));
+    wc.on('did-redirect-navigation', (_e, url) => {
+      try {
+        this.redirects.push(new URL(url).pathname);
+      } catch {
+        // Not a URL worth noting.
+      }
+    });
+    wc.on('console-message', (event, ...rest: unknown[]) => {
+      const d = event as unknown as { level?: unknown; message?: unknown };
+      const level = d.level ?? rest[0];
+      const raw = d.message ?? rest[1];
+      const message = typeof raw === 'string' ? raw : '';
+      if (level === 'error' || level === 3) this.consoleErrors.push(message.slice(0, 120));
+    });
     this.recordNetwork();
   }
 
@@ -129,6 +145,10 @@ export class SiteWindow {
   private readonly networkIds = new WeakMap<RequestRecord, string>();
   /** The control being used right now, so requests can be traced back to it. */
   private acting: string | undefined;
+  /** SPEC-phase4 §6A: per-action console errors, redirect hops and the last load time. */
+  private consoleErrors: string[] = [];
+  private redirects: string[] = [];
+  private loadedAt = 0;
   /** When the page last tried to open a new tab or leave the site (both blocked). */
   private openedAt = 0;
   /** Until when Fitts's action is in flight (its click, then the page settling). */
@@ -798,6 +818,9 @@ export class SiteWindow {
     const before = this.path();
     const armed = await this.probes<boolean>('P.feedbackArm(); return true;').catch(() => false);
     const t0 = Date.now();
+    this.consoleErrors = [];
+    this.redirects = [];
+    this.loadedAt = 0;
     this.acting = ref;
     this.fittsUntil = t0 + 15_000;
     let rect: SiteRect | null;
@@ -821,9 +844,29 @@ export class SiteWindow {
       : null;
     const requests = mine().map((r) => ({ ...r }));
     const opened = this.openedAt >= t0;
+    // Settled: the later of the last DOM change and the last request's end, plus the 300 ms of
+    // quiet that proved it (null when nothing changed and nothing was asked for).
+    const lastReq = Math.max(0, ...requests.map((r) => (r.endMs ?? r.startMs) - t0));
+    const lastChange = feedback?.lastChangeMs ?? null;
+    const settledMs =
+      lastChange === null && requests.length === 0
+        ? null
+        : Math.max(lastChange ?? 0, lastReq) + 300;
+    const navigationMs = result.navigated && this.loadedAt >= t0 ? this.loadedAt - t0 : null;
+    const errors = this.consoleErrors;
+    const redirects = this.redirects;
     return {
       ...result,
-      trace: { feedback, requests, ...(rect ? { rect } : {}), ...(opened ? { opened } : {}) },
+      trace: {
+        feedback,
+        requests,
+        ...(rect ? { rect } : {}),
+        ...(opened ? { opened } : {}),
+        settledMs,
+        navigationMs,
+        console: { errors: errors.length, ...(errors[0] ? { first: errors[0] } : {}) },
+        ...(redirects.length ? { redirects: [...redirects] } : {}),
+      },
     };
   }
 

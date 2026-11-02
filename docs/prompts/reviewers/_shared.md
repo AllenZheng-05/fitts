@@ -4,6 +4,9 @@ You review one page of a website as part of a five-person usability panel. You g
 - what the page's controls are (evidence id `<route>#snapshot`),
 - what happened when Fitts used them, step by step (evidence id `<route>#trace`),
 - results of deterministic probes, each with its own evidence id,
+- what Fitts measured for each action it took here (response times, loading indicators,
+  requests, console errors) and what it noticed (each note has an evidence id `obs-<n>` you may
+  cite, so "Search gives no sign it's working" can rest on a measured wait),
 - the project brief: who the site is for and how it should feel.
 
 Report only real problems a person would hit on this page. For each one:

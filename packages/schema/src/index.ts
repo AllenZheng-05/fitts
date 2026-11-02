@@ -543,6 +543,8 @@ export interface Finding {
    */
   agreement: { agreeing: number; total: number; who: string[]; measured?: boolean };
   evidence: string[];
+  /** The probe results and notes it rests on (SPEC-phase4 §6A: links its noticed lines). */
+  evidenceIds?: string[];
   elementRef?: string;
   stepIndex: number;
   atMs: number;
@@ -779,7 +781,23 @@ export type ChatItem =
       pointingLabel?: string;
     }
   | { id: string; type: 'fitts.thinking'; text: string }
-  | { id: string; type: 'steps'; steps: { label: string; costUsd: number }[] }
+  | {
+      id: string;
+      type: 'steps';
+      steps: {
+        label: string;
+        costUsd: number;
+        /** SPEC-phase4 §6A.3: the response time to show, whether it was slow, what Fitts noticed. */
+        ms?: number | null;
+        slow?: boolean;
+        noticed?: string[];
+        findingIds?: string[];
+        /** The action's record (`act-<step>`), for "Every detail"'s requests and console. */
+        step?: number;
+        /** A line only "Every detail" shows: a decision's why, or an ability starting or ending. */
+        detail?: 'thinking' | 'pass';
+      }[];
+    }
   | { id: string; type: 'finding'; findingId: string }
   | {
       id: string;
@@ -955,6 +973,95 @@ export interface RunState {
   coverage?: RunCoverage;
   /** SPEC-phase4 §6C: paused since (ms since epoch) because Meta's models can't be reached. */
   modelsDownSince?: number;
+  /** SPEC-phase4 §6A: the action log, one record per action, and what Fitts noticed. */
+  actions?: ActionRecord[];
+  observations?: Observation[];
+}
+
+/** SPEC-phase4 §6A.2: one action and what main measured around it. */
+export interface ActionRecord {
+  /** "act-<step>" */
+  id: string;
+  step: number;
+  /** The run clock, ms. */
+  at: number;
+  kind: 'click' | 'type' | 'navigate' | 'back' | 'key' | 'load';
+  target?: { name: string; role: string; ref: string; src?: string };
+  from: string;
+  to: string;
+  ms: {
+    /** First DOM change after the action. */
+    firstChange: number | null;
+    /** A loading indicator appeared. */
+    busy: number | null;
+    /** No DOM mutations or requests for 300 ms. */
+    settled: number | null;
+    /** URL changed → main content loaded. */
+    navigation: number | null;
+  };
+  requests: {
+    count: number;
+    failed: number;
+    slowest?: { method: string; path: string; ms: number; status: number };
+  };
+  /** Untrusted page text, trimmed. */
+  console: { errors: number; first?: string };
+  /** Hops, when the action caused a redirect chain. */
+  redirects?: string[];
+  /** Observation ids. */
+  observations: string[];
+  /** The journey it belonged to, when one. */
+  journeyId?: string;
+}
+
+export type ObservationKind =
+  | 'slow'
+  | 'no-feedback'
+  | 'silent-save'
+  | 'nothing-happened'
+  | 'jumped'
+  | 'popped-up'
+  | 'focus-moved'
+  | 'moved-before-tap'
+  | 'scrolled-by-itself'
+  | 'vanished-fast'
+  | 'autoplay'
+  | 'hard-to-read'
+  | 'too-small'
+  | 'missing-name'
+  | 'missing-detail'
+  | 'leaked'
+  | 'error-text'
+  | 'wrong-place'
+  | 'redirect'
+  | 'refresh-breaks'
+  | 'not-found'
+  | 'broken-link'
+  | 'console-error'
+  | 'request-failed'
+  | 'keyboard'
+  | 'state'
+  | 'perf'
+  | 'cut-off'
+  | 'inconsistent';
+
+/** SPEC-phase4 §6A.2: something Fitts noticed: a note, never a verdict, until the review. */
+export interface Observation {
+  /** "obs-<n>": also an evidence id the reviewers may cite. */
+  id: string;
+  step: number;
+  route: string;
+  /** The device cell, when not the default. */
+  cell?: string;
+  kind: ObservationKind;
+  /** The chat line, from a template in copy.ts. */
+  text: string;
+  ref?: string;
+  /** The probe result or event it came from. */
+  evidenceId?: string;
+  severityHint: 1 | 2 | 3 | 4;
+  /** Set when the review turns it into (part of) a finding. */
+  findingId?: string;
 }
 
 /** SPEC-phase4 §6.2: coverage against the App Model, kept current through the run. */

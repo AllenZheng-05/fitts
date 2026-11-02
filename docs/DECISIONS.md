@@ -3010,3 +3010,64 @@ Allen's requirement (Nov 1), added to the spec as §6C with a §13 row and a §1
   moves nothing while paused, rolls nothing back, resumes on its own, and ends with the same
   findings, changes and answered calls as the run without one. The old "api trouble: retry
   carries on" test is replaced by one for the new behavior (Retry now checks, never resumes).
+
+## Phase 4 — U5b: Fitts notices (the action log)
+
+- **One record per action, built from what main already measured.** `agent/log/record.ts`
+  turns each action's `OpTrace` into an `ActionRecord` (first change, loading indicator,
+  settled, navigation; request count, failures and the slowest; console errors; redirect hops).
+  Main adds the new measurements to the trace: `settledMs` is the later of the last DOM change
+  (the feedback probe now keeps `lastChangeMs`) and the last request's end, plus the 300 ms of
+  quiet that proves it; `navigationMs` comes from `did-finish-load`; console errors from
+  `console-message` (error level, trimmed to 120 characters, page text treated as data); hops
+  from `did-redirect-navigation`. Records go in `RunState.actions` through
+  `action.recorded`, so they're in the event log and replay plays them.
+- **Observations are templates, never a model.** Each kind has a line in `copy.noticed`; the
+  action's own measurements give slow, no feedback, nothing happened, saved silently, request
+  failed, console error and redirect notes; every failing probe item gives one note the moment
+  it's measured, deduped per route, probe, element and measurement. They say "noticed", never
+  "problem". A journey that didn't finish leaves a note too. Kinds the spec lists for U5c's
+  detectors (jumped, popped up, moved before tap…) are in the type now and get their sources in
+  U5c. Two kinds were added beyond the spec's list: `cut-off` (the device matrix's overflow,
+  spacing, 200% and landscape checks) and `inconsistent` (fonts, spacing, labels).
+- **"Slow"** is a first change after more than 1 s with no loading indicator ("no feedback"), or
+  after more than 2.5 s even with one; a page load is slow past 3 s. The steps line gets the
+  measured time as a chip, in the warning tone when slow.
+- **The time shown is how long the page took to answer**: when the action asked the server for
+  something, until that answer was on screen (settled less its 300 ms of quiet); otherwise the
+  first change, or the page load. Typing echoes at once (demo/chat's search changed the DOM in
+  4 ms), so the first change alone hid the 1.5 s wait. A request over 1 s with no loading
+  indicator is its own note ("waited 1.5 s for the server, with nothing on screen saying it was
+  working"), found by the live e2e.
+- **The steps group** shows each line's timing chip and its noticed lines (an `Eye` icon,
+  `aria-hidden`; the words carry the meaning). Collapsed, it says "N things noticed". A noticed
+  line that the review linked to a finding gets "Finding N" (opens the Finding panel); one that
+  wasn't gets "Show me", which goes through `answerQuestion(observationId, 'show')` (no new
+  engine method): the run pauses, switches to the note's cell, opens the page and outlines the
+  element. The Finding panel's "See it yourself" lists the notes the finding rests on.
+- **Linking notes to findings** happens right after the review: a note is linked when the finding
+  cites it, cites the probe result it came from, or sits on the finding's element and page.
+  Findings now keep their `evidenceIds` for this.
+- **The detail setting** (Settings › General › "How much Fitts shows while it works", default
+  "Everything I notice") changes rendering only, through `renderer/lib/detail.ts`. Highlights
+  keeps slow steps and steps with notes, timing chips only on slow steps, and notes with
+  severity hint 3 or more. "Every detail" (Allen asked for it in U5b, not U10) adds, in the same
+  steps group: the decider's why as "Thinking: …" lines (lilac, like the chat's thinking), each
+  ability's start and end ("Started the screen-size pass", "Finished the reviewer panel: done"),
+  and under each action its requests (count and the slowest) and console errors, read from the
+  action's record through a `step` number on the steps line. Those lines are steps entries with
+  a `detail` kind; the other levels skip them, the collapsed summary names the last action (not a
+  detail line), and notes and timings attach to the last action line even when a detail line
+  came after it.
+- **Fitts uses its own log**: the brain's history is the record's compact line ("tapped NEXT →
+  /compose/recipient · 1.8 s · no loading indicator · noticed: …"); the decider gets counts by
+  kind and the latest five lines (`situation.noticed`); each reviewer gets the page's measured
+  actions and its notes with ids it may cite (`obs-<n>` joins the valid evidence ids); converse
+  gets the latest eight lines to answer "what are you doing?"; the report gets an "Activity"
+  section per page in `<details>`.
+- **The event diff** replaces or clears the log whole when entries disappear (a new run in the
+  same project), and otherwise appends, so diff + reduce still reproduce the engine's state.
+- **The mock scenario** (Audit (Ask)) posts the NEXT step with its 1.8 s chip and two notes, one
+  linked to the "(null)" finding, so the steps group, the link and the detail setting are tested
+  offline. The demo/chat crawl e2e checks the search step's measured wait over 1 s, marked slow,
+  and that the "(null)" note is linked to its finding.

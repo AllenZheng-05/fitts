@@ -7,6 +7,8 @@ export type ModelProfile = 'quality' | 'economy' | 'open';
 export type TalkMode = 'button' | 'wake' | 'typing';
 export type ShapeMovement = 'still' | 'gentle' | 'lively';
 export type VoiceName = 'elevenlabs' | 'system';
+/** SPEC-phase4 §6A.3: how much of the action log the chat shows (the log is always kept). */
+export type DetailLevel = 'highlights' | 'everything' | 'all';
 export type UserMode = Exclude<Mode, 'dangerous'>;
 
 interface SettingsState {
@@ -35,6 +37,7 @@ interface SettingsState {
   talkMode: TalkMode;
   shapesOn: boolean;
   shapeMovement: ShapeMovement;
+  detail: DetailLevel;
 
   set: (patch: Partial<Omit<SettingsState, 'set' | 'setKey' | 'setSpeaksAloud'>>) => void;
   setKey: (key: KeyName, added: boolean) => void;
@@ -57,6 +60,7 @@ export const DEFAULT_SETTINGS = {
   talkMode: 'button' as TalkMode,
   shapesOn: true,
   shapeMovement: 'gentle' as ShapeMovement,
+  detail: 'everything' as DetailLevel,
 };
 
 export const useSettings = create<SettingsState>()(

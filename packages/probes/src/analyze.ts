@@ -44,6 +44,8 @@ export interface PageProbeResult {
 export interface Feedback {
   /** First DOM change after the action, or null if nothing changed. */
   firstChangeMs: number | null;
+  /** The last DOM change seen before the read (SPEC-phase4 §6A: "settled"). */
+  lastChangeMs?: number | null;
   /** When a loading indicator first showed, or null. */
   busyMs: number | null;
   /** Text that appeared (newest last, trimmed). */

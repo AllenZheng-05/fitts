@@ -133,6 +133,30 @@ export function buildReport(project: Project | undefined, run: RunState, now = n
         ];
       }),
     '',
+    // SPEC-phase4 §6A.4: what Fitts did and noticed, per page, folded.
+    ...((run.actions?.length ?? 0) > 0
+      ? [
+          `## ${r.activity}`,
+          '',
+          ...[...new Set((run.actions ?? []).map((a) => a.from))].flatMap((route) => [
+            `<details><summary>${route}</summary>`,
+            '',
+            ...(run.actions ?? [])
+              .filter((a) => a.from === route)
+              .map((a) => {
+                const t = a.ms.firstChange ?? a.ms.navigation;
+                const notes = (run.observations ?? [])
+                  .filter((o) => a.observations.includes(o.id))
+                  .map((o) => ` · ${o.text.replace(/\*\*/g, '')}`)
+                  .join('');
+                return `- ${a.step}. ${a.kind} ${a.target?.name ?? a.to}${t !== null ? ` · ${(t / 1000).toFixed(1)} s` : ''}${a.requests.count ? ` · ${a.requests.count} requests` : ''}${notes}`;
+              }),
+            '',
+            '</details>',
+            '',
+          ]),
+        ]
+      : []),
     `## ${r.cost}`,
     '',
     ...(Object.keys(copy.done.costLegend) as (keyof typeof copy.done.costLegend)[]).map(

@@ -123,6 +123,21 @@ export function SeeIt({ run, finding }: { run: RunState; finding: Finding }) {
           )}
         </p>
       )}
+      {(run.observations ?? []).some((o) => o.findingId === finding.id) && (
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] font-bold text-ink-2">{s.noticed}</span>
+          <ul className="flex flex-col gap-0.5">
+            {(run.observations ?? [])
+              .filter((o) => o.findingId === finding.id)
+              .slice(0, 6)
+              .map((o) => (
+                <li key={o.id} className="text-[12px] text-ink-2">
+                  <RichText text={o.text} />
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
       {(repro.wcag?.length || repro.rule) && (
         <ul className="flex flex-wrap gap-1.5">
           {repro.wcag?.map((c) => (

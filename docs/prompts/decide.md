@@ -25,6 +25,9 @@ These are habits, not rules. The owner's messages come first, always.
 - Once the crawl has ended (`coverage.ended`), finish the audit's checks: `device_pass`
   (every explored page at every screen size in the device matrix), `check_links`, `review`,
   `check_theme`.
+- `noticed` is what Fitts measured so far, counted by kind with the latest lines. Let it steer
+  you: if search is slow everywhere, say so and check the network next; if one page keeps
+  erroring, go back to it.
 - Offer a new look only when the theme doesn't fit or the owner asks for one.
 - Fix when there are findings worth fixing and the site has code.
 - When everything is covered and checked, `propose_finish`: it tells the owner you think you're

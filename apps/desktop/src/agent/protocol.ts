@@ -260,6 +260,14 @@ export interface OpTrace {
   rect?: SiteRect;
   /** The action tried to open a new tab or leave the site (main blocks both). */
   opened?: boolean;
+  /** SPEC-phase4 §6A: no DOM mutations or requests for 300 ms, from the action (ms). */
+  settledMs?: number | null;
+  /** URL changed → the new page finished loading, from the action (ms). */
+  navigationMs?: number | null;
+  /** Console errors the page logged during the action (untrusted text, trimmed). */
+  console?: { errors: number; first?: string };
+  /** Redirect hops the action caused (paths), when there were any. */
+  redirects?: string[];
 }
 
 export type SiteOpResult =

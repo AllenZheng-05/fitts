@@ -147,6 +147,8 @@ export interface ConverseInput {
   now: string;
   covered: { pages: number; controls: { done: number; total: number } };
   findings: string[];
+  /** SPEC-phase4 §6A.4: the latest things Fitts noticed ("/search: Typed in Search · …"). */
+  noticed?: string[];
   /** The last few lines of the chat, oldest first ("Fitts: …", "Owner: …"). */
   recent: string[];
   message: string;

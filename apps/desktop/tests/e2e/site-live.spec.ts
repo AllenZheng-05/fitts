@@ -154,7 +154,12 @@ async function runState(page: Page) {
       routes: { path: string; status: string }[];
       controlsTried: { done: number; total: number };
       overlays: { attention?: { ref: string } };
-      chat: { type: string; stateKind?: string; text?: string }[];
+      chat: {
+        type: string;
+        stateKind?: string;
+        text?: string;
+        steps?: { label: string; ms?: number | null; slow?: boolean }[];
+      }[];
       step: number;
       waitingFor?: string;
       gate?: { id: string; action: string; heldRequest: string };
@@ -162,6 +167,8 @@ async function runState(page: Page) {
       journeys?: RunState['journeys'];
       cells?: RunState['cells'];
       coverage?: RunState['coverage'];
+      actions?: RunState['actions'];
+      observations?: RunState['observations'];
     };
   });
 }
@@ -247,6 +254,21 @@ test('the real crawl reaches every route and tries every primary control (covera
     expect(reflow?.evidence.join(' ')).toMatch(/at 320px on Reflow · 320×640/);
   }
   await expect(proposal.first()).toContainText(/Screen sizes: \d+ checked/);
+  // SPEC-phase4 §6A: the search step carries its measured wait (planted #13: 1.5 s with no
+  // loading indicator), and the "(null)" note is linked to its finding.
+  {
+    const now = await runState(page);
+    const search = now.actions?.find(
+      (a) => a.kind === 'type' && /search/i.test(a.target?.name ?? ''),
+    );
+    expect(search?.requests.slowest?.ms ?? 0).toBeGreaterThan(1000);
+    const note = now.observations?.find((o) => o.kind === 'leaked' && /null/.test(o.text));
+    expect(note?.findingId).toBeDefined();
+    const line = now.chat
+      .flatMap((c) => (c.type === 'steps' ? (c.steps ?? []) : []))
+      .find((s) => /search/i.test(s.label) && (s.ms ?? 0) > 1000);
+    expect(line?.slow).toBe(true);
+  }
   await proposal.first().getByRole('button', { name: 'Keep going' }).click();
   await page.getByLabel('Message Fitts').press('Enter');
   await expect(proposal.first()).toContainText('You kept going');

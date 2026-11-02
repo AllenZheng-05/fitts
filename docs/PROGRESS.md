@@ -17,7 +17,7 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U4  | Repro (§5)                               | done        | `4105a5a` |
 | U5  | Journeys, coverage, device matrix (§6)   | done        | `bb5c828` |
 | U5a | Models unreachable: pause (§6C, added)   | done        | `1f18153` |
-| U5b | The action log (§6A)                     | todo        |           |
+| U5b | The action log (§6A)                     | done        | see git   |
 | U5c | Detect more (§6B)                        | todo        |           |
 | U6  | Code-aware fixer (§7)                    | todo        |           |
 | U7  | App Map (§8)                             | todo        |           |
@@ -27,10 +27,37 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 ## Current milestone and next step
 
-**Paused at Allen's request after U5a (Nov 1).** U5a is committed (all four suites green: 144 e2e). Next: U5b. U5 is committed. U5b's files and scripts wait in the scratchpad: `u5b-hold/`
+**U4b (ddmin, Allen asked Nov 2) next, its own commit; then U5c.** ddmin core is written (agent/repro/ddmin.ts + tests/agent/ddmin.test.ts); the wiring is scratchpad u4b.cjs. Lesson: an edit script's "skip if already applied" guard must not be `includes(b)`; insertions keep their anchor, so a rerun applies them again. Revert and apply once instead.
 (record.ts → `apps/desktop/src/agent/log/`, log.test.ts → `tests/agent/`), `u5b-a.mjs` then
 `u5b-b.mjs` (written before U5a: re-check their anchors in run.ts, e.g. the review() and
 answer() blocks U5a touched, before applying).
+
+## U5c plan (detect more; §6B)
+
+Never cut here: full axe, keyboard checks, state shots, navigation checks, the deterministic
+surprise detector. Cut first if behind (in §13 order): the production build in perf_pass (#3),
+the Wonder judge and SAM frames (#4), state_pass's empty and slow cases (#7).
+
+1. **axe** (§6B.1): `page.ts` second axe pass with the WCAG/best-practice tags minus the three
+   owned rules; `ProbeName 'axe'` items carry rule id, help, helpUrl, tags, impact; template
+   and severity from impact; standards from tags (already in standards.ts `axeStandards`);
+   VERIFIABLE gains 'axe'. Planted #27 (avatar alt), #28 (search label).
+2. **keyboard** (§6B.2): extend `focusSweep` to record the stop sequence with rects (up to
+   200); pure analysis in `packages/probes` (unreached, stuck, hidden, order, skip link);
+   dialog checks when a dialog opens. Planted #29's keyboard part.
+3. **states** (§6B.3): `agent/crawler/states.ts` state keys; probes + shot per new state;
+   RouteEvidence.states; reviewers see up to 5 extra states per route (cap 40/20).
+4. **navigation** (§6B.4): expected destination from href / App Model static targets; redirect
+   chains (U5b already records hops); Back after redirect; refresh each route at the end of
+   check_links; soft 404. Planted #31, #32.
+5. **surprise** (§6B.5): isolated-world detector (popped up, jumped, moved before tap, focus
+   moved, scrolled, vanished fast, autoplay) feeding observations and probe findings. Judge
+   (Wonder) and SAM frames likely cut (#4). Planted #29, #30.
+6. **state_pass** (§6B.6): Fetch interception of up to 6 GET endpoints: error first (never
+   cut), then empty and slow. Planted #33.
+7. **perf_pass** (§6B.7): throttled phone cell on the dev server labeled "dev build" (the
+   production build is cut #3 unless time).
+8. PLANTED.md/check script/bench list to 33; bench recall over 33 ≥ 80% (one paid bench run).
 
 ## U5 plan (journeys, coverage, device matrix; §6)
 
@@ -97,8 +124,6 @@ Total so far: **$0.03** of $15.
   `visualViewport.width` (U5 lesson). A quick Electron probe script in the scratchpad
   (`probe-320.cjs`, load about:blank before attaching the debugger) is the fastest way to see
   what a cell sees.
-- U5b's files are parked in the scratchpad's `u5b-hold/` (record.ts, log.test.ts) until U5 is
-  committed; move them back to `apps/desktop/src/agent/log/` and `tests/agent/`.
 - Milestone commits go straight to main.
 - The recorded Pass 2 fixture: `apps/desktop/tests/fixtures/llm/understand.json`; recorder:
   `FITTS_RECORD_UNDERSTAND=1 pnpm --filter @fitts/desktop exec vitest run tests/agent/record-understand.test.ts`.

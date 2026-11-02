@@ -2,7 +2,9 @@
 // `reduce` over them. Main, the agent and the renderer share this one reducer, so the log
 // powers the UI, resume, replay, cost reports and the run picker.
 import type {
+  ActionRecord,
   AppModelSummary,
+  Observation,
   Brief,
   CostEvent,
   Change,
@@ -30,6 +32,10 @@ export type RunEvent =
   | { type: 'ability.changed'; ability?: { name: string; since: number } }
   /** SPEC-phase4 §3: what Fitts understands from the code (the UI's summary of the model). */
   | { type: 'appmodel.set'; appModel: AppModelSummary }
+  // SPEC-phase4 §6A: the action log.
+  | { type: 'action.recorded'; record: ActionRecord }
+  | { type: 'observation.added'; observation: Observation }
+  | { type: 'observation.linked'; id: string; findingId: string }
   // Steps and routes
   | { type: 'step.started'; step: number; stepEstimate: number }
   | { type: 'step.finished'; step: number; shot?: string }
@@ -132,6 +138,26 @@ export function reduce(s: RunState | undefined, e: RunEvent): RunState | undefin
     }
     case 'appmodel.set':
       return { ...s, appModel: e.appModel };
+    case 'action.recorded':
+      return {
+        ...s,
+        actions: [...(s.actions ?? []).filter((a) => a.id !== e.record.id), e.record],
+      };
+    case 'observation.added':
+      return {
+        ...s,
+        observations: [
+          ...(s.observations ?? []).filter((o) => o.id !== e.observation.id),
+          e.observation,
+        ],
+      };
+    case 'observation.linked':
+      return {
+        ...s,
+        observations: (s.observations ?? []).map((o) =>
+          o.id === e.id ? { ...o, findingId: e.findingId } : o,
+        ),
+      };
     case 'step.started':
       return { ...s, step: e.step, stepEstimate: e.stepEstimate };
     case 'step.finished':
@@ -249,6 +275,8 @@ const HANDLED = new Set<keyof RunState>([
   'waitingFor',
   'driverClicks',
   'appModel',
+  'actions',
+  'observations',
 ]);
 
 /** Changes in a list keyed by id: created/updated, or `set` when items vanished or moved. */
@@ -300,6 +328,34 @@ export function diff(prev: RunState | undefined, next: RunState): RunEvent[] {
   if (prev.nowText !== next.nowText) out.push({ type: 'now.changed', nowText: next.nowText });
   if (next.appModel && !same(prev.appModel, next.appModel))
     out.push({ type: 'appmodel.set', appModel: next.appModel });
+  // SPEC-phase4 §6A: records are appended; observations are appended or linked to a finding.
+  // A log that lost entries (a new run in the same project) is replaced, or cleared, whole.
+  const prevA = prev.actions ?? [];
+  const nextA = next.actions ?? [];
+  if (prevA.some((p) => !nextA.some((a) => a.id === p.id)))
+    out.push(
+      next.actions
+        ? { type: 'run.patch', patch: { actions: next.actions } }
+        : { type: 'run.patch', patch: {}, unset: ['actions'] },
+    );
+  else
+    for (const a of nextA)
+      if (!prevA.some((p) => p.id === a.id)) out.push({ type: 'action.recorded', record: a });
+  const prevO = prev.observations ?? [];
+  const nextO = next.observations ?? [];
+  if (prevO.some((p) => !nextO.some((o) => o.id === p.id)))
+    out.push(
+      next.observations
+        ? { type: 'run.patch', patch: { observations: next.observations } }
+        : { type: 'run.patch', patch: {}, unset: ['observations'] },
+    );
+  else
+    for (const o of nextO) {
+      const was = prevO.find((p) => p.id === o.id);
+      if (!was) out.push({ type: 'observation.added', observation: o });
+      else if (was.findingId !== o.findingId && o.findingId)
+        out.push({ type: 'observation.linked', id: o.id, findingId: o.findingId });
+    }
 
   if (!same(prev.routes, next.routes)) {
     const prevPaths = prev.routes.map((r) => r.path);

@@ -96,6 +96,8 @@ export interface Situation {
   app?: { summary: string; pages: string[]; journeys: string[] };
   /** SPEC-phase4 §4.3: what the owner told Fitts on earlier runs, in one line. */
   memory?: string;
+  /** SPEC-phase4 §6A.4: what Fitts noticed so far: counts by kind, the latest lines. */
+  noticed?: { byKind: Record<string, number>; latest: string[] };
   /** SPEC-phase4 §6.1: the App Model's journeys and how far each got. */
   journeys?: {
     id: string;

@@ -532,6 +532,7 @@ function toFinding(
       ...(c.probe ? { measured: true } : {}),
     },
     evidence,
+    ...(c.evidenceIds.size ? { evidenceIds: [...c.evidenceIds] } : {}),
     ...(c.refs[0] ? { elementRef: c.refs[0] } : {}),
     ...(lead && (lead.expected || lead.actual || lead.steps?.length)
       ? {

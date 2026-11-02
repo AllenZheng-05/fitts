@@ -21,6 +21,7 @@ import {
   type TalkMode,
   type UserMode,
   type VoiceName,
+  type DetailLevel,
 } from '../../state/settings';
 import { useUi, type SettingsTab } from '../../state/ui';
 import { Remembers } from './Remembers';
@@ -105,6 +106,7 @@ function Section({
 /** You, and your data (Allen's feedback, round 5): your name, and deleting everything saved. */
 function GeneralTab() {
   const name = useSettings((s) => s.name);
+  const detail = useSettings((s) => s.detail);
   const [confirming, setConfirming] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const del = bridge().deleteAllData;
@@ -119,6 +121,19 @@ function GeneralTab() {
           maxLength={60}
           onChange={(e) => useSettings.getState().set({ name: e.target.value })}
         />
+        <Select
+          label={copy.settings.detail}
+          size="lg"
+          value={detail}
+          onChange={(e) => useSettings.getState().set({ detail: e.target.value as DetailLevel })}
+          options={(['highlights', 'everything', 'all'] as const).map((d) => ({
+            value: d,
+            label: copy.settings.details[d],
+          }))}
+        />
+        <p className="rounded-control bg-surface-2 px-3 py-2.5 text-[13px] leading-normal">
+          {copy.settings.detailHint}
+        </p>
       </Section>
       <Section title={copy.settings.dataTitle}>
         <p className="text-[14px] leading-normal text-ink-2">{copy.settings.dataBody}</p>

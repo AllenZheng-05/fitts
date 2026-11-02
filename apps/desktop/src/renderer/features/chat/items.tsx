@@ -4,9 +4,13 @@ import {
   type Brief,
   type ChatItem,
   type Finding,
+  type Observation,
   type RunState,
 } from '@fitts/schema';
+import { Eye } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { useSettings } from '../../state/settings';
+import { showsNote, showsRecord, showsStep, showsTiming } from '../../lib/detail';
 import { Button } from '../../components/Button';
 import { Chip, SeverityBadge } from '../../components/Chip';
 import { RichText } from '../../components/RichText';
@@ -47,7 +51,7 @@ export function ChatItemView({ item, run }: { item: ChatItem; run: RunState }) {
       );
       break;
     case 'steps':
-      body = <Steps item={item} />;
+      body = <Steps item={item} run={run} />;
       break;
     case 'finding':
       body = <FindingCard item={item} run={run} />;
@@ -152,18 +156,69 @@ function UserMessage({ item }: { item: Item<'user.message'> }) {
   );
 }
 
-function Steps({ item }: { item: Item<'steps'> }) {
+/** One noticed line: the eye, the note, "Finding N" when the review made one, and "Show me". */
+function Noticed({ o, run }: { o: Observation; run: RunState }) {
+  const n = run.findings.findIndex((f) => f.id === o.findingId);
+  return (
+    <li className="flex items-start gap-1.5 pl-5 text-[12px] text-ink-2">
+      <Eye aria-hidden className="mt-0.5 size-3.5 flex-none text-muted" />
+      <span className="min-w-0 flex-1">
+        <RichText text={o.text} />
+      </span>
+      {o.findingId && n >= 0 && (
+        <button
+          type="button"
+          className="flex-none font-sans font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
+          onClick={() => useUi.getState().set({ openFindingId: o.findingId ?? null })}
+        >
+          {format(copy.items.findingLink, { n: n + 1 })}
+        </button>
+      )}
+      {o.ref && !o.findingId && (
+        <button
+          type="button"
+          className="flex-none font-sans font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
+          onClick={() => getEngine().answerQuestion(run.projectId, o.id, 'show')}
+        >
+          {copy.items.showOnSite}
+        </button>
+      )}
+    </li>
+  );
+}
+
+function Steps({ item, run }: { item: Item<'steps'>; run: RunState }) {
   const [open, setOpen] = useState(false);
-  const last = item.steps.at(-1);
+  const level = useSettings((s) => s.detail);
+  const byId = new Map((run.observations ?? []).map((o) => [o.id, o]));
+  const notesOf = (step: Item<'steps'>['steps'][number]) =>
+    (step.noticed ?? []).flatMap((id) => {
+      const o = byId.get(id);
+      return o && showsNote(level, o) ? [o] : [];
+    });
+  const last = item.steps.findLast((s) => !s.detail) ?? item.steps.at(-1);
+  const noticedTotal = item.steps.reduce((n, s) => n + notesOf(s).length, 0);
+  const shown = item.steps.filter((s) => showsStep(level, s));
+  const recordOf = (step: Item<'steps'>['steps'][number]) =>
+    step.step !== undefined ? run.actions?.find((a) => a.step === step.step) : undefined;
+  const actionCount = item.steps.filter((s) => !s.detail).length;
   return (
     <div className="flex flex-col gap-2">
       {/* What Fitts just did, always in view; the rest opens below. */}
       {last && !open && (
         <span className="font-mono text-[12px] text-ink-2">
           {format(copy.items.lastStep, { step: last.label })}
+          {noticedTotal > 0 && (
+            <span className="text-muted">
+              {' · '}
+              {noticedTotal === 1
+                ? copy.items.noticedOne
+                : format(copy.items.noticedCount, { n: noticedTotal })}
+            </span>
+          )}
         </span>
       )}
-      {item.steps.length > 1 && (
+      {shown.length > 1 && (
         <Button
           variant="ghost-dashed"
           size="inline"
@@ -171,17 +226,90 @@ function Steps({ item }: { item: Item<'steps'> }) {
           className="self-start"
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? copy.items.hideSteps : format(copy.items.showSteps, { n: item.steps.length })}
+          {open ? copy.items.hideSteps : format(copy.items.showSteps, { n: actionCount })}
         </Button>
       )}
       {open && (
         <ol className="flex flex-col gap-1 rounded-control bg-surface-2 p-2.5 font-mono text-[12px]">
-          {item.steps.map((step, i) => (
-            <li key={i} className="flex justify-between gap-3">
-              <span>{step.label}</span>
-              {step.costUsd > 0 && <span className="text-muted">{formatUsd(step.costUsd)}</span>}
-            </li>
-          ))}
+          {shown.map((step, i) => {
+            const notes = notesOf(step);
+            if (step.detail === 'thinking')
+              return (
+                <li key={i} className="font-sans text-[12px] text-lilac-ink">
+                  {format(copy.items.thinking, { why: step.label })}
+                </li>
+              );
+            if (step.detail === 'pass')
+              return (
+                <li key={i} className="text-muted">
+                  {step.label}
+                </li>
+              );
+            const record = showsRecord(level) ? recordOf(step) : undefined;
+            const slowest = record?.requests.slowest;
+            const findingNs = (step.findingIds ?? [])
+              .map((id) => run.findings.findIndex((f) => f.id === id))
+              .filter((n) => n >= 0);
+            return (
+              <li key={i} className="flex flex-col gap-0.5">
+                <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span>{step.label}</span>
+                  <span className="flex items-center gap-2">
+                    {showsTiming(level, step) && (
+                      <Chip
+                        tone={step.slow ? 'sun' : 'neutral'}
+                        className="px-1.5 py-0"
+                        aria-label={format(copy.items.timingLabel, {
+                          s: ((step.ms ?? 0) / 1000).toFixed(1),
+                        })}
+                        title={step.slow ? copy.items.slowLabel : undefined}
+                      >
+                        {format(copy.items.timing, { s: ((step.ms ?? 0) / 1000).toFixed(1) })}
+                      </Chip>
+                    )}
+                    {findingNs.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className="font-sans font-semibold text-cobalt-ink underline hover:text-cobalt-deep"
+                        onClick={() =>
+                          useUi.getState().set({ openFindingId: run.findings[n]?.id ?? null })
+                        }
+                      >
+                        {format(copy.items.findingLink, { n: n + 1 })}
+                      </button>
+                    ))}
+                    {step.costUsd > 0 && (
+                      <span className="text-muted">{formatUsd(step.costUsd)}</span>
+                    )}
+                  </span>
+                </span>
+                {record && (record.requests.count > 0 || record.console.errors > 0) && (
+                  <span className="pl-5 text-muted">
+                    {record.requests.count > 0 &&
+                      (slowest
+                        ? format(copy.items.requests, {
+                            n: record.requests.count,
+                            method: slowest.method,
+                            path: slowest.path,
+                            s: (slowest.ms / 1000).toFixed(1),
+                          })
+                        : format(copy.items.requestsOnly, { n: record.requests.count }))}
+                    {record.requests.count > 0 && record.console.errors > 0 && ' · '}
+                    {record.console.errors > 0 &&
+                      format(copy.items.consoleErrors, { n: record.console.errors })}
+                  </span>
+                )}
+                {notes.length > 0 && (
+                  <ul className="flex flex-col gap-0.5">
+                    {notes.map((o) => (
+                      <Noticed key={o.id} o={o} run={run} />
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

@@ -10,6 +10,7 @@ import {
   type DeviceCell,
   type Finding,
   type Journey,
+  type Observation,
   type RunCoverage,
   type EdgeStateKind,
   type MemoryRule,
@@ -27,6 +28,15 @@ import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
 import { Coverage, DESTRUCTIVE, patternOf, routeOf } from '../crawler/coverage';
 import { chooseCells, mergeBreakpoints, widthsFromCss } from '../devices/matrix';
+import {
+  buildRecord,
+  noticeAction,
+  noticeProbe,
+  noticedSummary,
+  observationsFor,
+  recordLine,
+  responseMs,
+} from '../log/record';
 import {
   FallbackJourneyBrain,
   PlanJourneyBrain,
@@ -218,6 +228,15 @@ export class RealRun {
   >();
   /** SPEC-phase4 §6.3: the device matrix, once the device pass chose it. */
   private cells: DeviceCell[] = [];
+  /** SPEC-phase4 §6A: what Fitts noticed, in order; keys of probe notes already made. */
+  private readonly observations: Observation[] = [];
+  private readonly noted = new Set<string>();
+  private obsN = 0;
+  /** The cell the site is in during the device pass (notes say where). */
+  private cellNow: string | undefined;
+  /** The journey being run (its records say so). */
+  private journeyNow: string | undefined;
+  private readonly nextObsId = () => `obs-${++this.obsN}`;
   private cellsRun = 0;
   private lastCoverage = '';
   private readonly recent: Outcome[] = [];
@@ -311,9 +330,19 @@ export class RealRun {
       if (!p.dynamic && !p.route.includes(':')) this.coverage.discover(p.route, 'code');
     const { first, later } = journeyOrder(deps.appModel?.journeys ?? []);
     for (const j of [...first, ...later]) this.journeyStatus.set(j.id, { status: 'planned' });
-    this.probes = new ProbeRunner(deps.site, from.runId, (result) =>
-      this.emit([{ type: 'probe.result', result }]),
-    );
+    this.probes = new ProbeRunner(deps.site, from.runId, (result) => {
+      this.emit([{ type: 'probe.result', result }]);
+      this.notice(
+        noticeProbe(
+          result,
+          this.state.step,
+          this.nextObsId,
+          (ref) => this.lastSnap?.nodes.find((n) => n.ref === ref)?.name,
+          this.noted,
+          this.cellNow,
+        ),
+      );
+    });
     this.state = {
       ...from,
       phase: 'audit',
@@ -571,6 +600,9 @@ export class RealRun {
       // refused step never announces itself (Allen's feedback, round 7).
       const refusal = this.refusal(decision);
       if (decision.say && !refusal) this.say(decision.say);
+      if (decision.why && !refusal) this.logDetail('thinking', decision.why);
+      const passName = copy.fitts.abilityNames[decision.ability] ?? decision.ability;
+      if (!refusal) this.logDetail('pass', format(copy.fitts.passStarted, { name: passName }));
       this.emit([
         {
           type: 'ability.changed',
@@ -581,6 +613,14 @@ export class RealRun {
         ? { ability: decision.ability, result: 'refused' as const, note: refusal }
         : await this.use(decision);
       if (!this.finished) this.emit([{ type: 'ability.changed' }]);
+      if (!refusal && !this.finished)
+        this.logDetail(
+          'pass',
+          format(copy.fitts.passEnded, {
+            name: passName,
+            result: copy.fitts.passResults[outcome.result] ?? outcome.result,
+          }) + (outcome.note ? ` (${outcome.note})` : ''),
+        );
       refused = outcome.result === 'refused';
       this.recent.push(outcome);
       if (this.recent.length > RECENT) this.recent.shift();
@@ -920,6 +960,7 @@ export class RealRun {
       earlier: this.heard.slice(-10),
       budget: { spentUsd: this.state.cost.spentUsd, capUsd: this.state.cost.capUsd },
       ...(this.journeyStatus.size ? { journeys: this.journeyList() } : {}),
+      ...(this.observations.length ? { noticed: noticedSummary(this.observations) } : {}),
       ...(memoryLine(this.deps.memory?.get())
         ? {
             memory: `The owner told you on earlier runs: ${memoryLine(this.deps.memory?.get()) ?? ''}`,
@@ -1349,10 +1390,21 @@ export class RealRun {
    * group, which shows the latest and opens to show them all. Anything else in the chat starts
    * a new group.
    */
-  private logAction(label: string): void {
+  /**
+   * SPEC-phase4 §6A.3: a line only "Every detail" shows: the decider's why ("Thinking: …"), or
+   * an ability starting and ending. Appended to the current steps group like an action.
+   */
+  private logDetail(detail: 'thinking' | 'pass', label: string): void {
+    this.logAction(label, detail);
+  }
+
+  private logAction(label: string, detail?: 'thinking' | 'pass'): void {
     const last = this.state.chat.at(-1);
     const current = this.stepsItem && last?.id === this.stepsItem.id ? this.stepsItem : undefined;
-    const steps = [...(current?.steps ?? []), { label, costUsd: 0 }].slice(-200);
+    const steps = [
+      ...(current?.steps ?? []),
+      { label, costUsd: 0, ...(detail ? { detail } : {}) },
+    ].slice(-200);
     const item = { id: current?.id ?? this.id(), type: 'steps' as const, steps };
     this.stepsItem = { id: item.id, steps };
     this.emit([{ type: current ? 'chat.item.updated' : 'chat.item', item }]);
@@ -1908,6 +1960,7 @@ export class RealRun {
           continue;
         }
         original ??= previous;
+        this.cellNow = cell.id;
         for (const route of routes) {
           if (this.finished) break;
           this.emit([
@@ -1930,6 +1983,7 @@ export class RealRun {
         this.syncCoverage();
       }
     } finally {
+      this.cellNow = undefined;
       if (original !== undefined) await site.device?.(original).catch(() => undefined);
     }
   }
@@ -1993,6 +2047,7 @@ export class RealRun {
     const site = this.deps.site;
     const spark = this.deps.journeyBrain?.(j);
     const brain = spark ? new FallbackJourneyBrain(spark) : new PlanJourneyBrain();
+    this.journeyNow = j.id;
     const snap0 = await site.snapshot().catch(() => undefined);
     if (snap0 && routeOf(snap0.path) !== routeOf(j.start))
       await this.perform(
@@ -2028,6 +2083,7 @@ export class RealRun {
       },
       j,
     );
+    this.journeyNow = undefined;
     // Paused or stopped mid-way: not the journey's fault; it's tried again later.
     if (result.status === 'blocked' && result.reason === 'the run stopped' && !this.finished) {
       this.setJourney(j.id, { status: 'planned' });
@@ -2043,6 +2099,17 @@ export class RealRun {
         ? format(copy.fitts.journeyDone, { name: j.name, n: result.steps })
         : format(copy.fitts.journeyFailed, { name: j.name, reason: result.reason ?? '' }),
     );
+    if (result.status !== 'done')
+      this.notice([
+        {
+          id: this.nextObsId(),
+          step: this.state.step,
+          route: result.route,
+          kind: 'state',
+          text: format(copy.noticed.journeyFailed, { name: j.name, reason: result.reason ?? '' }),
+          severityHint: 2,
+        },
+      ]);
     if (result.status !== 'done')
       this.pages
         .get(result.route)
@@ -2109,6 +2176,10 @@ export class RealRun {
                 {
                   ...p.evidence,
                   probes: this.probes.results.filter((r) => r.route === p.evidence.route),
+                  observations: this.observations.filter((o) => o.route === p.evidence.route),
+                  records: (this.state.actions ?? []).filter(
+                    (a) => a.from === p.evidence.route || a.to === p.evidence.route,
+                  ),
                 },
                 this.state.brief,
                 this.abort.signal,
@@ -2139,6 +2210,7 @@ export class RealRun {
     const ruled = applyRules(findings, this.deps.memory?.get(), (f) => checks.get(f.id)?.probe);
     const withReplay = await this.withSources(ruled.map((f) => this.withReplay(f)));
     this.post(withReplay);
+    this.linkObservations(withReplay);
     const shown = withReplay.filter((f) => (f.lane ?? 'shown') === 'shown');
     void this.evidence(shown).then(() => this.media(shown));
     void this.reproJob(shown);
@@ -2560,8 +2632,145 @@ export class RealRun {
     }
     const logged = this.stepsItem?.steps.at(-1)?.label;
     this.trail.push(this.trailStep(step, action, from, logged ?? label, outcome));
+    this.record(step, action, from, outcome);
     this.emit([{ type: 'step.finished', step }]);
     this.syncCoverage();
+  }
+
+  /**
+   * SPEC-phase4 §6A: one record per action from what main measured, and the notes its
+   * measurements earn; the steps line gets its timing chip and its noticed lines.
+   */
+  private record(
+    step: number,
+    action: Exclude<Action, { kind: 'done' }>,
+    from: string,
+    outcome: { path: string; navigated: boolean; trace?: OpTrace } | undefined,
+  ): void {
+    const node =
+      action.kind === 'navigate'
+        ? undefined
+        : this.lastSnap?.nodes.find((n) => n.ref === action.ref);
+    const record = buildRecord({
+      step,
+      at: this.state.elapsedMs,
+      kind: action.kind,
+      ...(action.kind !== 'navigate'
+        ? {
+            target: {
+              name: node?.name ?? action.name,
+              role: node?.role ?? 'element',
+              ref: action.ref,
+            },
+          }
+        : {}),
+      from: routeOf(from),
+      to: routeOf(outcome?.path ?? (action.kind === 'navigate' ? action.path : from)),
+      trace: outcome?.trace,
+      ...(this.journeyNow ? { journeyId: this.journeyNow } : {}),
+    });
+    const notes = noticeAction(record, outcome?.trace, this.nextObsId, this.cellNow);
+    record.observations = notes.map((n) => n.id);
+    this.emit([{ type: 'action.recorded', record }]);
+    this.notice(notes);
+    const ms = responseMs(record);
+    const slow = notes.some((n) => n.kind === 'slow' || n.kind === 'no-feedback');
+    this.decorateStep(ms, slow, record.observations, record.step);
+    // The brain's history is the log's compact line, not a label (§6A.4).
+    const last = this.history.length - 1;
+    if (last >= 0) this.history[last] = recordLine(record, notes);
+  }
+
+  /** Adds notes to the run (state, chat) and to the current steps line. */
+  private notice(notes: Observation[]): void {
+    if (notes.length === 0) return;
+    this.observations.push(...notes);
+    this.emit(notes.map((observation) => ({ type: 'observation.added' as const, observation })));
+    const last = this.state.chat.at(-1);
+    if (this.stepsItem && last?.id === this.stepsItem.id && last.type === 'steps') {
+      const steps = [...last.steps];
+      const i = steps.findLastIndex((s) => !s.detail);
+      const entry = steps[i];
+      if (entry) {
+        const noticed = [...(entry.noticed ?? []), ...notes.map((n) => n.id)];
+        steps[i] = { ...entry, noticed: [...new Set(noticed)] };
+        this.stepsItem = { id: last.id, steps };
+        this.emit([{ type: 'chat.item.updated', item: { ...last, steps } }]);
+      }
+    }
+  }
+
+  /** The current steps line gets its timing and its slow flag (§6A.3). */
+  private decorateStep(ms: number | null, slow: boolean, noticed: string[], step?: number): void {
+    const last = this.state.chat.at(-1);
+    if (!this.stepsItem || last?.id !== this.stepsItem.id || last.type !== 'steps') return;
+    const steps = [...last.steps];
+    const i = steps.findLastIndex((s) => !s.detail);
+    const entry = steps[i];
+    if (!entry) return;
+    steps[i] = {
+      ...entry,
+      ms,
+      ...(step !== undefined ? { step } : {}),
+      ...(slow ? { slow } : {}),
+      noticed: [...new Set([...(entry.noticed ?? []), ...noticed])],
+    };
+    this.stepsItem = { id: last.id, steps };
+    this.emit([{ type: 'chat.item.updated', item: { ...last, steps } }]);
+  }
+
+  /** After the review: the notes a finding rests on say so, and the steps lines link to it. */
+  private linkObservations(findings: Finding[]): void {
+    const linked = new Map<string, string>();
+    for (const f of findings) {
+      const ids = new Set<string>([...(f.evidenceIds ?? [])]);
+      for (const o of observationsFor(f, this.observations, ids)) {
+        if (o.findingId || linked.has(o.id)) continue;
+        linked.set(o.id, f.id);
+        o.findingId = f.id;
+        this.emit([{ type: 'observation.linked', id: o.id, findingId: f.id }]);
+      }
+    }
+    if (linked.size === 0) return;
+    for (const item of this.state.chat) {
+      if (item.type !== 'steps') continue;
+      let changed = false;
+      const steps = item.steps.map((s) => {
+        const ids = (s.noticed ?? []).flatMap((id) =>
+          linked.has(id) ? [linked.get(id) ?? ''] : [],
+        );
+        if (ids.length === 0) return s;
+        changed = true;
+        return { ...s, findingIds: [...new Set([...(s.findingIds ?? []), ...ids])] };
+      });
+      if (changed) this.emit([{ type: 'chat.item.updated', item: { ...item, steps } }]);
+    }
+  }
+
+  /** "Show me" on a noticed line: the page, the cell, and the element outlined (§6A.3). */
+  private async showObservation(o: Observation): Promise<void> {
+    if (this.state.activity === 'acting') this.setActivity('paused');
+    const cell = o.cell ? this.cells.find((c) => c.id === o.cell) : undefined;
+    if (cell) await this.deps.site.cell?.(cell).catch(() => null);
+    else if (o.cell) await this.deps.site.device?.(o.cell).catch(() => null);
+    try {
+      await this.deps.site.navigate(o.route);
+      if (o.ref) await this.deps.site.reveal?.(o.ref);
+    } catch {
+      this.say(format(copy.fitts.showFindingFailed, { route: o.route }));
+      return;
+    }
+    this.emit([
+      {
+        type: 'overlay.set',
+        overlays: {
+          problems: this.state.overlays.problems,
+          ...(o.ref
+            ? { attention: { ref: o.ref, label: o.text.replace(/\*\*/g, '').slice(0, 60) } }
+            : {}),
+        },
+      },
+    ]);
   }
 
   /** One trail entry (SPEC-phase4 §5.1): what was touched, by role and name, and where it led. */
@@ -3035,6 +3244,9 @@ export class RealRun {
             .sort((a, b) => b.severity - a.severity)
             .slice(0, 8)
             .map((f) => `${f.title} (${f.route})`),
+          noticed: this.observations
+            .slice(-8)
+            .map((o) => `${o.route}: ${o.text.replace(/\*\*/g, '')}`),
           recent,
           message,
           look: this.lookFacts(),
@@ -3090,6 +3302,12 @@ export class RealRun {
     }
     if (item?.type === 'finish-proposal') {
       if (item.answer === undefined) this.answerProposal(item, answer);
+      return;
+    }
+    // "Show me" on a noticed line (§6A.3): the item id is the observation's.
+    const observation = this.observations.find((o) => o.id === itemId);
+    if (observation && answer === 'show') {
+      void this.showObservation(observation);
       return;
     }
     // "This matters more/less" on a finding (§4.2): the item id is the finding's.

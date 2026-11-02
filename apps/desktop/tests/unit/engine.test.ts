@@ -46,6 +46,8 @@ describe('beat ordering', () => {
       'fitts.message',
       'steps',
       'fitts.thinking',
+      // SPEC-phase4 §6A: the NEXT step with its timing and noticed lines, then its finding.
+      'steps',
       'finding',
       'fitts.message',
       'finding',

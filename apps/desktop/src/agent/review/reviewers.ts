@@ -8,6 +8,8 @@ import {
   type Heuristic,
   type Lens,
   type ProbeResult,
+  type ActionRecord,
+  type Observation,
 } from '@fitts/schema';
 import {
   type CallContext,
@@ -31,6 +33,9 @@ export interface RouteEvidence {
   /** What Fitts did there, in order ("typed in Message", "tapped NEXT → /compose/confirm"). */
   trace: string[];
   probes: ProbeResult[];
+  /** SPEC-phase4 §6A.4: what Fitts noticed here (each id citable) and the measured actions. */
+  observations?: Observation[];
+  records?: ActionRecord[];
 }
 
 export interface PersonaReview {
@@ -84,6 +89,28 @@ export function reviewInput(ev: RouteEvidence, brief: Brief): string {
     `Evidence ids you may cite: ${validIds(ev).join(', ')}`,
     `Probes: ${JSON.stringify(probes)}`,
     `What Fitts did here (${traceId(ev.route)}): ${ev.trace.slice(-20).join(' | ') || 'only looked'}`,
+    ...(ev.records?.length
+      ? [
+          `Measured per action: ${JSON.stringify(
+            ev.records.slice(-12).map((r) => ({
+              step: r.step,
+              did: `${r.kind} ${r.target?.name ?? r.to}`,
+              ms: r.ms,
+              requests: r.requests,
+              ...(r.console.errors ? { consoleErrors: r.console.errors } : {}),
+            })),
+          )}`,
+        ]
+      : []),
+    ...(ev.observations?.length
+      ? [
+          `What Fitts noticed here (cite by id): ${JSON.stringify(
+            ev.observations
+              .slice(0, 30)
+              .map((o) => ({ id: o.id, text: o.text.replace(/\*\*/g, '') })),
+          )}`,
+        ]
+      : []),
     `Page (${snapshotId(ev.route)}): <untrusted_page_content>${JSON.stringify(page)}</untrusted_page_content>`,
   ].join('\n');
 }
@@ -94,6 +121,7 @@ export function validIds(ev: RouteEvidence): string[] {
     snapshotId(ev.route),
     ...(ev.trace.length ? [traceId(ev.route)] : []),
     ...ev.probes.map((p) => p.evidenceId),
+    ...(ev.observations ?? []).map((o) => o.id),
   ];
 }
 

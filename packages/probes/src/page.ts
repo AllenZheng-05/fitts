@@ -487,6 +487,7 @@ function focusCheck(F: Refs): ProbeItem | null | 'none' {
 const BUSY = /\b(loading|searching|sending|saving|please wait|working)\b|…$/i;
 let feedback: {
   t0: number;
+  last: number | null;
   first: number | null;
   busyAt: number | null;
   added: { el: Element; text: string }[];
@@ -513,6 +514,7 @@ function feedbackArm(): void {
     place: place(),
     t0: performance.now(),
     first: null as number | null,
+    last: null as number | null,
     busyAt: null as number | null,
     added: [] as { el: Element; text: string }[],
     live: [] as string[],
@@ -521,6 +523,7 @@ function feedbackArm(): void {
         if (r.type === 'attributes' && r.attributeName === 'data-fitts-ref') continue;
         const t = performance.now() - state.t0;
         state.first ??= t;
+        state.last = t;
         const target = r.target instanceof Element ? r.target : r.target.parentElement;
         const nodes = r.type === 'childList' ? [...r.addedNodes] : [r.target];
         for (const n of nodes) {
@@ -570,6 +573,7 @@ function feedbackRead(F: Refs): Feedback {
     });
   return {
     firstChangeMs: feedback.first === null ? null : Math.round(feedback.first),
+    lastChangeMs: feedback.last === null ? null : Math.round(feedback.last),
     busyMs: feedback.busyAt === null ? null : Math.round(feedback.busyAt),
     added: feedback.added.map((a) => a.text).slice(0, 20),
     live: feedback.live.slice(0, 10),

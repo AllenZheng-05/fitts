@@ -67,6 +67,48 @@ test('Finding panel (Ask): open, change the fix, not a problem, Esc', async () =
   await expect(panel.getByRole('button', { name: 'Fix it' })).toBeVisible();
 });
 
+test('the steps group shows timing chips and noticed lines; a noticed line opens its finding (SPEC-phase4 §6A)', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Audit (Ask)');
+  await page.getByRole('button', { name: 'Pause' }).click();
+  const group = chat(page)
+    .getByRole('listitem')
+    .filter({ hasText: 'Tapped “NEXT” → /compose/recipient' });
+  await expect(group.first()).toContainText('2 things noticed');
+  await group.first().getByRole('button', { name: 'Show all 2 steps' }).click();
+  await expect(group.first()).toContainText('1.8 s');
+  await expect(group.first()).toContainText('the page changed in 1.8 s');
+  await expect(group.first()).toContainText('Noticed the page shows "(null)"');
+  await expectNoSeriousA11yViolations(page);
+  await group.first().getByRole('button', { name: 'Finding 1' }).first().click();
+  await expect(page.getByRole('dialog', { name: '"(null)" shown as a name' })).toBeVisible();
+  // The finding's "See it yourself" lists the notes it rests on.
+  await expect(page.getByRole('dialog', { name: '"(null)" shown as a name' })).toContainText(
+    'What I noticed along the way',
+  );
+  await page.keyboard.press('Escape');
+  // The default level doesn't show decisions, passes or requests; "Every detail" does.
+  await expect(group.first()).not.toContainText('Thinking:');
+  await page.keyboard.press('ControlOrMeta+,');
+  await page.getByLabel('How much Fitts shows while it works').selectOption('all');
+  await page.keyboard.press('Escape');
+  const hideAll = group.first().getByRole('button', { name: 'Hide steps' });
+  if (!(await hideAll.isVisible()))
+    await group.first().getByRole('button', { name: 'Show all 2 steps' }).click();
+  await expect(group.first()).toContainText('Thinking: the compose flow is where people get stuck');
+  await expect(group.first()).toContainText('Started exploring');
+  await expect(group.first()).toContainText('1 requests · slowest GET /api/contacts/grandma 1.7 s');
+  await expect(group.first()).toContainText('1 console errors');
+  await expectNoSeriousA11yViolations(page);
+  // Highlights hides quick steps' timings and low notes; the log itself stays.
+  await page.keyboard.press('ControlOrMeta+,');
+  await page.getByLabel('How much Fitts shows while it works').selectOption('highlights');
+  await page.keyboard.press('Escape');
+  const hide = group.first().getByRole('button', { name: 'Hide steps' });
+  if (await hide.isVisible()) await hide.click();
+  await expect(group.first()).toContainText('1 thing noticed');
+});
+
 test('Finding panel: "See it yourself" has the steps, expected/actual, environment and copies the test', async () => {
   const { page } = launched;
   await loadScenario(page, 'Audit (Ask)');

@@ -253,6 +253,18 @@ export const copy = {
     showSteps: 'Show all {n} steps',
     lastStep: 'Fitts · {step}',
     hideSteps: 'Hide steps',
+    // SPEC-phase4 §6A.3: the action log in the steps group.
+    noticedCount: '{n} things noticed',
+    noticedOne: '1 thing noticed',
+    timing: '{s} s',
+    timingLabel: 'The page responded in {s} seconds',
+    slowLabel: 'Slow, or no sign it was working',
+    findingLink: 'Finding {n}',
+    showOnSite: 'Show me',
+    thinking: 'Thinking: {why}',
+    requests: '{n} requests · slowest {method} {path} {s} s',
+    requestsOnly: '{n} requests',
+    consoleErrors: '{n} console errors',
     seeEvidence: 'See evidence and fix',
     stateApproved: 'Approved',
     stateSkipped: 'Skipped for now',
@@ -546,6 +558,7 @@ export const copy = {
       copyTest: 'Copy Playwright test',
       stepsCopied: 'Steps copied',
       testCopied: 'Playwright test copied',
+      noticed: 'What I noticed along the way',
     },
     fixIt: 'Fix it',
     changeFix: 'Change the fix',
@@ -704,6 +717,7 @@ export const copy = {
       byRedesign: 'by the redesign',
       evidence: 'Evidence',
       repro: 'See it yourself',
+      activity: 'Activity',
       suggestion: 'a suggestion, without enough evidence yet',
       ownerOk: 'you said this is fine',
       title: 'Fitts report · {project} · Run #{run}',
@@ -917,6 +931,15 @@ export const copy = {
     generalTitle: 'You',
     nameLabel: 'Your name',
     nameHint: 'What I call you. It stays on this computer.',
+    // SPEC-phase4 §6A.3: how much of the action log the chat shows.
+    detail: 'How much Fitts shows while it works',
+    details: {
+      highlights: 'Highlights',
+      everything: 'Everything I notice',
+      all: 'Every detail',
+    },
+    detailHint:
+      'Highlights: the slow steps and what matters most. Everything I notice: every timing and every noticed line. Every detail: requests, console errors and each decision too. The log is always kept.',
     dataTitle: 'Your data',
     dataBody:
       'Your projects, past runs, API keys and settings are saved on this computer. Deleting them starts Fitts over as if it were just installed. Your code, its branches and your pull requests on GitHub stay as they are.',
@@ -1029,6 +1052,46 @@ export const copy = {
   },
   // What Fitts says. Canonical strings from SPEC §8 are kept exactly; **bold** spans are
   // rendered by the chat. Scenario-specific narration lives with its scenario in mock/.
+  /**
+   * SPEC-phase4 §6A.2: what Fitts noticed, as templates over what it measured. Notes, never
+   * verdicts: "noticed", not "problem", until the review makes a finding.
+   */
+  noticed: {
+    slow: '{verb} **{name}** · took {s} s to respond',
+    slowLoad: 'Opened {path} · the page took {s} s to load',
+    waited:
+      '{verb} **{name}** · waited {s} s for the server, with nothing on screen saying it was working',
+    noFeedback:
+      '{verb} **{name}** · the page changed in {s} s, with nothing on screen for the first {first} s',
+    silentSave: 'Tapped **{name}** · the server saved it, but nothing on screen said so',
+    nothingHappened: 'Tapped **{name}** · nothing changed on screen',
+    requestFailed: 'Noticed a request failed after tapping **{name}**: {method} {path} → {status}',
+    consoleError: 'Noticed {n} {errors} in the page’s console after tapping **{name}**',
+    redirect: 'Noticed {path} bounced through {hops} before landing on {to}',
+    journeyFailed: 'Noticed I couldn’t finish “{name}”: {reason}',
+    probe: {
+      contrast: 'Noticed text that’s hard to read: {measured} (needs {expected})',
+      'target-size': 'Noticed **{name}** is small to tap: {measured} (needs {expected})',
+      'fitts-id': 'Noticed **{name}** is far and small for a primary action: {measured}',
+      'font-inventory': 'Noticed {measured}',
+      spacing: 'Noticed spacing off the grid: {measured}',
+      'label-consistency': 'Noticed one action with different names: {measured}',
+      'feedback-timing': 'Noticed **{name}** gives no sign it’s working: {measured}',
+      'back-mid-flow': 'Noticed going back lost what I typed: {measured}',
+      'error-message': 'Noticed an error that doesn’t help: {measured}',
+      'placeholder-leak': 'Noticed the page {measured}',
+      'focus-visible': 'Noticed **{name}** shows no focus when tabbed to',
+      'button-name': 'Noticed this {what} has no name a screen reader can say',
+      'link-name': 'Noticed this {what} has no name a screen reader can say',
+      links: 'Noticed a link that doesn’t work: {measured}',
+      network: 'Noticed {measured}',
+      'web-vitals': 'Noticed {measured}',
+      'viewport-sweep': 'Noticed the {measured}',
+      'text-spacing': 'Noticed {measured}',
+      'resize-text': 'Noticed the {measured}',
+      orientation: 'Noticed the page {measured}',
+    },
+  },
   fitts: {
     interviewOpener:
       "Hi {name}! Before I touch anything, I'd love to hear about this site. What's it for?",
@@ -1085,6 +1148,33 @@ export const copy = {
     journeyDone: 'Done: “{name}”, in {n} steps.',
     journeyFailed: 'I couldn’t finish “{name}”: {reason}.',
     checkingCell: 'Checking {route} at {cell}',
+    // SPEC-phase4 §6A.3: "Every detail" names each ability as it starts and ends.
+    abilityNames: {
+      explore: 'exploring',
+      journey: 'a journey',
+      device_pass: 'the screen-size pass',
+      check_links: 'the link and network check',
+      review: 'the reviewer panel',
+      check_theme: 'the look check',
+      looks: 'the new looks',
+      fix: 'fixes',
+      propose_finish: 'proposing to finish',
+      report_issue: 'your report',
+      skip_pages: 'skipping pages',
+      stop_exploring: 'stopping exploring',
+      new_look: 'a new look',
+      revise_looks: 'another round of looks',
+      dismiss: 'not a problem',
+      retry_fix: 'trying a fix again',
+    } as Record<string, string>,
+    passStarted: 'Started {name}',
+    passEnded: 'Finished {name}: {result}',
+    passResults: {
+      done: 'done',
+      progress: 'made progress',
+      refused: 'refused',
+      nothing: 'nothing to do',
+    } as Record<string, string>,
     reported: 'Noted. “{title}” is in the findings as yours; I’ll look into it.',
     severityNoted: 'Okay, “{title}” is severity {n} now.',
     proposalWaiting: 'Waiting for you to finish the run',
