@@ -57,7 +57,8 @@ test('bench:chat', async () => {
       'A messaging app so my grandparents can text the family. It should feel calm and simple.',
     );
   await page.getByLabel('Message Fitts').press('Enter');
-  await page.getByRole('button', { name: 'Start the audit' }).click();
+  // The real interview's first reply (and the App Model's Pass 2) can take a while.
+  await page.getByRole('button', { name: 'Start the audit' }).click({ timeout: 120_000 });
 
   // Done when the run ends (findings) or says it found nothing.
   await expect
@@ -70,7 +71,20 @@ test('bench:chat', async () => {
             }
           ).fitts.engine;
           return (await engine.states())['demo-chat'];
-        })) as { phase: string; waitingFor?: string; chat: { stateKind?: string }[] } | undefined;
+        })) as
+          | { phase: string; waitingFor?: string; chat: { stateKind?: string; answer?: string }[] }
+          | undefined;
+        // The demo's dev server stopped: fail now with the reason, not at the timeout.
+        if (s?.chat.some((c) => c.stateKind === 'site-down' && c.answer === undefined))
+          throw new Error('demo/chat stopped answering (the site-down card is up)');
+        // A destructive write held at the gate (demo/chat's Delete conversation): answer it as a
+        // careful owner would, or the run waits on the modal until the bench times out.
+        if (s?.waitingFor === 'gate')
+          await page
+            .getByRole('alertdialog', { name: 'This could delete real data' })
+            .getByRole('button', { name: "Don't do it" })
+            .click({ timeout: 5000 })
+            .catch(() => undefined);
         // Findings are in once the run ends, finds nothing, or asks to fix what it found (the
         // test build fixes demo/chat in its mirror repo, so the approval card comes first).
         return (
