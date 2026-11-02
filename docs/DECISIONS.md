@@ -3595,3 +3595,19 @@ cuts.
   (360×800). A note above it says it's an imitation, not the real Android app. An app without a
   web build (react-native-web and react-dom) says so instead of waiting on "Starting…". Fitts
   never adds packages to a project, so demo/basil-ember-android got its own web build.
+
+## Phase 4 — the demo repos on GitHub (Allen, Nov 2)
+
+- Allen created Fitts-demo-basil-ember and Fitts-demo-basil-ember-android. `pnpm demo:mirror`
+  targets those names (GitHub ignores case; the local mirror folders keep their lowercase names).
+- **The website's history is Allen's.** Its first commit is his own push of the untouched site.
+  The wiring is one commit on top of it, prepared in a clone outside the monorepo for him to push:
+  the plugin, port 5176, the start page and `.fitts-worktrees/`. So the untouched AI commit and
+  the wiring stay apart.
+- **The mirror builds on what's published.** For a demo already on GitHub it fetches the remote's
+  main first, resets the local export onto it (the export replaces the whole tree, so a local-only
+  commit loses nothing) and commits only a difference. A push is then always a fast-forward, never
+  forced, and never rewrites the remote's history. A repo that doesn't exist yet (chat, hartwell)
+  keeps its local history, and the fetch can't open a sign-in prompt.
+- Files an export never writes (`*.tsbuildinfo`, build output) are left alone when they're already
+  in the repo, like the website's committed tsconfig.tsbuildinfo.
