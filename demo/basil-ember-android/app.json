@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Basil & Ember",
+    "slug": "basil-ember-android",
+    "version": "1.0.0",
+    "scheme": "basilember",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": ["expo-router", "expo-font"],
+    "experiments": { "typedRoutes": true },
+    "android": {
+      "package": "com.basilandember.order",
+      "adaptiveIcon": { "backgroundColor": "#1c1611" }
+    }
+  }
+}
