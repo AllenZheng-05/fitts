@@ -123,6 +123,8 @@ export class FixHost {
         return this.museCached;
       case 'muse':
         return this.muse(call.job, call.task, call.model, call.maxSteps);
+      case 'museUnderstand':
+        return this.museUnderstand(projectId, call.prompt, call.schema);
       case 'replay': {
         const next = this.verifying.then(() =>
           this.replayOn(call.job, call.ask, call.device ?? null),
@@ -344,6 +346,52 @@ export class FixHost {
       files: changed.filter((f) => !refused.includes(f)),
       refused,
     };
+  }
+
+  /**
+   * Understand's Pass 2 on Muse Code: a detached worktree of HEAD under .fitts-worktrees (so
+   * nothing it does can touch the user's files), the prompt and schema next to it, the key on
+   * stdin; the worktree is removed afterwards. `text` is its JSON answer, or empty.
+   */
+  private async museUnderstand(projectId: string, prompt: string, schema: Record<string, unknown>) {
+    const none = { ok: false, text: '', usage: { input: 0, output: 0, cached: 0, reasoning: 0 } };
+    if (!(await this.available(projectId)).ok) return { ...none, error: 'not a git repository' };
+    const status = await (this.museCached ??= museStatus());
+    if (status.status !== 'ready' || !status.via)
+      return { ...none, error: `Muse Code is ${status.status}` };
+    const root = this.root(projectId);
+    await this.exclude(root);
+    const base = join(root, '.fitts-worktrees', 'understand');
+    let dir = join(base, 'read');
+    for (let n = 2; existsSync(dir); n++) dir = join(base, `read-${n}`);
+    mkdirSync(base, { recursive: true });
+    const add = await git(root, 'worktree', 'add', '-q', '--detach', dir, 'HEAD');
+    if (add.code !== 0) return { ...none, error: 'git worktree add failed' };
+    const name = dir.split(sep).pop() ?? 'read';
+    writeFileSync(join(base, `${name}.prompt.md`), prompt);
+    writeFileSync(join(base, `${name}.schema.json`), JSON.stringify(schema));
+    try {
+      const res = await museExec({
+        via: status.via,
+        cwd: dir,
+        promptFile: `../${name}.prompt.md`,
+        outputSchema: `../${name}.schema.json`,
+        apiKey: this.policy.metaKey(),
+        maxSteps: 30,
+        timeoutMs: 10 * 60_000,
+      });
+      return {
+        ok: res.code === 0 && res.final.trim().startsWith('{'),
+        text: res.final,
+        usage: res.usage,
+        authFailed: res.authFailed,
+        ...(res.error ? { error: res.error } : {}),
+      };
+    } finally {
+      await git(root, 'worktree', 'remove', '--force', dir);
+      rmSync(join(base, `${name}.prompt.md`), { force: true });
+      rmSync(join(base, `${name}.schema.json`), { force: true });
+    }
   }
 
   /** A path inside the worktree (no escaping it, no .git, no node_modules). */

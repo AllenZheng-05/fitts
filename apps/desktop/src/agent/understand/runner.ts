@@ -11,7 +11,13 @@ import { readJson, readText } from '../../main/understand/files';
 import { renderRepoMap, repoMap } from '../../main/understand/repomap';
 import type { UnderstandAsk } from '../protocol';
 import type { CallContext, LlmCaller } from '../llm/call';
-import { applyPatches, understand, validate, type UnderstandInput } from './understand';
+import {
+  applyPatches,
+  understand,
+  validate,
+  type MuseUnderstand,
+  type UnderstandInput,
+} from './understand';
 
 export interface Built {
   model: AppModel;
@@ -25,7 +31,15 @@ const sha1 = (s: string) => createHash('sha1').update(s).digest('hex');
 
 export async function buildModel(
   ask: UnderstandAsk,
-  llm: { online: boolean; caller: LlmCaller; ctx: CallContext; model: string } | undefined,
+  llm:
+    | {
+        online: boolean;
+        caller: LlmCaller;
+        ctx: CallContext;
+        model: string;
+        muse?: MuseUnderstand;
+      }
+    | undefined,
   signal?: AbortSignal,
 ): Promise<Built> {
   const { folder, projectId, commit, cached, patches } = ask;
@@ -62,7 +76,9 @@ export async function buildModel(
     repoMap: renderRepoMap(repoMap(folder, extracted.files)),
     routeFiles,
   };
-  const raw = llm?.online ? await understand(llm.caller, llm.ctx, llm.model, input, signal) : null;
+  const raw = llm?.online
+    ? await understand(llm.caller, llm.ctx, llm.model, input, signal, llm.muse)
+    : null;
   const v = validate(extracted, raw, (file) => existsSync(join(folder, file)));
   const model: AppModel = applyPatches(
     {

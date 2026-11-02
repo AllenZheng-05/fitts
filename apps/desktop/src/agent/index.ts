@@ -60,7 +60,7 @@ import { Media } from './llm/media';
 import { voiceEntry } from './llm/voice-cost';
 import { domainOf, verifyDns, verifyFile } from './verify-site/verify';
 import type { AgentMessage, MainMessage, UnderstandAsk } from './protocol';
-import { patchFromMessage, summaryOf } from './understand/understand';
+import { patchFromMessage, summaryOf, type MuseUnderstand } from './understand/understand';
 import { applyPatches, applyUnchecked, buildModel } from './understand/runner';
 import { draftReport } from './orchestrator/report';
 import { SiteRpc } from './site-client';
@@ -349,11 +349,10 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       });
     if (res?.ok && res.patched > 0)
       return { patched: res.patched, summary: res.summary ?? 'Muse Code made the change.' };
-    opts.onStep?.(
-      res?.authFailed
-        ? 'Muse Code couldn’t sign in, so I’m fixing this one myself.'
-        : 'Fixing this one myself',
-    );
+    // Not installed (or not ready) is quiet; a Muse run that didn't work says so.
+    if (res?.authFailed)
+      opts.onStep?.('Muse Code couldn’t sign in, so I’m fixing this one myself.');
+    else if (res && !res.error?.startsWith('Muse Code is')) opts.onStep?.('Fixing this one myself');
     return runFixer(
       runCaller,
       callCtx(),
@@ -493,9 +492,10 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
                   patched: 0,
                   summary: 'deliberately skipped (rollback check)',
                 });
-              // SPEC-phase4 §7.4: Muse Code first when chosen and ready; the in-process fixer
-              // runs whenever it can't (not installed, couldn't sign in, changed nothing).
-              if (process.env['FITTS_FIXER'] === 'muse' && tools.muse)
+              // SPEC-phase4 §7.4, Muse Code by default (Allen, Nov 2): the in-process fixer runs
+              // whenever it can't (not installed, couldn't sign in, changed nothing), or always
+              // with FITTS_FIXER=inprocess.
+              if (process.env['FITTS_FIXER'] !== 'inprocess' && tools.muse)
                 return museFix(task, tools, opts);
               return runFixer(
                 runCaller,
@@ -553,6 +553,39 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
   return true;
 }
 
+/**
+ * Understand's Pass 2 on Muse Code, through main (which spawns it): its JSON, or null so Spark
+ * answers instead. Its usage goes to the ledger as Wonder tokens, like the Spark call it replaces.
+ */
+function museUnderstandFor(projectId: string, contributor: boolean): MuseUnderstand {
+  return async (prompt, schema) => {
+    const r = (await siteRpc.for(projectId).fix({ fn: 'museUnderstand', prompt, schema })) as {
+      ok: boolean;
+      text: string;
+      usage: { input: number; output: number; cached: number; reasoning: number };
+    };
+    if (r.usage.input + r.usage.output > 0)
+      ledger.record({
+        ts: new Date().toISOString(),
+        runId: ctxFor(projectId).runId,
+        projectId,
+        task: 'understand',
+        phase: PHASE_OF.understand,
+        provider: 'meta',
+        model: WONDER,
+        contributor,
+        inputTokens: r.usage.input,
+        cachedTokens: r.usage.cached,
+        outputTokens: r.usage.output,
+        reasoningTokens: r.usage.reasoning,
+        usd: tokenUsd(WONDER, r.usage),
+        latencyMs: 0,
+        priceTable: PRICE_TABLE,
+      });
+    return r.ok ? r.text : null;
+  };
+}
+
 /** Main asked: Pass 1 here, Pass 2 with a model when online, then the card (§3.3). */
 async function understandProject(ask: UnderstandAsk): Promise<void> {
   const { projectId } = ask;
@@ -568,6 +601,9 @@ async function understandProject(ask: UnderstandAsk): Promise<void> {
           ctx: ctxFor(projectId),
           model: modelFor('understand', profile, { contributor, baseten: Boolean(keys.baseten) })
             .model,
+          ...(process.env['FITTS_FIXER'] !== 'inprocess'
+            ? { muse: museUnderstandFor(projectId, contributor) }
+            : {}),
         }
       : undefined,
   );

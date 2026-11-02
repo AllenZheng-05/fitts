@@ -271,13 +271,33 @@ export function plainSummary(x: Extracted): string {
  * falls back to Pass 1's code-only model). Unreachable models never return here: the caller
  * waits for them (SPEC-phase4 §6C), so the understanding step pauses with the interview.
  */
+/** Understand on Muse Code: the instructions, the input and the schema in; its JSON out, or null. */
+export type MuseUnderstand = (
+  prompt: string,
+  schema: Record<string, unknown>,
+) => Promise<string | null>;
+
 export async function understand(
   caller: LlmCaller,
   ctx: CallContext,
   model: string,
   input: UnderstandInput,
   signal?: AbortSignal,
+  muse?: MuseUnderstand,
 ): Promise<ModelOut | null> {
+  // Muse Code first when it's there (Allen, Nov 2); Spark in-process whenever it can't answer.
+  if (muse) {
+    const text = await muse(
+      `${prompt}\n\n${understandInput(input)}`,
+      UNDERSTAND_FORMAT.schema as Record<string, unknown>,
+    ).catch(() => null);
+    if (text)
+      try {
+        return JSON.parse(text) as ModelOut;
+      } catch {
+        // Not JSON: the in-process call below.
+      }
+  }
   try {
     return await retryUnusable(async () => {
       const res = await caller.call(ctx, {

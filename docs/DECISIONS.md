@@ -3283,3 +3283,24 @@ cuts.
 - **Generated in one pass by a lower-power model** (Allen's wish): Sonnet wrote the whole app
   from one prompt, saved as its `prompt.md`. Then Fitts's wiring (workspace, mirror, bench) is
   added in its own commit, as with basil-ember.
+
+## Phase 4 — Muse Code by default (Allen, Nov 2)
+
+- **Muse Code is the fixer whenever it's ready.** Each fix job asks main to run it in the run's
+  worktree (key on stdin, the safe flags, the allowlist checked after). When `museStatus` isn't
+  ready, Fitts's own fixer takes the job without a word. When Muse Code can't sign in, or changes
+  nothing allowed, Fitts's own fixer takes it with a line on the Now line. `FITTS_FIXER=inprocess`
+  forces the old path. Muse gets the same task file plus a short rules block: it has its own
+  tools, so the task's mentions of run_check and request_scope don't apply to it. The project's
+  CI and tests still run after it, as for every fix, and a failure gets the in-process repair
+  pass.
+- **Understand's Pass 2 runs on Muse Code first, in a throwaway worktree.**
+  - Main makes a detached worktree of HEAD under `.fitts-worktrees/understand/`, puts the
+    prompt and the JSON schema next to it (never in the repo), runs `muse exec
+    --output-schema`, and removes the worktree.
+  - Its JSON goes through the same validation as Spark's.
+  - No answer, or an answer that isn't JSON, falls back to the in-process Spark call.
+  - Not a git repository means Spark.
+  - Its usage goes to the ledger as Wonder tokens.
+- **Tests never reach it:** e2e runs offline (no fixer, no Pass 2 model), and unit tests use a
+  fake Muse function.

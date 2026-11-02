@@ -82,6 +82,8 @@ export interface MuseRun {
   events: Record<string, unknown>[];
   usage: { input: number; output: number; cached: number; reasoning: number };
   summary: string;
+  /** The last message in full (with --output-schema, the JSON answer). */
+  final: string;
   /** Exit 1 or an auth message: Muse Code couldn't sign in. */
   authFailed: boolean;
   error?: string;
@@ -127,6 +129,7 @@ export function museExec(opts: {
     const events: Record<string, unknown>[] = [];
     const usage = { input: 0, output: 0, cached: 0, reasoning: 0 };
     let summary = '';
+    let final = '';
     let stderr = '';
     let buffer = '';
     let child: ChildProcess;
@@ -138,6 +141,7 @@ export function museExec(opts: {
         events,
         usage,
         summary,
+        final,
         authFailed: false,
         error: firstLine((e as Error).message),
       });
@@ -168,11 +172,13 @@ export function museExec(opts: {
             usage.cached += Number(u['cached_tokens'] ?? u['cached'] ?? 0);
             usage.reasoning += Number(u['reasoning_tokens'] ?? u['reasoning'] ?? 0);
           }
-          if (type === 'run.completed' || type === 'final' || type === 'message')
+          if (type === 'run.completed' || type === 'final' || type === 'message') {
+            final = str(e['text']) || str(e['message']) || str(e['summary']) || final;
             summary = (str(e['summary']) || str(e['text']) || str(e['message']) || summary).slice(
               0,
               600,
             );
+          }
           opts.onEvent?.(e);
         } catch {
           // Not JSON: Muse Code's own progress text.
@@ -190,6 +196,7 @@ export function museExec(opts: {
         events,
         usage,
         summary,
+        final,
         authFailed: authFailed || (code === 1 && events.length === 0),
         ...(code !== 0 ? { error: firstLine(stderr) || `muse exited ${code}` } : {}),
       });

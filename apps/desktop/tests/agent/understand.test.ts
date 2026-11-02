@@ -394,3 +394,41 @@ describe('FITTS.md', () => {
     expect(md).toContain('Fill in the contacts-add form on /contacts');
   });
 });
+
+describe('Pass 2 on Muse Code first (Allen, Nov 2)', () => {
+  const x = extract(DEMO);
+  const input = {
+    extracted: x,
+    readme: '',
+    pkg: { name: 'demo-chat' },
+    repoMap: '',
+    routeFiles: [],
+  };
+
+  it.skipIf(!recorded)('Muse Code’s JSON is used and Spark isn’t called', async () => {
+    const client = new FakeLlmClient([]);
+    const caller = new LlmCaller(() => client, new CostLedger());
+    const answer = fixture('understand').response.outputText;
+    let prompt = '';
+    let schema: Record<string, unknown> = {};
+    const raw = await understand(caller, ctx, 'muse-spark-1.3', input, undefined, (p, s) => {
+      prompt = p;
+      schema = s;
+      return Promise.resolve(answer);
+    });
+    expect(validate(x, raw, (f) => x.files.includes(f)).pages).toHaveLength(9);
+    expect(client.requests).toHaveLength(0);
+    expect(prompt).toContain('<untrusted_project_data>');
+    expect(schema['type']).toBe('object');
+  });
+
+  it.skipIf(!recorded)('no answer or not JSON from Muse Code: Spark answers instead', async () => {
+    for (const muse of [() => Promise.resolve(null), () => Promise.resolve('not json')]) {
+      const client = new FakeLlmClient([fixture('understand')]);
+      const caller = new LlmCaller(() => client, new CostLedger());
+      const raw = await understand(caller, ctx, 'muse-spark-1.3', input, undefined, muse);
+      expect(validate(x, raw, (f) => x.files.includes(f)).pages).toHaveLength(9);
+      expect(client.requests).toHaveLength(1);
+    }
+  });
+});

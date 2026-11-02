@@ -196,6 +196,11 @@ export type FixCall =
   | { fn: 'muse'; job: string; task: string; model?: string; maxSteps?: number }
   /** SPEC-phase4 §7.5: a repro replayed on the job's own dev server (trace verification). */
   | { fn: 'replay'; job: string; ask: ReplayAsk; device?: DeviceCell | null }
+  /**
+   * Understand's Pass 2 on Muse Code (Allen, Nov 2): read-only, in a throwaway worktree, with
+   * `--output-schema`. Answers MuseUnderstandResult.
+   */
+  | { fn: 'museUnderstand'; prompt: string; schema: Record<string, unknown> }
   /** `size`: the before shots' size, so before and after line up. */
   | {
       fn: 'verifyPages';
