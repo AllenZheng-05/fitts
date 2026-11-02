@@ -9,7 +9,13 @@ import {
   type Lens,
   type ProbeResult,
 } from '@fitts/schema';
-import type { CallContext, LlmCaller } from '../llm/call';
+import {
+  type CallContext,
+  type LlmCaller,
+  isUnusable,
+  retryUnusable,
+  UnusableAnswer,
+} from '../llm/call';
 import type { ModelChoice } from '../llm/router';
 import type { AxSnapshot } from '../protocol';
 import { PERSONAS } from './personas';
@@ -31,6 +37,8 @@ export interface PersonaReview {
   route: string;
   persona: string;
   drafts: FindingDraft[];
+  /** SPEC-phase4 §6C: its answer couldn't be read, twice; the run says so in the chat. */
+  unusable?: boolean;
 }
 
 export const shotId = (route: string) => `${route}#shot`;
@@ -154,50 +162,60 @@ export class ReviewerPanel {
         const choice = roster[i] ?? roster[0];
         try {
           if (!choice) throw new Error('no reviewer model');
-          const res = await this.caller.call(this.ctx(), {
-            task: 'review',
-            model: choice.model,
-            provider: choice.provider,
-            instructions: persona.instructions,
-            input: [
-              {
-                role: 'user',
-                content: [
-                  { type: 'input_text', text },
-                  ...(ev.shot
-                    ? [
-                        {
-                          type: 'input_image',
-                          image_url: `data:image/jpeg;base64,${ev.shot.jpegBase64}`,
-                        },
-                      ]
-                    : []),
-                  ...(ev.phoneShot
-                    ? [
-                        { type: 'input_text', text: `The same page on ${ev.phoneShot.label}:` },
-                        {
-                          type: 'input_image',
-                          image_url: `data:image/jpeg;base64,${ev.phoneShot.jpegBase64}`,
-                        },
-                      ]
-                    : []),
-                ],
-              },
-            ],
-            format: FINDING_DRAFTS_FORMAT,
-            reasoning: { effort: 'low' },
-            maxOutputTokens: 6000,
-            fixture: `review-${persona.id}`,
-            ...(signal ? { signal } : {}),
-          });
+          const ask = async () => {
+            const res = await this.caller.call(this.ctx(), {
+              task: 'review',
+              model: choice.model,
+              provider: choice.provider,
+              instructions: persona.instructions,
+              input: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'input_text', text },
+                    ...(ev.shot
+                      ? [
+                          {
+                            type: 'input_image',
+                            image_url: `data:image/jpeg;base64,${ev.shot.jpegBase64}`,
+                          },
+                        ]
+                      : []),
+                    ...(ev.phoneShot
+                      ? [
+                          { type: 'input_text', text: `The same page on ${ev.phoneShot.label}:` },
+                          {
+                            type: 'input_image',
+                            image_url: `data:image/jpeg;base64,${ev.phoneShot.jpegBase64}`,
+                          },
+                        ]
+                      : []),
+                  ],
+                },
+              ],
+              format: FINDING_DRAFTS_FORMAT,
+              reasoning: { effort: 'low' },
+              maxOutputTokens: 6000,
+              fixture: `review-${persona.id}`,
+              ...(signal ? { signal } : {}),
+            });
+            const raw = parseJson(res.outputText) as { findings?: unknown } | null;
+            if (!raw || !Array.isArray(raw.findings)) throw new UnusableAnswer('no findings list');
+            return raw;
+          };
+          // SPEC-phase4 §6C: an unreadable answer is asked for once more.
+          const raw = await retryUnusable(ask);
+          return { route: ev.route, persona: persona.name, drafts: cleanDrafts(raw, ev) };
+        } catch (e) {
+          if ((e as { name?: string }).name === 'AbortError') throw e;
           return {
             route: ev.route,
             persona: persona.name,
-            drafts: cleanDrafts(parseJson(res.outputText), ev),
+            drafts: [],
+            ...(isUnusable(e) && !(e instanceof Error && e.message === 'no reviewer model')
+              ? { unusable: true }
+              : {}),
           };
-        } catch (e) {
-          if ((e as { name?: string }).name === 'AbortError') throw e;
-          return { route: ev.route, persona: persona.name, drafts: [] };
         }
       }),
     );

@@ -27,7 +27,13 @@ import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
 import { Coverage, DESTRUCTIVE, patternOf, routeOf } from '../crawler/coverage';
 import { chooseCells, mergeBreakpoints, widthsFromCss } from '../devices/matrix';
-import { PlanJourneyBrain, journeyOrder, runJourney, type JourneyBrain } from '../crawler/journey';
+import {
+  FallbackJourneyBrain,
+  PlanJourneyBrain,
+  journeyOrder,
+  runJourney,
+  type JourneyBrain,
+} from '../crawler/journey';
 import { copy } from '../../renderer/copy';
 import { format } from '../../renderer/lib/format';
 import { ProbeRunner } from '../crawler/probes';
@@ -54,8 +60,6 @@ import {
   type Situation,
 } from './abilities';
 
-/** api-trouble retries on its own after this long (§6.3). */
-export const API_RETRY_MS = 12_000;
 /**
  * A safety ceiling, not a target (Allen's feedback, round 4): a run ends on coverage or on
  * going in circles (STALL_*), and the budget bounds it long before this. Big sites pass 200.
@@ -96,6 +100,8 @@ export interface RunDeps {
   appModel?: AppModel;
   /** SPEC-phase4 §6.1: a brain for one journey (Spark with the screenshot); the plan itself without. */
   journeyBrain?: (journey: Journey) => JourneyBrain;
+  /** SPEC-phase4 §6C: "Retry now" on the paused card: check the models right away. */
+  retryModels?: () => void;
   /** SPEC-phase4 §4.3: what the owner told Fitts on earlier runs, and how to add to it. */
   memory?: {
     get(): ProjectMemory | undefined;
@@ -177,6 +183,14 @@ export class RealRun {
   private finished = false;
   private wake: (() => void) | undefined;
   private abort = new AbortController();
+  /**
+   * SPEC-phase4 §6C: paused because Meta's models can't be reached. Nothing new starts (no site
+   * action, probe, journey or fix) until they answer; the card's id, and what the run was doing.
+   */
+  private modelsPaused = false;
+  private modelsCard: string | undefined;
+  private beforeModels: RunState['activity'] | undefined;
+  private modelsWaiters: (() => void)[] = [];
   private readonly history: string[] = [];
   /** Every step taken, for each finding's replay (Allen's feedback, round 4). */
   private readonly trail: TrailStep[] = [];
@@ -430,7 +444,67 @@ export class RealRun {
 
   private blocked(): boolean {
     const a = this.state.activity;
-    return a === 'paused' || a === 'user-driving' || a === 'waiting-on-user';
+    return this.modelsPaused || a === 'paused' || a === 'user-driving' || a === 'waiting-on-user';
+  }
+
+  /** Resolves when the models answer (at once when they do): fixes wait here (§6C). */
+  private untilModels(): Promise<void> {
+    if (!this.modelsPaused || this.finished) return Promise.resolve();
+    return new Promise((resolve) => this.modelsWaiters.push(resolve));
+  }
+
+  /**
+   * SPEC-phase4 §6C: a model call found Meta's models unreachable. The run pauses at once and
+   * says so; the call itself waits in the caller and is sent again when they answer. Only the
+   * owner's Stop ends the run while it's paused.
+   */
+  modelsDown(): void {
+    if (this.finished || this.modelsPaused) return;
+    this.modelsPaused = true;
+    this.beforeModels = this.state.activity;
+    this.modelsCard = this.card(
+      'api-trouble',
+      (a) => {
+        if (a === 'stop') this.finish({ stop: true });
+      },
+      false,
+    );
+    this.setActivity('paused');
+    this.emit([
+      { type: 'now.changed', nowText: copy.fitts.modelsPausedNow },
+      { type: 'run.patch', patch: { modelsDownSince: Date.now() } },
+    ]);
+  }
+
+  /** The models answer again: the run picks up exactly where it was (§6C). */
+  modelsUp(): void {
+    if (!this.modelsPaused) return;
+    this.modelsPaused = false;
+    const id = this.modelsCard;
+    this.modelsCard = undefined;
+    const item = id ? this.state.chat.find((c) => c.id === id) : undefined;
+    if (id) this.handlers.delete(id);
+    if (item?.type === 'state' && item.answer === undefined)
+      this.emit([{ type: 'chat.item.updated', item: { ...item, answer: 'reconnected' } }]);
+    this.emit([{ type: 'run.patch', patch: {}, unset: ['modelsDownSince'] }]);
+    if (this.finished) return;
+    this.say(copy.fitts.apiRecovered);
+    // Back to what it was doing, unless the owner paused or took the wheel meanwhile.
+    if (this.state.activity === 'paused') {
+      const before = this.beforeModels;
+      this.setActivity(
+        before === 'waiting-on-user' || this.state.waitingFor
+          ? 'waiting-on-user'
+          : before === 'paused' || before === 'user-driving'
+            ? before
+            : 'acting',
+      );
+    }
+    this.beforeModels = undefined;
+    const waiters = this.modelsWaiters;
+    this.modelsWaiters = [];
+    for (const w of waiters) w();
+    this.kick();
   }
 
   private kick(): void {
@@ -1917,7 +1991,8 @@ export class RealRun {
       { type: 'now.changed', nowText: format(copy.fitts.tryingJourney, { name: j.name }) },
     ]);
     const site = this.deps.site;
-    const brain = this.deps.journeyBrain?.(j) ?? new PlanJourneyBrain();
+    const spark = this.deps.journeyBrain?.(j);
+    const brain = spark ? new FallbackJourneyBrain(spark) : new PlanJourneyBrain();
     const snap0 = await site.snapshot().catch(() => undefined);
     if (snap0 && routeOf(snap0.path) !== routeOf(j.start))
       await this.perform(
@@ -1999,6 +2074,7 @@ export class RealRun {
         baseline: (route) => this.probes.results.filter((r) => r.route === route),
         costOf: (id) => this.deps.ledger.findingCost(id),
         idle: () => this.fixesSettled(),
+        ready: () => this.untilModels(),
         restingActivity: () => (this.finished ? 'idle' : 'acting'),
         review: (changeId, adjust) => this.reviewRedesign(changeId, adjust),
         settled: (change) => this.changeSettled(change),
@@ -2046,6 +2122,8 @@ export class RealRun {
         }
       }
     }
+    for (const r of reviews.filter((x) => x.unusable))
+      this.say(format(copy.fitts.reviewerUnreadable, { persona: r.persona, route: r.route }));
     const { findings, checks } = aggregateWithChecks({
       runId: this.state.runId,
       probes: this.probes.results,
@@ -2661,20 +2739,6 @@ export class RealRun {
     }, 3000);
   }
 
-  /** Three failed model calls in a row (§6.3): the api-trouble card, retried after 12s. */
-  apiTrouble(): void {
-    if (this.finished) return;
-    const id = this.card('api-trouble', (a) => {
-      if (a === 'pause') return this.pause();
-      this.say('Retrying now.');
-      this.resumeFromCard();
-    });
-    setTimeout(() => {
-      const item = this.state.chat.find((c) => c.id === id);
-      if (item?.type === 'state' && item.answer === undefined) this.answer(id, 'retry-now');
-    }, API_RETRY_MS);
-  }
-
   private resumeFromCard(): void {
     this.emit([{ type: 'waiting.changed' }]);
     if (!this.finished) this.setActivity('acting');
@@ -2713,6 +2777,9 @@ export class RealRun {
    * stopped pushes nothing: the branch keeps what passed. Once, whichever path ends the run.
    */
   finish(opts: { stop?: boolean } = {}): void {
+    const waiters = this.modelsWaiters;
+    this.modelsWaiters = [];
+    for (const w of waiters) w();
     if (this.finished || this.finishing) return;
     this.finishing = true;
     void (async () => {
@@ -2785,6 +2852,11 @@ export class RealRun {
 
   resume(): void {
     if (this.state.activity !== 'paused') return;
+    // Paused for the models: Resume is "Retry now" (§6C); the run carries on when they answer.
+    if (this.modelsPaused) {
+      this.deps.retryModels?.();
+      return;
+    }
     this.setActivity(this.state.waitingFor ? 'waiting-on-user' : 'acting');
     this.kick();
   }
@@ -3002,6 +3074,16 @@ export class RealRun {
 
   answer(itemId: string, answer: string): void {
     const item = this.state.chat.find((c) => c.id === itemId);
+    if (
+      item?.type === 'state' &&
+      item.stateKind === 'api-trouble' &&
+      item.answer === undefined &&
+      answer === 'retry-now'
+    ) {
+      this.say(copy.fitts.modelsRetrying);
+      this.deps.retryModels?.();
+      return;
+    }
     if (item?.type === 'review' && item.answer === undefined) {
       this.answerReview(item, answer);
       return;

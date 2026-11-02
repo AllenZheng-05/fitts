@@ -953,6 +953,8 @@ export interface RunState {
   cells?: DeviceCell[];
   /** SPEC-phase4 §6.2: how much of what the code names has been covered. */
   coverage?: RunCoverage;
+  /** SPEC-phase4 §6C: paused since (ms since epoch) because Meta's models can't be reached. */
+  modelsDownSince?: number;
 }
 
 /** SPEC-phase4 §6.2: coverage against the App Model, kept current through the run. */
@@ -1066,7 +1068,7 @@ export const EDGE_STATE_ANSWERS = {
   'site-down': ['restart', 'wait'],
   'budget-warning': ['economy', 'keep'],
   budget: ['add-10', 'stop'],
-  'api-trouble': ['retry-now', 'pause'],
+  'api-trouble': ['retry-now', 'stop'],
   reopen: ['resume', 'summary'],
   'nothing-found': ['see-checks', 'finish'],
 } as const satisfies Record<EdgeStateKind, readonly string[]>;

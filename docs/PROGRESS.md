@@ -15,7 +15,8 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U2  | Understand + the understanding card (§3) | done        | `ba8d406` |
 | U3  | Owner first + memory (§4)                | done        | `bad28a3` |
 | U4  | Repro (§5)                               | done        | `4105a5a` |
-| U5  | Journeys, coverage, device matrix (§6)   | done        | see git   |
+| U5  | Journeys, coverage, device matrix (§6)   | done        | `bb5c828` |
+| U5a | Models unreachable: pause (§6C, added)   | done        | see git   |
 | U5b | The action log (§6A)                     | todo        |           |
 | U5c | Detect more (§6B)                        | todo        |           |
 | U6  | Code-aware fixer (§7)                    | todo        |           |
@@ -26,13 +27,10 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 ## Current milestone and next step
 
-**U5 (journeys, coverage, device matrix; §6): built; the crawl e2e passes; the full e2e and
-unit suites are running for the commit.** Everything in the
-plan below is in the tree: matrix + journeys (new files), the three scripts' shared edits
-(schema/probes/protocol/site/manager, abilities/decider/prompt/coverage/probes/aggregate/run/
-index/copy, renderer/demo/bench/check/e2e). Typecheck and lint green; unit and the demo/chat
-e2e were running at the last note. Then: DECISIONS U5 is written; commit "Phase 4 U5: journeys,
-coverage and the device matrix"; next U5b (the action log, §6A).
+**Paused at Allen's request after U5a (Nov 1).** U5a is committed (all four suites green: 144 e2e). Next: U5b. U5 is committed. U5b's files and scripts wait in the scratchpad: `u5b-hold/`
+(record.ts → `apps/desktop/src/agent/log/`, log.test.ts → `tests/agent/`), `u5b-a.mjs` then
+`u5b-b.mjs` (written before U5a: re-check their anchors in run.ts, e.g. the review() and
+answer() blocks U5a touched, before applying).
 
 ## U5 plan (journeys, coverage, device matrix; §6)
 

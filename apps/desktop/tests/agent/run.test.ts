@@ -10,7 +10,16 @@ import {
 } from '@fitts/schema';
 import { testDirection } from './design';
 import { describe, expect, it } from 'vitest';
-import { ExplorerBrain, type Brain } from '../../src/agent/crawler/brain';
+import { ExplorerBrain, SparkBrain, type Brain } from '../../src/agent/crawler/brain';
+import {
+  LlmCaller,
+  LlmError,
+  type LlmClient,
+  type LlmRequest,
+  type LlmResponse,
+} from '../../src/agent/llm/call';
+import { Reachability } from '../../src/agent/llm/reachability';
+import { ReviewerPanel } from '../../src/agent/review/reviewers';
 import { BudgetGuard } from '../../src/agent/ledger/budget';
 import { CostLedger } from '../../src/agent/ledger/ledger';
 import { RealRun, type RunDeps } from '../../src/agent/orchestrator/run';
@@ -151,6 +160,8 @@ function setup({
   redesigner,
   memory,
   reportIssue,
+  retryModels,
+  panel,
 }: {
   site?: ReturnType<typeof fakeSite>;
   brain?: Brain;
@@ -167,6 +178,8 @@ function setup({
   redesigner?: RunDeps['redesigner'];
   memory?: RunDeps['memory'];
   reportIssue?: RunDeps['reportIssue'];
+  retryModels?: RunDeps['retryModels'];
+  panel?: RunDeps['panel'];
 } = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
@@ -178,6 +191,8 @@ function setup({
       ...(fixer ? { fixer } : {}),
       ...(memory ? { memory } : {}),
       ...(reportIssue ? { reportIssue } : {}),
+      ...(retryModels ? { retryModels } : {}),
+      ...(panel ? { panel } : {}),
       ...(redesigner ? { redesigner } : {}),
       ...(maxSteps ? { maxSteps } : {}),
       ...(decider ? { decider } : {}),
@@ -217,6 +232,9 @@ async function finished(state: () => RunState | undefined, run: RealRun, ms = 30
 
 const card = (s: RunState | undefined, kind: string) =>
   s?.chat.find((c) => c.type === 'state' && c.stateKind === kind && c.answer === undefined);
+/** The card of that kind, answered or not. */
+const anyCard = (s: RunState | undefined, kind: string) =>
+  s?.chat.find((c) => c.type === 'state' && c.stateKind === kind);
 
 describe('RealRun crawl (coverage gate)', () => {
   it('reaches every route, tries every primary control (destructive ones through the gate), and ends', async () => {
@@ -356,15 +374,45 @@ describe('RealRun edge states from real conditions', () => {
     run.dispose();
   });
 
-  it('api trouble: the card, and retry carries on', async () => {
+  it('models unreachable (SPEC-phase4 §6C): the run pauses with the card; Retry now checks, it never resumes on its own; they answer and it carries on', async () => {
+    let retried = 0;
+    const { run, state } = setup({ retryModels: () => (retried += 1) });
+    run.start();
+    await until(() => (state()?.step ?? 0) >= 1);
+    run.modelsDown();
+    const c = card(state(), 'api-trouble');
+    expect(c).toBeTruthy();
+    expect(state()?.activity).toBe('paused');
+    expect(state()?.modelsDownSince).toBeGreaterThan(0);
+    const step = state()?.step ?? 0;
+    // Retry now: a check, not a resume; Resume does the same while the models are down.
+    run.answer(c?.id ?? '', 'retry-now');
+    run.resume();
+    expect(retried).toBe(2);
+    expect(state()?.activity).toBe('paused');
+    expect(
+      (anyCard(state(), 'api-trouble') as { answer?: string } | undefined)?.answer,
+    ).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(state()?.step).toBe(step);
+    expect(state()?.phase).toBe('audit');
+    run.modelsUp();
+    expect(state()?.activity).toBe('acting');
+    expect(state()?.modelsDownSince).toBeUndefined();
+    expect((anyCard(state(), 'api-trouble') as { answer?: string } | undefined)?.answer).toBe(
+      'reconnected',
+    );
+    await until(() => (state()?.step ?? 0) > step);
+    run.dispose();
+  });
+
+  it('models unreachable: Stop the run on the card is the only way it ends', async () => {
     const { run, state } = setup();
     run.start();
     await until(() => (state()?.step ?? 0) >= 1);
-    run.apiTrouble();
-    const c = card(state(), 'api-trouble');
-    expect(c).toBeTruthy();
-    run.answer(c?.id ?? '', 'retry-now');
-    expect(state()?.activity).toBe('acting');
+    run.modelsDown();
+    run.answer(card(state(), 'api-trouble')?.id ?? '', 'stop');
+    await until(() => state()?.phase === 'done');
     run.dispose();
   });
 
@@ -1868,4 +1916,164 @@ describe('the owner decides (SPEC-phase4 §4)', () => {
     await until(() => state()?.phase === 'done');
     run.dispose();
   });
+});
+
+describe('SPEC-phase4 §6C: when Meta’s models can’t be reached, the run pauses and loses nothing', () => {
+  /** The page's untried controls, from the crawl brain's own input. */
+  const untriedOf = (req: LlmRequest): { ref: string }[] => {
+    const first = (req.input as { content?: { text?: string }[] }[])[0];
+    const m = /<untrusted_page_content>(.*?)<\/untrusted_page_content>/.exec(
+      first?.content?.[0]?.text ?? '',
+    );
+    try {
+      return (JSON.parse(m?.[1] ?? '{}') as { untried?: { ref: string }[] }).untried ?? [];
+    } catch {
+      return [];
+    }
+  };
+  const usage = { input: 10, cached: 0, output: 10, reasoning: 0 };
+  /** One deterministic model for every task this run asks. */
+  const answer = (req: LlmRequest): LlmResponse => {
+    if (req.task === 'crawl') {
+      const first = untriedOf(req)[0];
+      return {
+        outputText: '',
+        output: first
+          ? [
+              {
+                type: 'function_call',
+                name: 'click',
+                arguments: JSON.stringify({ ref: first.ref, why: 'Next control' }),
+              },
+            ]
+          : [],
+        usage,
+        model: req.model,
+      };
+    }
+    if (req.task === 'review') {
+      const text = JSON.stringify(req.input);
+      const route = /Route: ([^\\]+?)\\n/.exec(text)?.[1] ?? '/';
+      return {
+        outputText: JSON.stringify({
+          findings: [
+            {
+              title: `Unclear purpose on ${route}`,
+              finding: 'People can’t tell what this page is for.',
+              fix: 'Add a heading that says what the page does.',
+              heuristic: 'H2',
+              lens: 'usability',
+              severity: 2,
+              elementRef: null,
+              evidenceIds: [`${route}#snapshot`],
+              evidence: ['No heading on the page'],
+              expected: null,
+              actual: null,
+              steps: [],
+            },
+          ],
+        }),
+        output: [],
+        usage,
+        model: req.model,
+      };
+    }
+    return { outputText: 'done', output: [], usage, model: req.model };
+  };
+
+  /** A whole run with Spark, the panel and the fixer on one model; `cut`: lose it at that task. */
+  async function runWith(cut: 'crawl' | 'review' | 'fix' | null) {
+    let down = false;
+    let cutDone = false;
+    const answered: string[] = [];
+    const client: LlmClient = {
+      respond(req) {
+        if (cut && !cutDone && req.task === cut) {
+          cutDone = true;
+          down = true;
+        }
+        if (down) return Promise.reject(new LlmError('fetch failed', undefined, true));
+        answered.push(`${req.task} ${JSON.stringify(req.input).length}`);
+        return Promise.resolve(answer(req));
+      },
+    };
+    const reach = new Reachability(() => Promise.resolve(!down), { intervalMs: 10 });
+    const caller = new LlmCaller(() => client, new CostLedger(), {
+      retries: 0,
+      waitForModels: (p, c, _e, signal) => reach.wait(p, c.projectId, signal),
+    });
+    const ctx = () => ({
+      runId: 'run-1',
+      projectId: 'demo-chat',
+      contributor: false,
+      allowed: () => true,
+    });
+    const r = redesignable();
+    r.site.probes = () =>
+      Promise.resolve([
+        {
+          probe: 'target-size' as const,
+          pass: false,
+          items: [{ ref: 'go-b', selector: '', measured: '28×20px', expected: 'at least 24×24px' }],
+        },
+      ]);
+    const fixer: RunDeps['fixer'] = async (task) => {
+      await caller.call(ctx(), { task: 'fix', model: 'm', input: task });
+      return { patched: 1, summary: 'Padded the link to 24×24.' };
+    };
+    const { run, state } = setup({
+      site: r.site,
+      fixer,
+      redesigner: r.redesigner,
+      mode: 'autonomous',
+      brain: new SparkBrain(caller, ctx, () => 'm'),
+      panel: new ReviewerPanel(caller, ctx, () => [{ provider: 'meta', model: 'm' }]),
+      retryModels: () => void reach.retryNow(),
+    });
+    reach.on({ down: () => run.modelsDown(), up: () => run.modelsUp() });
+    const pausedWell = async () => {
+      await until(() => down && state()?.activity === 'paused', 10_000);
+      expect(card(state(), 'api-trouble')).toBeTruthy();
+      const before = state();
+      // Paused: nothing moves, nothing is rolled back, the run doesn't end on its own.
+      await new Promise((res) => setTimeout(res, 120));
+      expect(state()?.step).toBe(before?.step);
+      expect(state()?.phase).toBe('audit');
+      expect(state()?.changes.some((c) => c.status === 'rolled-back')).toBe(false);
+      down = false;
+    };
+    run.start();
+    if (cut === 'crawl') await pausedWell();
+    await until(() => Boolean(card(state(), 'login-wall')), 10_000);
+    run.answer(card(state(), 'login-wall')?.id ?? '', 'skip');
+    if (cut === 'review' || cut === 'fix') await pausedWell();
+    await finished(state, run, 20_000);
+    const s = state();
+    run.dispose();
+    reach.dispose();
+    return {
+      findings: (s?.findings ?? []).map((x) => `${x.title} · ${x.route} · ${x.status}`).sort(),
+      changes: (s?.changes ?? []).map((c) => `${c.kind} · ${c.title} · ${c.status}`).sort(),
+      answered: [...answered].sort(),
+      paused: Boolean(anyCard(s, 'api-trouble')),
+      resumedCard: (anyCard(s, 'api-trouble') as { answer?: string } | undefined)?.answer,
+    };
+  }
+
+  it('mid-crawl, mid-review and mid-fix: paused, resumed, and the same results as a run that never lost the connection', async () => {
+    const steady = await runWith(null);
+    expect(steady.paused).toBe(false);
+    // The run did real work on the model: findings from the panel and a fix through the fixer.
+    expect(steady.findings.some((x) => x.startsWith('Unclear purpose on'))).toBe(true);
+    expect(steady.changes.length).toBeGreaterThan(0);
+    for (const cut of ['crawl', 'review', 'fix'] as const) {
+      const lost = await runWith(cut);
+      expect(lost.paused, cut).toBe(true);
+      expect(lost.resumedCard, cut).toBe('reconnected');
+      expect(lost.findings, cut).toEqual(steady.findings);
+      expect(lost.changes, cut).toEqual(steady.changes);
+      // Every call that was waiting was sent again and answered: nothing dropped or emptied.
+      expect(lost.answered, cut).toEqual(steady.answered);
+    }
+  }, 120_000);
 });

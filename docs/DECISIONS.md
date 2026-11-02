@@ -2929,6 +2929,9 @@ understand the project's CI before coding; and one PR for the whole run.
   page's 44px of padding reaches 340px: it fits at 360px (the old viewport sweep's narrowest
   width) and overflows at 320px, so only the reflow cell finds it. PLANTED.md, the bench list
   and the check script count 26.
+  §6B.8's table names the Inbox for #26; it went on Settings because the Inbox's rows already
+  truncate with an ellipsis (no overflow to plant without changing that planted look), and the
+  settings list is one element whose minimum width is easy to state and to fix.
 - **Overflow is measured against the visual viewport.** In mobile emulation Chromium grows the
   layout viewport (`window.innerWidth`) to fit content wider than the screen (a 340px page at
   320px reports `innerWidth` 341), so the old "scrollWidth > innerWidth" check could never fire
@@ -2942,3 +2945,68 @@ understand the project's CI before coding; and one PR for the whole run.
   cut order #10) and V8 code coverage in the App Map (#1, "only if U1–U8 are done"). The
   login-wall card keeps saying logins are coming. If they're not reached before the freeze, they
   move to ROADMAP's cut list.
+
+## Phase 4 — U5a: when Meta's models can't be reached, the run pauses
+
+Allen's requirement (Nov 1), added to the spec as §6C with a §13 row and a §14 guarantee.
+
+- **The caller decides, and waits.** `isUnreachable` (no status, 401, 403, 408, 409, 429, 5xx)
+  and `isUnusable` (anything else that isn't an abort or the budget cap) live in
+  `agent/llm/call.ts`. `LlmCaller` keeps its own retries with backoff for transient errors
+  (none for 401/403), and then, instead of throwing, asks `waitForModels` for a promise and sends
+  the very same request again when it resolves. A 400/404/422 is a bad request, not an outage:
+  it's thrown for the caller's usable-answer handling. The old `onTrouble` hook stays only for
+  callers with no waiter.
+- **One reachability poller for the agent process** (`agent/llm/reachability.ts`, no network
+  of its own): a waiting call marks its provider down, the project's run (or interview) is told
+  once per outage, and `GET /v1/models` (`pingProvider`, the same free request the Welcome key
+  check makes) runs every 10 seconds. When everything answers, the projects resume first and then
+  every waiting call is released, so a call that comes back finds its run acting, not paused.
+  Baseten (the open-weights reviewer) is checked against its own `/models`; the card names Meta
+  because that's what the owner set up.
+- **Production waits, offline and tests throw.** `waitForModels` returns a wait only when
+  `online()` (a Meta key and not `FITTS_OFFLINE`); otherwise it returns undefined and the
+  failure is thrown as before, so the e2e build and unit tests keep their offline fallbacks and
+  never touch the network.
+- **The run pauses at once.** `RealRun.modelsDown()` posts the api-trouble card (non-blocking,
+  so a question or the gate that was waiting stays waiting), sets activity `paused`, sets
+  `RunState.modelsDownSince` and the Now line. `blocked()` is true while paused for the models,
+  so the crawl, journeys and the device pass start nothing; the fix pipeline waits on
+  `host.ready()` before a fix starts and again before it's checked, so no site action happens
+  either. The call that was in flight is still waiting in the caller, so the ability that was
+  running continues from that exact step. `modelsUp()` marks the card "reconnected", says so,
+  and restores what the run was doing (acting, or waiting on the owner if a card was open, or
+  the owner's own pause).
+- **"Retry now" is a check, not a resume.** The card's Retry now (and the header's Resume while
+  paused for the models) runs the check immediately; the card stays until the models answer.
+  "Stop the run" ends it, the only way a paused run ends. The 12-second auto-retry, its countdown
+  and `API_RETRY_MS` are gone (agent, renderer and the mock engine's scenario).
+- **Unusable answers get exactly one retry, then today's fallback**: the decider
+  (`SparkDecider.next`; two unusable decisions and the loop uses the scripted order), the crawl
+  brain (then the explorer), a journey step (`FallbackJourneyBrain`: then the plan takes the
+  step), Understand's Pass 2 (then the code-only model). A reviewer whose answer can't be read
+  twice comes back marked `unusable` and the run says, in the chat, which reviewer and which page
+  is missing. Interview turns, converse, judges and the fixer have no fallback to reach for: they
+  simply wait for the models.
+- **A fix is never rolled back for an outage**, because the fixer's model call waits in the
+  caller and the pipeline waits before checking; only a real verdict can roll a fix back.
+- **The interview pauses the same way**: the stub engine posts the same card (`modelsDown` /
+  `modelsUp`); the turn itself waits in the agent and goes again. Retry now goes to the poller;
+  Stop is the engine's.
+- **An audit starts only when the models answer**: `startAudit` pings first and, if Meta
+  doesn't answer, Fitts says it can't reach the models and hasn't started. The Welcome key check
+  already makes the same request and says "Couldn't reach the provider".
+- **After 2 minutes paused, the OS notification** "Fitts paused: it can't reach Meta's models."
+  comes from the renderer's notification hook (`modelsNotice`), once per outage, even for the
+  project on screen (the owner may have walked away); the hook now also looks every 15 seconds,
+  since an outage is time passing rather than a state change.
+- **Muse Code** (U6) isn't the fixer yet; when it is, a `muse` process that fails on the network
+  will be classified the same way (unreachable: pause and retry the step; never a rollback).
+- **Tests**: `tests/agent/reachability.test.ts` covers the classification, waiting and resending
+  the identical request, 401, Retry now, abort, the offline throw, `pingProvider`, and the one
+  retry for the decider, crawl brain, journey step and reviewers. `run.test.ts` runs the whole
+  audit (Spark brain, panel and fixer on one fake model) four times: without an outage, and with
+  the model unreachable mid-crawl, mid-review and mid-fix; each outage run pauses with the card,
+  moves nothing while paused, rolls nothing back, resumes on its own, and ends with the same
+  findings, changes and answered calls as the run without one. The old "api trouble: retry
+  carries on" test is replaced by one for the new behavior (Retry now checks, never resumes).

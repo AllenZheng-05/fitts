@@ -47,6 +47,28 @@ export interface LlmClient {
   respond(req: LlmRequest): Promise<LlmResponse>;
 }
 
+/**
+ * SPEC-phase4 §6C: the no-cost check that the provider answers (GET /v1/models; free). Used by
+ * the reachability poller while a run is paused, and before an audit starts.
+ */
+export async function pingProvider(
+  provider: Provider,
+  apiKey: string | undefined,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  if (!apiKey) return false;
+  const url = `${provider === 'meta' ? META_BASE_URL : BASETEN_BASE_URL}/models`;
+  try {
+    const res = await fetchImpl(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export class LlmError extends Error {
   constructor(
     message: string,
@@ -65,6 +87,49 @@ export class BudgetExceeded extends Error {
 
 const RETRYABLE = (status: number | undefined) =>
   status === undefined || status === 408 || status === 409 || status === 429 || status >= 500;
+
+/**
+ * SPEC-phase4 §6C: the models can't be reached: no answer (network, DNS, timeout), a server
+ * error, rate limited after the retries, or the key refused (401/403). These never come back to
+ * a caller as a failure when the caller can wait for the models.
+ */
+export const isUnreachable = (e: unknown): boolean =>
+  e instanceof LlmError &&
+  (e.status === undefined ||
+    e.status === 401 ||
+    e.status === 403 ||
+    e.status === 408 ||
+    e.status === 409 ||
+    e.status === 429 ||
+    e.status >= 500);
+
+/** The model answered, but its answer can't be used (malformed, an unknown tool, off-schema). */
+export class UnusableAnswer extends Error {
+  constructor(what = 'the answer could not be used') {
+    super(what);
+    this.name = 'UnusableAnswer';
+  }
+}
+
+/**
+ * SPEC-phase4 §6C: an unusable answer is asked for once more; only if that fails too may the
+ * caller fall back. Aborts, the budget cap and unreachable models are never retried here.
+ */
+export const isUnusable = (e: unknown): boolean => {
+  const name = (e as { name?: string } | null)?.name;
+  if (name === 'AbortError' || name === 'APIUserAbortError') return false;
+  if (e instanceof BudgetExceeded) return false;
+  return !isUnreachable(e);
+};
+
+export async function retryUnusable<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!isUnusable(e)) throw e;
+    return fn();
+  }
+}
 
 function toLlmError(e: unknown): LlmError {
   if (e instanceof LlmError) return e;
@@ -239,6 +304,17 @@ export class LlmCaller {
       retries?: number;
       baseDelayMs?: number;
       onTrouble?: (e: LlmError) => void;
+      /**
+       * SPEC-phase4 §6C: when the models can't be reached, wait for them (resolves when they
+       * answer, then the same call is sent again). Absent, or returning undefined (offline and
+       * test builds only), the failure is thrown as before.
+       */
+      waitForModels?: (
+        provider: Provider,
+        ctx: CallContext,
+        error: LlmError,
+        signal?: AbortSignal,
+      ) => Promise<void> | undefined;
     } = {},
   ) {}
 
@@ -247,6 +323,31 @@ export class LlmCaller {
     const provider = req.provider ?? (req.model.startsWith('meta-models/') ? 'baseten' : 'meta');
     const client = this.clientFor(provider);
     if (!client) throw new LlmError(`No ${provider} key`, 401, false);
+    for (;;) {
+      try {
+        return await this.attempt(ctx, req, provider, client);
+      } catch (e) {
+        if (!isUnreachable(e)) throw e;
+        const err = e as LlmError;
+        const wait = this.opts.waitForModels?.(provider, ctx, err, req.signal);
+        if (!wait) {
+          if (err.retryable) this.opts.onTrouble?.(err);
+          throw err;
+        }
+        // Paused until the models answer; then the exact same call goes again.
+        await wait;
+        if (!ctx.allowed()) throw new BudgetExceeded();
+      }
+    }
+  }
+
+  /** One call with its retries (backoff on 429/5xx/timeouts); throws the last failure. */
+  private async attempt(
+    ctx: CallContext,
+    req: LlmRequest,
+    provider: Provider,
+    client: LlmClient,
+  ): Promise<LlmResponse> {
     const attempts = (this.opts.retries ?? 3) + 1;
     let lastError: LlmError | undefined;
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -282,7 +383,6 @@ export class LlmCaller {
         await sleep(base * 2 ** attempt + Math.random() * base * 0.25, req.signal);
       }
     }
-    if (lastError?.retryable) this.opts.onTrouble?.(lastError);
     throw lastError ?? new LlmError('model call failed', undefined, false);
   }
 }

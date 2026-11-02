@@ -324,7 +324,7 @@ describe('SparkJourneyBrain', () => {
     expect(content[1]).toEqual({ type: 'input_image', image_url: 'data:image/jpeg;base64,AAAA' });
   });
 
-  it('maps goal_met, blocked, back and a bad ref', async () => {
+  it('maps goal_met, blocked and back; an unusable answer is retried once, then thrown', async () => {
     const { caller: c } = caller([
       { name: 'any', response: call('goal_met', { why: 'Sent shows' }) },
       { name: 'any', response: call('blocked', { reason: 'login' }) },
@@ -337,7 +337,8 @@ describe('SparkJourneyBrain', () => {
     expect(await brain.next(input)).toEqual({ kind: 'goal_met', why: 'Sent shows' });
     expect(await brain.next(input)).toEqual({ kind: 'blocked', reason: 'login' });
     expect(await brain.next(input)).toEqual({ kind: 'back', why: 'wrong page' });
-    expect((await brain.next(input)).kind).toBe('blocked');
-    expect((await brain.next(input)).kind).toBe('blocked');
+    // SPEC-phase4 §6C: a ref that isn't on the page, then a path off the site: unusable twice,
+    // so it throws (the run's FallbackJourneyBrain lets the plan take that step).
+    await expect(brain.next(input)).rejects.toMatchObject({ name: 'UnusableAnswer' });
   });
 });

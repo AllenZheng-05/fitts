@@ -21,8 +21,6 @@ export const REPLY_MS = 900;
 export const RETRY_MS = 3000;
 /** How long a fix takes in run time when the script doesn't say. */
 export const FIX_MS = 8000;
-import { API_RETRY_MS } from '../lib/timing';
-export { API_RETRY_MS };
 
 const isAuto = (mode: Mode) => mode === 'autonomous' || mode === 'dangerous';
 const isAsk = (mode: Mode) => mode === 'ask-every' || mode === 'ask-unsure';
@@ -176,6 +174,41 @@ export class MockRunEngine implements RunEngine {
   /** One line from Fitts in the run's chat (the agent's notes, like "your site isn't up"). */
   note(projectId: string, text: string): void {
     this.mutate(this.ensure(projectId), (_s, ctx) => ctx.say(text));
+  }
+
+  /**
+   * SPEC-phase4 §6C: during the interview or the understanding step, Meta's models can't be
+   * reached: the paused card (the turn itself waits in the agent and goes again when they
+   * answer). Stop ends the run; "Retry now" is the agent's.
+   */
+  modelsDown(projectId: string): void {
+    const ctrl = this.ensure(projectId);
+    this.mutate(ctrl, (s, ctx) => {
+      if (s.chat.some((c) => c.type === 'state' && c.stateKind === 'api-trouble' && !c.answer))
+        return;
+      const id = ctx.post({ type: 'state', stateKind: 'api-trouble' });
+      ctx.onAnswer(id, (answer, _s2, c) => {
+        if (answer === 'stop') c.finish();
+      });
+      s.modelsDownSince = Date.now();
+    });
+  }
+
+  /** They answer again: the card says so and the interview carries on. */
+  modelsUp(projectId: string): void {
+    const ctrl = this.runs.get(projectId);
+    if (!ctrl) return;
+    this.mutate(ctrl, (s, ctx) => {
+      const card = s.chat.find(
+        (c) => c.type === 'state' && c.stateKind === 'api-trouble' && !c.answer,
+      );
+      if (card?.type === 'state') {
+        card.answer = 'reconnected';
+        ctrl.handlers.delete(card.id);
+        ctx.say(copy.fitts.apiRecovered);
+      }
+      delete s.modelsDownSince;
+    });
   }
 
   /**
@@ -909,17 +942,10 @@ export class MockRunEngine implements RunEngine {
         });
         return;
       case 'api-trouble':
+        // SPEC-phase4 §6C: paused until the models answer; no countdown, no auto-resume.
         holdOn();
         ctx.onAnswer(id, (answer, _s2, c) => {
-          if (answer === 'pause') return c.pause();
-          c.say(copy.fitts.apiRecovered);
-        });
-        ctx.after(API_RETRY_MS, (s2, c) => {
-          const card = s2.chat.find((x) => x.id === id);
-          if (card?.type !== 'state' || card.answer) return;
-          card.answer = 'retry-now';
-          if (ctrl.held?.itemId === id) this.release(ctrl, s2);
-          ctrl.handlers.delete(id);
+          if (answer === 'stop') return c.finish();
           c.say(copy.fitts.apiRecovered);
         });
         return;

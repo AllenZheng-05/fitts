@@ -81,6 +81,8 @@ export interface PipelineHost {
   costOf(findingId: string): number;
   /** Every job has settled (none running or queued). */
   idle(): void;
+  /** SPEC-phase4 §6C: resolves when Meta's models answer (at once when they do). */
+  ready?(): Promise<void>;
   /** What the run is doing once a redesign adjustment ends (acting, or idle when it's done). */
   restingActivity(): RunState['activity'];
   /**
@@ -558,6 +560,8 @@ export class FixPipeline {
     const check = this.checks.get(p.findingId);
     // The redesign may have fixed it while it waited in the queue.
     if (!f || !check || f.status !== 'fixing') return;
+    // SPEC-phase4 §6C: no fix starts while the run is paused for the models.
+    await this.host.ready?.();
     this.host.emit([{ type: 'now.changed', nowText: `Fixing “${f.title}”` }]);
     this.startedIn.add(p.mode);
     let reason: string | null = null;
@@ -596,6 +600,7 @@ export class FixPipeline {
             pass === 0 ? (summary ? `no change made: ${summary}` : 'no change made') : reason;
           break;
         }
+        await this.host.ready?.();
         this.host.emit([{ type: 'now.changed', nowText: `Checking the fix for “${f.title}”` }]);
         const route = check.routes[0] ?? f.route;
         const after = (await this.site.fix({

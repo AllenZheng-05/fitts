@@ -29,6 +29,15 @@ function needsYou(run: RunState): { id: string; text: string } | null {
  * A run in a project that isn't on screen still reaches you (SPEC §6.9, §7.7): a real
  * OS notification, once per question. Clicking it opens that project with the question.
  */
+/** SPEC-phase4 §6C: paused this long for Meta's models, Fitts tells you, wherever you are. */
+export const MODELS_NOTIFY_MS = 2 * 60_000;
+
+export function modelsNotice(run: RunState, now: number): { id: string; text: string } | null {
+  const since = run.modelsDownSince;
+  if (since === undefined || now - since < MODELS_NOTIFY_MS) return null;
+  return { id: `${run.projectId}:models:${since}`, text: copy.notify.modelsDown };
+}
+
 export function useBackgroundNotifications() {
   useEffect(() => {
     const sent = new Set<string>();
@@ -36,6 +45,14 @@ export function useBackgroundNotifications() {
       const { runs, activeProjectId } = useRunStore.getState();
       const screen = useUi.getState().screen;
       if (!useSettings.getState().notificationsAllowed) return;
+      // Paused for the models two minutes: told even when the project is on screen (you may
+      // have walked away); the run never ends on its own.
+      for (const run of Object.values(runs)) {
+        const notice = modelsNotice(run, Date.now());
+        if (!notice || sent.has(notice.id)) continue;
+        sent.add(notice.id);
+        bridge().notify({ id: notice.id, title: copy.notify.title, body: notice.text });
+      }
       for (const run of Object.values(runs)) {
         if (run.projectId === activeProjectId && screen === 'workspace') continue;
         const need = needsYou(run);
@@ -50,11 +67,14 @@ export function useBackgroundNotifications() {
     };
     check();
     const unsubscribe = useRunStore.subscribe(check);
+    // The outage notice is about time passing, not a state change: look every 15 seconds.
+    const tick = setInterval(check, 15_000);
     const offClick = bridge().onNotificationClick((id) => {
       const projectId = id.split(':')[0];
       if (projectId) useUi.getState().openProject(projectId);
     });
     return () => {
+      clearInterval(tick);
       unsubscribe();
       offClick();
     };

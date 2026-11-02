@@ -4,7 +4,13 @@
 // modes, probes after each action), up to 15 actions. The outcome is evidence for the reviewers.
 import type { AppPage, Journey } from '@fitts/schema';
 import prompt from '../../../../../docs/prompts/journey.md?raw';
-import type { CallContext, LlmCaller } from '../llm/call';
+import {
+  isUnusable,
+  retryUnusable,
+  UnusableAnswer,
+  type CallContext,
+  type LlmCaller,
+} from '../llm/call';
 import type { AxSnapshot } from '../protocol';
 import { DESTRUCTIVE, routeOf } from './coverage';
 import { MARKER, type Action } from './brain';
@@ -260,7 +266,12 @@ export class SparkJourneyBrain implements JourneyBrain {
     private readonly model: () => string,
   ) {}
 
-  async next(input: JourneyStepInput): Promise<JourneyAction> {
+  /** SPEC-phase4 §6C: an unusable answer is asked for once more, then thrown (the fallback takes over). */
+  next(input: JourneyStepInput): Promise<JourneyAction> {
+    return retryUnusable(() => this.ask(input));
+  }
+
+  private async ask(input: JourneyStepInput): Promise<JourneyAction> {
     const { journey, snapshot, shot, history, signal } = input;
     const page = JSON.stringify({
       path: snapshot.path,
@@ -302,7 +313,7 @@ export class SparkJourneyBrain implements JourneyBrain {
       ...(signal ? { signal } : {}),
     });
     const call = res.output.find((o) => o.type === 'function_call');
-    if (!call) return { kind: 'blocked', reason: 'Fitts could not pick a next step' };
+    if (!call) throw new UnusableAnswer('no step picked');
     const args = JSON.parse(typeof call['arguments'] === 'string' ? call['arguments'] : '{}') as {
       ref?: string;
       text?: string;
@@ -316,7 +327,7 @@ export class SparkJourneyBrain implements JourneyBrain {
       case 'click':
         return node
           ? { kind: 'click', ref: node.ref, name: node.name, why: why || `Tapping ${node.name}` }
-          : { kind: 'blocked', reason: 'picked a control that is not on the page' };
+          : unusable('picked a control that is not on the page');
       case 'type':
         return node
           ? {
@@ -326,17 +337,19 @@ export class SparkJourneyBrain implements JourneyBrain {
               text: (args.text ?? MARKER).slice(0, 200),
               why: why || `Typing in ${node.name}`,
             }
-          : { kind: 'blocked', reason: 'picked a field that is not on the page' };
+          : unusable('picked a field that is not on the page');
       case 'navigate':
         return args.path && args.path.startsWith('/')
           ? { kind: 'navigate', path: args.path, why: why || `Opening ${args.path}` }
-          : { kind: 'blocked', reason: 'asked for a path off the site' };
+          : unusable('asked for a path off the site');
       case 'back':
         return { kind: 'back', why: why || 'Going back' };
       case 'goal_met':
         return { kind: 'goal_met', why: why || 'The goal is done' };
-      default:
+      case 'blocked':
         return { kind: 'blocked', reason: (args.reason ?? why ?? 'blocked').slice(0, 160) };
+      default:
+        throw new UnusableAnswer(`unknown tool ${String(call['name'])}`);
     }
   }
 }
@@ -428,5 +441,29 @@ export class PlanJourneyBrain implements JourneyBrain {
         return Promise.resolve({ kind: 'click', ref: guess.ref, name: guess.name, why: step });
     }
     return Promise.resolve({ kind: 'goal_met', why: 'every step of the plan was done' });
+  }
+}
+
+const unusable = (what: string): never => {
+  throw new UnusableAnswer(what);
+};
+
+/**
+ * SPEC-phase4 §6C: Spark first; when its answer for a step stays unusable after one retry, the
+ * plan itself takes that step. Unreachable models never get here (the caller waits for them).
+ */
+export class FallbackJourneyBrain implements JourneyBrain {
+  constructor(
+    private readonly primary: JourneyBrain,
+    private readonly fallback: JourneyBrain = new PlanJourneyBrain(),
+  ) {}
+
+  async next(input: JourneyStepInput): Promise<JourneyAction> {
+    try {
+      return await this.primary.next(input);
+    } catch (e) {
+      if (!isUnusable(e)) throw e;
+      return this.fallback.next(input);
+    }
   }
 }

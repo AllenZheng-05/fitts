@@ -3,7 +3,7 @@
 // crawler's tools; anything it proposes outside the page's untried controls falls back to the
 // deterministic explorer, which always makes progress.
 import type { Brief } from '@fitts/schema';
-import type { LlmCaller, CallContext } from '../llm/call';
+import { retryUnusable, UnusableAnswer, type LlmCaller, type CallContext } from '../llm/call';
 import type { AxSnapshot } from '../protocol';
 import { routeOf, type Coverage } from './coverage';
 
@@ -203,7 +203,9 @@ export class SparkBrain implements Brain {
       headings: snapshot.headings,
       untried,
     });
-    try {
+    // SPEC-phase4 §6C: an answer that names no untried control is asked for once more; only
+    // then does the explorer pick. Unreachable models never get here: the caller waits.
+    const ask = async (): Promise<Action> => {
       const res = await this.caller.call(this.ctx(), {
         task: 'crawl',
         model: this.model(),
@@ -256,6 +258,10 @@ export class SparkBrain implements Brain {
           };
         }
       }
+      throw new UnusableAnswer('no untried control named');
+    };
+    try {
+      return await retryUnusable(ask);
     } catch (e) {
       if ((e as { name?: string }).name === 'AbortError') throw e;
     }

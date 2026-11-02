@@ -5,7 +5,7 @@
 import type { AppModel, AppModelPatch, AppModelSummary, Journey } from '@fitts/schema';
 import prompt from '../../../../../docs/prompts/understand.md?raw';
 import patchPrompt from '../../../../../docs/prompts/understand-patch.md?raw';
-import type { CallContext, LlmCaller } from '../llm/call';
+import { retryUnusable, UnusableAnswer, type CallContext, type LlmCaller } from '../llm/call';
 import type { Extracted } from '../../main/understand/extract';
 
 /** Over this many input tokens, only the repo map and the route files go (§3.2). */
@@ -266,7 +266,11 @@ export function plainSummary(x: Extracted): string {
   return `${x.name ? `${x.name} is a` : 'A'} ${x.stack.framework} app with ${n} ${n === 1 ? 'page' : 'pages'}${n ? ` (${routes}${x.pages.length > 8 ? ', …' : ''})` : ''}${forms ? `, ${forms} ${forms === 1 ? 'form' : 'forms'}` : ''}${x.apis.length ? ` and ${x.apis.length} API ${x.apis.length === 1 ? 'call' : 'calls'}` : ''}. I read the code without a model, so the features and journeys are what the forms and routes say.`;
 }
 
-/** Pass 2: one structured call; null when it fails (the caller falls back to Pass 1). */
+/**
+ * Pass 2: one structured call; an unusable answer is asked for once more, then null (the caller
+ * falls back to Pass 1's code-only model). Unreachable models never return here: the caller
+ * waits for them (SPEC-phase4 §6C), so the understanding step pauses with the interview.
+ */
 export async function understand(
   caller: LlmCaller,
   ctx: CallContext,
@@ -275,18 +279,24 @@ export async function understand(
   signal?: AbortSignal,
 ): Promise<ModelOut | null> {
   try {
-    const res = await caller.call(ctx, {
-      task: 'understand',
-      model,
-      instructions: prompt,
-      input: understandInput(input),
-      format: UNDERSTAND_FORMAT,
-      reasoning: { effort: 'medium' },
-      maxOutputTokens: 12_000,
-      fixture: 'understand',
-      ...(signal ? { signal } : {}),
+    return await retryUnusable(async () => {
+      const res = await caller.call(ctx, {
+        task: 'understand',
+        model,
+        instructions: prompt,
+        input: understandInput(input),
+        format: UNDERSTAND_FORMAT,
+        reasoning: { effort: 'medium' },
+        maxOutputTokens: 12_000,
+        fixture: 'understand',
+        ...(signal ? { signal } : {}),
+      });
+      try {
+        return JSON.parse(res.outputText) as ModelOut;
+      } catch {
+        throw new UnusableAnswer('the model was not JSON');
+      }
     });
-    return JSON.parse(res.outputText) as ModelOut;
   } catch {
     return null;
   }

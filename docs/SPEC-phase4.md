@@ -910,6 +910,51 @@ with the judge's recorded fixture).
 
 ---
 
+## 6C. U5a — When Meta's models can't be reached, the run pauses
+
+Added Nov 1 (Allen). Fitts never carries on without its models.
+
+### 6C.1 Two kinds of failure (`agent/llm/call.ts`)
+
+- **Unreachable**: network errors, DNS, timeouts, 5xx, 429 after its retries, 401/403. These
+  never return to the caller as a failure: `LlmCaller` waits for the models instead of
+  throwing, then sends the exact same call again.
+- **Unusable answer**: the model answered, but the output is malformed, names an unknown tool, or
+  fails its schema. Only these may use the fallbacks (scripted decider, explorer brain, plan
+  journey brain, code-only App Model), after one retry (`retryUnusable`).
+
+### 6C.2 Pausing and resuming
+
+- On unreachable the run pauses at once: activity `paused`; no site action, probe, journey, fix or
+  Muse Code call starts. A Muse Code process already waiting on the network is left to finish
+  or time out, then treated the same way (U6).
+- The api-trouble card: "I can't reach Meta's models, so I've paused. I'll pick up where I left
+  off as soon as they answer." Buttons: **Retry now**, **Stop the run**.
+- While paused, a no-cost check (`GET /v1/models`) runs every 10 seconds. When it answers, the run
+  resumes on its own and the call that failed is retried; the ability that was running carries on
+  from that step. Nothing is skipped, dropped or marked done. There is no timed auto-retry that
+  resumes without a working connection.
+- No silent losses: a reviewer, journey step, judge, interview turn or fixer call that was waiting
+  is retried after reconnecting, never replaced by an empty result. A fix is never rolled back
+  because its model couldn't be reached. A reviewer whose answer stays unusable after one retry
+  is noted in the chat (which reviewer, which page).
+- The interview and the understanding step pause the same way. Starting an audit (and the
+  Welcome key check) first confirms the models answer; if they don't, the audit doesn't start and
+  Fitts says why.
+- After 2 minutes paused, the OS notification: "Fitts paused: it can't reach Meta's models." The
+  run never ends on its own while paused; only the owner's Stop ends it.
+- The budget cap is unchanged (its own card, the owner's choice).
+
+### 6C.3 Tests
+
+The fallbacks for unreachable models stay only behind `FITTS_OFFLINE` and the test build, so
+tests stay offline and free; production builds never use them for unreachable models. Unit: a
+fake model that becomes unreachable mid-crawl, mid-review and mid-fix: the run pauses, nothing is
+lost or rolled back, and after it comes back the results equal a run that never lost the
+connection. An unusable answer still falls back after one retry.
+
+---
+
 ## 7. U6 — A fixer that knows the code
 
 ### 7.1 Context
@@ -1280,6 +1325,7 @@ lines in commits or PR bodies.
 | U4 | Repro (§5) | "See it yourself" tab; replay confirms demo/chat #1 in ≤ 3 steps; Playwright text snapshot tests; PR and report include repros |
 | U5 | Journeys, coverage, device matrix (§6) | Journeys run on demo/chat; `coverage` and `unreached` correct; matrix selection tests; planted #26 found at 320px |
 | U5b | The action log (§6A) | Every action line has its timing; noticed lines for every observation kind (template snapshots); search step shows the 1.5 s line; noticed lines link to findings; the three detail levels; brain, decider and reviewers receive the records (fixture assertions) |
+| U5a | Models unreachable: pause, never carry on without them (§6C) | Unreachable never fails a call (the caller waits); the run pauses with the card and resumes on its own when `GET /v1/models` answers; unusable answers fall back after one retry; outage mid-crawl, mid-review and mid-fix gives the same results as no outage (unit); no timed auto-retry |
 | U5c | Detect more (§6B) | Full axe, keyboard, states, navigation, surprise detector (+ Wonder judge), state pass, perf pass; planted #27–#33 added; ≥ 6 of #26–#33 found; bench recall over 33 ≥ 80% |
 | U6 | Code-aware fixer (§7) | Allowlist guarantee test; phone-only and trace fixes verified in the bench; "Checked by review" labeling; Muse Code used when available (else fallback, both recorded) |
 | U7 | App Map (§8) | Done Map e2e + axe; drawer contents; live compact tree in the audit |
@@ -1329,6 +1375,7 @@ mode, the Windows build.
 | Guarantee | Where |
 |---|---|
 | Only the owner ends a run (Finish, Stop, budget Stop) | `run.ts` `use()` / `answer()` |
+| Unreachable models never fail a call or end a run: the caller waits, the run pauses, nothing is dropped, emptied or rolled back, and it resumes only when the models answer | `llm/call.ts` `LlmCaller`, `llm/reachability.ts`, `run.ts` `modelsDown()` |
 | Owner rules beat Fitts: a matching `not-a-problem` finding is never posted, pinned or fixed | aggregator + `pipeline.fixable()` |
 | Owner findings are always shown and offered | aggregator |
 | A change is "verified" only when an oracle (probe, trace replay) passed and tests/CI pass; otherwise it's "Checked by review" or rolled back | `pipeline.ts` |

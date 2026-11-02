@@ -2,7 +2,7 @@
 // one tool per decision; `converse` answers the owner while the work goes on.
 import decidePrompt from '../../../../../docs/prompts/decide.md?raw';
 import conversePrompt from '../../../../../docs/prompts/converse.md?raw';
-import type { CallContext, LlmCaller } from '../llm/call';
+import { type CallContext, type LlmCaller, retryUnusable, UnusableAnswer } from '../llm/call';
 import type { AbilityName, Decider, Decision, Situation } from './abilities';
 
 const say = { type: 'string', description: 'One line to the owner, or empty.' };
@@ -69,7 +69,7 @@ const NAMES = new Set<string>(TOOLS.map((t) => t.name));
 
 /** Parses one tool call into a Decision; throws on anything else (the run falls back). */
 export function parseDecision(name: string, args: string): Decision {
-  if (!NAMES.has(name)) throw new Error(`unknown ability ${name}`);
+  if (!NAMES.has(name)) throw new UnusableAnswer(`unknown ability ${name}`);
   const a = JSON.parse(args || '{}') as {
     route?: string;
     say?: string;
@@ -104,7 +104,12 @@ export class SparkDecider implements Decider {
     private readonly model: () => string,
   ) {}
 
-  async next(situation: Situation, signal?: AbortSignal): Promise<Decision> {
+  /** SPEC-phase4 §6C: an unusable decision is asked for once more; then the loop falls back. */
+  next(situation: Situation, signal?: AbortSignal): Promise<Decision> {
+    return retryUnusable(() => this.decide(situation, signal));
+  }
+
+  private async decide(situation: Situation, signal?: AbortSignal): Promise<Decision> {
     const res = await this.caller.call(this.ctx(), {
       task: 'crawl',
       model: this.model(),
@@ -126,7 +131,7 @@ export class SparkDecider implements Decider {
       ...(signal ? { signal } : {}),
     });
     const call = res.output.find((o) => o.type === 'function_call');
-    if (!call) throw new Error('no decision');
+    if (!call) throw new UnusableAnswer('no decision');
     return parseDecision(
       typeof call['name'] === 'string' ? call['name'] : '',
       typeof call['arguments'] === 'string' ? call['arguments'] : '{}',

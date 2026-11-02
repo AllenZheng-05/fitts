@@ -591,12 +591,15 @@ describe('Scenario panel controls', () => {
     }
   });
 
-  it('API trouble retries on its own after 12s', () => {
+  it('API trouble stays paused until the models answer: no timed retry; Stop the run ends it (SPEC-phase4 §6C)', () => {
     engine.loadAudit(DEMO_CHAT, 'ask-unsure');
     engine.showEdgeState(DEMO_CHAT, 'api-trouble');
     expect(run().waitingFor).toMatch(/^question:/);
-    advance(12_000);
-    expect(run().waitingFor).toBeUndefined();
-    expect(messages(run())).toContain(copy.fitts.apiRecovered);
+    advance(60_000);
+    expect(run().waitingFor).toMatch(/^question:/);
+    expect(messages(run())).not.toContain(copy.fitts.apiRecovered);
+    const id = (run().waitingFor ?? '').slice('question:'.length);
+    engine.answerQuestion(DEMO_CHAT, id, 'stop');
+    expect(run().phase).toBe('done');
   });
 });

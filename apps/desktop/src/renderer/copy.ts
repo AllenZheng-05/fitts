@@ -416,10 +416,10 @@ export const copy = {
       answers: { 'add-10': 'Add $10', stop: 'Stop here' },
     },
     'api-trouble': {
-      title: "Meta's API isn't answering",
-      body: "Retrying in {seconds} seconds, attempt 2 of 5. Nothing is lost if it keeps failing; I'll pause and wait for you.",
-      bodyRetrying: 'Retrying now, attempt 2 of 5.',
-      answers: { 'retry-now': 'Retry now', pause: 'Pause' },
+      title: "I can't reach Meta's models, so I've paused.",
+      body: "I'll pick up where I left off as soon as they answer.",
+      reconnected: 'They answered again. I picked up where I left off.',
+      answers: { 'retry-now': 'Retry now', stop: 'Stop the run' },
     },
     reopen: {
       title: 'Pick up where we left off?',
@@ -620,6 +620,7 @@ export const copy = {
       '"Allow once" unlocks after you check the box. Fitts reads this aloud and stays paused until you choose.',
   },
   notify: {
+    modelsDown: 'Fitts paused: it can’t reach Meta’s models.',
     finishProposal: 'Fitts thinks it’s done. Have a look?',
     title: 'Fitts needs you',
     body: '{question}',
@@ -1103,7 +1104,14 @@ export const copy = {
     budgetKeepQuality: "Staying on Quality. I'll pause and ask at {cap}.",
     serverRestarted: "Restarted the dev server. It's answering again, so I'm carrying on.",
     waitingForYou: "Okay, I'll wait. Tell me when it's back.",
-    apiRecovered: 'The connection is back. Carrying on.',
+    apiRecovered: 'Meta’s models are answering again. Picking up where I left off.',
+    // SPEC-phase4 §6C.
+    modelsPausedNow: 'Paused: waiting for Meta’s models to answer',
+    modelsRetrying: 'Checking whether Meta’s models answer now.',
+    modelsNotAnswering:
+      'I can’t reach Meta’s models right now, so I haven’t started the audit. I need them to look at your site. Try again in a moment.',
+    reviewerUnreadable:
+      'The {persona} reviewer’s answer for {route} couldn’t be read, even on a second try, so that view of the page is missing.',
     checksDone: "Here's everything I checked.",
     loginAdded: "Thanks. I'll use the test login for /settings.",
     commitFirst: "Okay. Commit when you're ready, then start the audit again.",

@@ -225,7 +225,7 @@ const EDGE_STATES: [string, string][] = [
   ['Site down', 'Your site stopped responding'],
   ['Budget warning', "I've used 80% of your $20 cap"],
   ['Budget reached', "I've reached your $20 cap"],
-  ['API trouble', "Meta's API isn't answering"],
+  ['API trouble', "I can't reach Meta's models, so I've paused."],
   ['Reopen after crash', 'Pick up where we left off?'],
   ['Nothing found', 'Nothing here worth changing'],
 ];

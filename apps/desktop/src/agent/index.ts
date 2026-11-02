@@ -24,7 +24,16 @@ import { copy } from '../renderer/copy';
 import { MockRunEngine } from '../renderer/state/mock-engine';
 import { BudgetGuard } from './ledger/budget';
 import { CostLedger, withLedger } from './ledger/ledger';
-import { basetenClient, LlmCaller, metaClient, type Provider } from './llm/call';
+import {
+  basetenClient,
+  LlmCaller,
+  metaClient,
+  pingProvider,
+  type CallContext,
+  type LlmError,
+  type Provider,
+} from './llm/call';
+import { Reachability } from './llm/reachability';
 import { contributorFor, modelFor, reviewerRoster, SPARK_OPEN, type Profile } from './llm/router';
 import { testKey } from './llm/test-key';
 import { recording } from './llm/fake';
@@ -77,7 +86,34 @@ function clientFor(provider: Provider) {
   const dir = process.env['FITTS_RECORD_LLM'];
   return client && dir ? recording(client, dir) : client;
 }
-const caller = new LlmCaller(clientFor, ledger);
+/**
+ * SPEC-phase4 §6C: Meta's models, waited for when they can't be reached. Production runs never
+ * carry on without them: the call waits, the run (or interview) pauses, and a no-cost check
+ * every 10 seconds resumes everything when they answer. Offline and test builds keep throwing,
+ * so tests stay offline with their fallbacks.
+ */
+const reach = new Reachability((p) => pingProvider(p, p === 'meta' ? keys.meta : keys.baseten));
+const waitForModels = (
+  provider: Provider,
+  ctx: CallContext,
+  _error: LlmError,
+  signal?: AbortSignal,
+) => (online() ? reach.wait(provider, ctx.projectId, signal) : undefined);
+const caller = new LlmCaller(clientFor, ledger, { waitForModels });
+reach.on({
+  down: (projectId) => {
+    const run = realRuns.get(projectId);
+    if (run) run.modelsDown();
+    else engine.modelsDown(projectId);
+  },
+  up: (projectIds) => {
+    for (const id of projectIds) {
+      const run = realRuns.get(id);
+      if (run) run.modelsUp();
+      else engine.modelsUp(id);
+    }
+  },
+});
 
 /** Live sites main reported (url when running), and the real runs on them (P4). */
 const liveSites = new Map<string, { status: string; url?: string }>();
@@ -261,9 +297,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
   const origin = new URL(site.url).origin;
   const runRef: { current?: RealRun } = {};
   const contributor = contributorFor(projectId, set?.contributorMode ?? false);
-  const runCaller = new LlmCaller(clientFor, ledger, {
-    onTrouble: () => runRef.current?.apiTrouble(),
-  });
+  const runCaller = new LlmCaller(clientFor, ledger, { waitForModels });
   const useModel = online() && process.env['FITTS_CRAWL_BRAIN'] !== 'explorer';
   let fixJobs = 0;
   const callCtx = () => ({
@@ -349,6 +383,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       ...(converse ? { converse } : {}),
       ...(set?.name ? { ownerName: set.name } : {}),
       ...(models.get(projectId) ? { appModel: models.get(projectId)?.model } : {}),
+      retryModels: () => void reach.retryNow(),
       ...(journeyBrain ? { journeyBrain } : {}),
       memory: {
         get: () => memories.get(projectId),
@@ -688,11 +723,25 @@ function call({ projectId, method, args, brief, lastRunId, settings: set }: Engi
     });
     return;
   }
-  if (method === 'startAudit' && startRealAudit(projectId, set)) return;
-  // A real run never falls back to Phase 1's scripted audit: it waits for the site.
+  // SPEC-phase4 §6C: an audit starts only when Meta's models answer; else Fitts says why.
   if (method === 'startAudit' && online()) {
-    engine.note(projectId, copy.fitts.siteNotReady);
+    void reach.answers('meta').then((ok) => {
+      if (!ok) return engine.note(projectId, copy.fitts.modelsNotAnswering);
+      if (startRealAudit(projectId, set)) return;
+      // A real run never falls back to Phase 1's scripted audit: it waits for the site.
+      engine.note(projectId, copy.fitts.siteNotReady);
+    });
     return;
+  }
+  if (method === 'startAudit' && startRealAudit(projectId, set)) return;
+  // The interview's paused card: "Retry now" checks the models; Stop is the engine's.
+  if (method === 'answerQuestion' && args[1] === 'retry-now') {
+    const item = raw.get(projectId)?.chat.find((c) => c.id === args[0]);
+    if (item?.type === 'state' && item.stateKind === 'api-trouble' && online()) {
+      engine.note(projectId, copy.fitts.modelsRetrying);
+      void reach.retryNow();
+      return;
+    }
   }
   if (method === 'answerQuestion') {
     const item = raw.get(projectId)?.chat.find((c) => c.id === args[0]);

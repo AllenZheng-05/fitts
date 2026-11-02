@@ -6,7 +6,7 @@ import {
   type Finding,
   type RunState,
 } from '@fitts/schema';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '../../components/Button';
 import { Chip, SeverityBadge } from '../../components/Chip';
 import { RichText } from '../../components/RichText';
@@ -17,7 +17,6 @@ import { format, formatUsd } from '../../lib/format';
 import { sendFromComposer } from '../../state/actions';
 import { getEngine } from '../../state/engine';
 import { useSpeech } from '../../state/speech';
-import { API_RETRY_MS } from '../../lib/timing';
 import { useUi, type Decision } from '../../state/ui';
 import { finishReview, startReview } from '../finding-panel/review';
 import { DirectionViewer } from './DirectionViewer';
@@ -938,7 +937,7 @@ function Driving({ run }: { run: RunState }) {
   );
 }
 
-function stateBody(item: Item<'state'>, run: RunState, seconds: number): string {
+function stateBody(item: Item<'state'>, run: RunState): string {
   const kind = item.stateKind;
   const c = copy.states;
   switch (kind) {
@@ -964,9 +963,7 @@ function stateBody(item: Item<'state'>, run: RunState, seconds: number): string 
       return format(body, { url: d.url });
     }
     case 'api-trouble':
-      return seconds > 0
-        ? format(c['api-trouble'].body, { seconds })
-        : c['api-trouble'].bodyRetrying;
+      return c['api-trouble'].body;
     case 'reopen':
       return format(c.reopen.body, {
         run: run.runId.replace('run-', ''),
@@ -983,9 +980,6 @@ function stateBody(item: Item<'state'>, run: RunState, seconds: number): string 
 function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
   const kind = item.stateKind;
   const text = copy.states[kind];
-  const seconds = useCountdown(
-    kind === 'api-trouble' && item.answer === undefined ? API_RETRY_MS : 0,
-  );
   const answers = EDGE_STATE_ANSWERS[kind] as readonly string[];
   const live = kind === 'site-down' && item.detail?.live === true;
   const siteLog =
@@ -1011,7 +1005,7 @@ function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
     <div className={cx(CARD, 'gap-2 p-3.5', kind === 'login-wall' ? 'bg-sun-tint' : 'bg-card')}>
       <span className="font-display text-[16px] font-bold">{title}</span>
       <p className="text-[14px] leading-normal">
-        <RichText text={stateBody(item, run, seconds)} />
+        <RichText text={stateBody(item, run)} />
       </p>
       {siteLog.length > 0 && (
         <pre className="rounded-row bg-ink p-2.5 font-mono text-[12px] whitespace-pre-wrap text-paper">
@@ -1020,7 +1014,9 @@ function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
       )}
       {item.answer !== undefined ? (
         <span className="text-[13px] font-semibold text-muted">
-          {format(copy.states.answered, { answer: labels[item.answer] ?? item.answer })}
+          {kind === 'api-trouble' && item.answer === 'reconnected'
+            ? copy.states['api-trouble'].reconnected
+            : format(copy.states.answered, { answer: labels[item.answer] ?? item.answer })}
         </span>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -1038,20 +1034,6 @@ function EdgeStateCard({ item, run }: { item: Item<'state'>; run: RunState }) {
       )}
     </div>
   );
-}
-
-/** Seconds left, counting down live (the API-trouble card's retry, §7.7). */
-function useCountdown(ms: number) {
-  const [left, setLeft] = useState(Math.ceil(ms / 1000));
-  useEffect(() => {
-    if (ms <= 0) return;
-    const started = Date.now();
-    const timer = setInterval(() => {
-      setLeft(Math.max(0, Math.ceil((ms - (Date.now() - started)) / 1000)));
-    }, 250);
-    return () => clearInterval(timer);
-  }, [ms]);
-  return ms > 0 ? left : 0;
 }
 
 export function TypingIndicator() {
