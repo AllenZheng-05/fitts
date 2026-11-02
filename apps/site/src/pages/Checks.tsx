@@ -127,7 +127,7 @@ function Catalog() {
       </p>
 
       {groups.map((g) => (
-        <div key={g.id} className="mt-10">
+        <div key={g.id} id={`checks-${g.id}`} className="mt-10">
           <h3 className="font-display text-2xl font-bold">{g.name}</h3>
           <p className="mt-1 max-w-3xl leading-relaxed text-ink-2">{g.about}</p>
           <ul className="mt-4 grid gap-4 md:grid-cols-2">

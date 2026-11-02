@@ -93,3 +93,35 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
   U9 fix run (3 of 3, $2.65), saying which two were verified by measuring and that the brand fix
   was checked by review; its audit's 6/10 is from the same run. Numbers aren't rounded up:
   88%, 60%, 78% are PROGRESS's.
+
+## Step 3 — How it works
+
+- **The loop** is six buttons (`aria-expanded`, `aria-controls`) over one panel region; one step
+  is open at a time. Each panel lists what Fitts does, which models, which checks (linking to
+  that group on /checks) and a clip slot. Two columns on phones, so the panel stays near.
+- **Model jobs, checked against the code.** Spark, Wonder, SAM, Muse Code and Spark Open as the
+  spec says. Two corrections:
+  - **Muse Image** doesn't draw redesign mockups any more: Phase 3 replaced them with style
+    boards built by code, and `run.ts` `heroArt()` uses Muse Image for one thing, the hero
+    illustration on each direction's board. The site says that.
+  - **SAM 3.1** outlines the element in each finding's screenshot as well as in a moment's
+    first and last frames (`run.ts`).
+- **Profiles table.** `PROFILE_ROWS` in content/how.ts, shown as a table on wide screens and as
+  cards below 768 px (one is `display: none`, so screen readers get one). Routed rows are
+  compared with `modelFor()` and `reviewerRoster()` (with a Baseten key) in
+  `tests/unit/profiles.test.ts`. Three rows aren't routed (Muse Code, the Wonder judge and review
+  check, SAM): they're the same in every profile, by the code (`WONDER` is fixed for the judge
+  and the review check). A note says Open without a Baseten key falls back to Spark.
+- **Android's fixed version.** The spec says Fitts "shows the fixed app on the emulator". Allen's
+  Nov 2 change (PROGRESS, U9) keeps the emulator on the live app and shows the fixed version as
+  its web build at phone width, marked as an imitation; fixes are still checked on the device.
+  The site says what the code does.
+- **Rails lead.** Not every rail is a §14 guarantee (severity isn't), so the lead says the rules
+  that keep you in charge are in code, not a prompt. "Verified" also requires the project's own
+  tests to pass (§14), now in the rail.
+- **Device previews** come straight from `DEVICES` in @fitts/schema, so the list can't drift.
+- **Presentation mode** (a Showcase card) isn't in the code on this branch or on main as of
+  Nov 2, probably U10. Its slot shows "Clip coming" until a real clip exists; check the caption
+  against the feature when it lands.
+- **media.ts** was written in this step (the loop and the PR block need slots); step 4 adds the
+  Showcase page over it.
