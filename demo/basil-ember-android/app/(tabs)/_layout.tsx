@@ -24,7 +24,7 @@ export default function TabsLayout() {
           title: 'Basil & Ember',
           tabBarLabel: 'Menu',
           tabBarButtonTestID: 'tab-menu',
-          tabBarIcon: ({ color, size }) => <Feather name="book-open" color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Feather name="book-open" color={color as string} size={size} />,
         }}
       />
       <Tabs.Screen
@@ -33,7 +33,7 @@ export default function TabsLayout() {
           title: 'Your bag',
           tabBarLabel: 'Cart',
           tabBarButtonTestID: 'tab-cart',
-          tabBarIcon: ({ color, size }) => <Feather name="shopping-bag" color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Feather name="shopping-bag" color={color as string} size={size} />,
         }}
       />
       <Tabs.Screen
@@ -42,7 +42,7 @@ export default function TabsLayout() {
           title: 'Orders',
           tabBarLabel: 'Orders',
           tabBarButtonTestID: 'tab-orders',
-          tabBarIcon: ({ color, size }) => <Feather name="clock" color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Feather name="clock" color={color as string} size={size} />,
         }}
       />
     </Tabs>

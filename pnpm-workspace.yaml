@@ -2,7 +2,7 @@ packages:
   - apps/*
   - packages/*
   - demo/*
-  # Joins at U8's wiring commit (dependencies installed, versions fixed).
+  # An Expo app with its own npm install (Metro and Gradle expect a plain node_modules).
   - '!demo/basil-ember-android'
 
 # demo/basil-ember's jest-dom 6 imports `vitest` without declaring it, so pnpm resolved it to the

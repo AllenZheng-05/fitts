@@ -18,9 +18,23 @@ Fitts audits it as a standalone project, so the demo run uses a clone outside th
 2. From the monorepo root: `pnpm demo:mirror --push` (it also pushes the chat and hartwell
    mirrors; a local export is already committed under `.fitts-dev/mirror/`).
 3. Clone it somewhere outside the monorepo, e.g.
-   `git clone https://github.com/AllenZheng-05/fitts-demo-basil-ember C:UsersPlasmProjectsasil-ember-demo`,
+   `git clone https://github.com/AllenZheng-05/fitts-demo-basil-ember C:/Users/Plasm/Projects/basil-ember-demo`,
    then `npm install` there, and open that folder in Fitts for the demo run (its dev server
    runs on port 5176).
+
+## P4-0b. Publish the Android app's mirror and build it on the emulator (15 min, mostly Gradle)
+
+demo/basil-ember-android is Basil & Ember's ordering app (Expo SDK 58, a development build); its
+issues are planted (PLANTED.md).
+
+1. `gh repo create AllenZheng-05/fitts-demo-basil-ember-android --public`, then
+   `pnpm demo:mirror --push` from the monorepo root (a local export is already committed under
+   `.fitts-dev/mirror/`).
+2. Clone it outside the monorepo, e.g.
+   `git clone https://github.com/AllenZheng-05/fitts-demo-basil-ember-android C:/Users/Plasm/Projects/basil-ember-android-demo`,
+   then `npm install` there (its .npmrc sets legacy-peer-deps).
+3. With Fitts_Pixel running: `npx expo run:android` once (builds and installs the dev client),
+   then open that folder in Fitts for the Android demo run.
 
 ## P4-1. Android SDK and emulator — DONE Nov 1 (Fitts_Pixel, API 37, emulator-5554; Expo SDK 58 dev build verified)
 
