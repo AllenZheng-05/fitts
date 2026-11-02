@@ -1,10 +1,23 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { beforeAfter } from './content';
 
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
 
+export interface BeforeAfterLabels {
+  before: string;
+  after: string;
+  sliderLabel: string;
+}
+
 /** Two screenshots laid over each other, revealed by a draggable divider (arrows move it 5%). */
-export function BeforeAfter({ before, after }: { before: string; after: string }) {
+export function BeforeAfter({
+  before,
+  after,
+  labels: beforeAfter,
+}: {
+  before: string;
+  after: string;
+  labels: BeforeAfterLabels;
+}) {
   const [pos, setPos] = useState(50);
   const track = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
