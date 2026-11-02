@@ -115,4 +115,11 @@ order.)
   unbundled dev server at Slow 4G is minutes per page and pessimistic. A later phase builds a
   detached production copy (`.fitts-worktrees/<runId>/perf`), serves it and measures every
   journey page, with INP and page-change timing.
+- **The App Map drawer's per-page speed and state screenshots (§8.3, left out in U7, Nov 2).** The
+  page drawer has no "Speed" section and no thumbnails of the states reviewed (forced empty, error
+  and slow included). Neither is in the event log yet, and adding them would grow every run's log.
+  Relatedly, "Checked at" lists every cell the run used for each reached page, not only the cells
+  that actually visited that page: the run doesn't record which cells went where. A later phase
+  records per-page perf, state shots and cell visits as compact references (asset ids, not
+  images) in the log.
 

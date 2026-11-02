@@ -22,13 +22,21 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U5c | Detect more (§6B)                        | done        | `4650f2b` |
 | U6  | Code-aware fixer (§7)                    | done        |           |
 | U7  | App Map (§8)                             | done        |           |
-| U8  | Android audit (§9.1–9.3)                 | todo        |           |
+| U8  | Android audit (§9.1–9.3)                 | in progress |           |
 | U9  | Android fix (§9.4)                       | todo        |           |
 | U10 | Release polish                           | todo        |           |
 
 ## Current milestone and next step
 
-**Done since U6:** Muse Code by default; navigation and keyboard verifiable; the paid bench:chat runs (numbers below); the Muse Wonder judge restored (§13 #4); **U7 the App Map (e2e 146/146).** **Next: U8** (Android audit, with A9): commit demo/basil-ember-android as built, wiring, plant A9; main/android (adb, dump, AndroidWindow), Android probes, Maestro repro, themefit on Android shots, bench:android on the emulator. Still owed: p9.bench (U6, on purpose).
+**Done since U6:** Muse Code by default; navigation and keyboard verifiable; the paid bench:chat runs (numbers below); the Muse Wonder judge (§13 #4); U7 the App Map. **U8 in progress (Nov 2, ~11:30 CST):**
+  - Committed: demo/basil-ember-android as generated, its wiring and the A9 plant.
+  - Built with Allen's P4-0a (CMake 3.31.6, long paths) from C:/Users/Plasm/bea, and opens on Fitts_Pixel.
+  - Uncommitted but green (typecheck, lint, 519 unit tests): main/android (adb, dump, AndroidWindow, manager routing, gate on the tap, owner taps, screen names from Pass 1's Expo Router titles), the Android probes, the Maestro repro, the Android site view, the Welcome chips, A9's brand check (finding, no directions), bench:android with A1–A9, and real menu fixtures (dump and screencaps, stock and brand).
+  - Running now: the first paid bench:android.
+  - Then: full e2e and the U8 commit, then U9 (the brand fix, on the owner's ask).
+  - Recording the brand-check fixtures with the .env.local recorder was blocked; they come from the bench's FITTS_RECORD_LLM instead, or Allen runs FITTS_RECORD_BRAND=1.
+
+  Still owed: p9.bench (U6, on purpose).
 
 **Spend (Allen, Nov 2):** Allen has $129 of free Meta credits, so paid runs and paid tests are fine when they give real evidence (the original $15 cap is superseded). About $0.11 spent so far in Phase 4. Plan: the judge, then the bench noise fixes, one paid bench for both, then p9.bench.
 
@@ -155,6 +163,7 @@ Total so far: **$0.033** of $15.
 ## Cuts applied
 
 - U5c: the production build in perf_pass (§13 #3). In ROADMAP.
+- U7: the App Map drawer's per-page speed and state screenshots (§8.3); "Checked at" lists every cell, not the cells that visited the page. In ROADMAP.
 - U5c: the Wonder judge and SAM frames (§13 #4): restored Nov 2 at Allen's request (off ROADMAP).
 - (ddmin was cut in U4 and put back in U4b at Allen's request, Nov 2.)
 
