@@ -125,3 +125,23 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
   against the feature when it lands.
 - **media.ts** was written in this step (the loop and the PR block need slots); step 4 adds the
   Showcase page over it.
+
+## Step 4 — Showcase and the media manifest
+
+- **One card per feature**, all 14 from the spec, from `SHOWCASE_MEDIA` in src/media.ts, each with
+  a clip slot, a one-line caption and its honesty label. Every slot is empty today, so each shows
+  "Clip coming". Filling one in is `src` and `poster` in media.ts and the files in public/media/.
+- **Honesty labels by project.** Basil & Ember (built by Muse Code from one prompt, never
+  changed by hand) is "Real AI-built site, untouched": the understanding card, presentation mode,
+  the 2:45 AM pickup (a reviewer finding on Basil & Ember's checkout, docs/basil-ember-preview.md),
+  the App Map, a redesign, talking to Fitts, the PR. The chat app and the Android app are "Our
+  test app, planted issues": Noticed lines, See it yourself, a verified fix, the menu jump, the
+  emulator's fixed version, the brand fix, the Cancel order gate (A5), the pause. Allen can
+  change any label in media.ts if a clip is recorded on another project.
+- **The portfolio before/after** renders only when both `PORTFOLIO.before` and `.after` are set,
+  and the "Real site, merged" legend appears with it. It reuses BeforeAfter.tsx (labels now passed
+  in) with a text description for screen readers (`PORTFOLIO.alt`) and the merged PR's link.
+  The 2007 images and copy are gone.
+- **Clips** load only near the screen (`preload="none"`, `src` set by an IntersectionObserver),
+  play muted, looping and inline, pause off screen, don't autoplay with reduced motion, and keep
+  a visible Pause/Play button (WCAG 2.2.2) named with the clip's title.

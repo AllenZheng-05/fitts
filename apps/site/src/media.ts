@@ -205,4 +205,6 @@ export const PORTFOLIO = {
   /** The merged pull request. */
   prNumber: 0,
   prUrl: '',
+  /** What changed between the two, for people who can't see the images. */
+  alt: '',
 };

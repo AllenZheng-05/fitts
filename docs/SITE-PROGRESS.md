@@ -10,8 +10,8 @@ Working log for the fitts.allenzheng.com redesign (docs/SPEC-site.md), on branch
 | 0   | Save the spec                                                 | done   |
 | 1   | Home, Download, the field, still image, shell, 404, claims    | done   |
 | 2   | What Fitts checks, from the code, drift test, How well it works | done |
-| 3   | How it works                                                  | todo   |
-| 4   | Showcase scaffold and the media manifest                      | todo   |
+| 3   | How it works                                                  | done   |
+| 4   | Showcase scaffold and the media manifest                      | done   |
 | 5   | Checks, e2e, and the Fitts audit                              | todo   |
 
 ## Step 1

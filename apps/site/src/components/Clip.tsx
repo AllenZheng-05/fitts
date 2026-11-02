@@ -1,17 +1,16 @@
 import { Clapperboard, Pause, Play } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { media as words } from '../content/site';
-import { HONESTY, type Media } from '../media';
+import { HONESTY, type Honesty, type Media } from '../media';
 import { chip, chipBase, cx } from './ui';
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** The honesty label on a clip: what kind of project it shows. */
-export function HonestyLabel({ m }: { m: Media }) {
-  if (!m.honesty) return null;
-  const tone =
-    m.honesty === 'merged' ? chip.mint : m.honesty === 'untouched' ? chip.cobalt : chip.sun;
-  return <span className={cx(chipBase, tone)}>{HONESTY[m.honesty]}</span>;
+export function HonestyLabel({ honesty }: { honesty: Honesty | undefined }) {
+  if (!honesty) return null;
+  const tone = honesty === 'merged' ? chip.mint : honesty === 'untouched' ? chip.cobalt : chip.sun;
+  return <span className={cx(chipBase, tone)}>{HONESTY[honesty]}</span>;
 }
 
 /**
