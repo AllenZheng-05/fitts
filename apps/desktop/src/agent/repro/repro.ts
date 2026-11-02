@@ -162,6 +162,8 @@ export interface ReproInput {
   probe?: ProbeName;
   /** The reviewer's own expected/actual/steps, when the draft gave them. */
   draft?: { expected?: string; actual?: string; steps?: string[] };
+  /** Steps a replay confirmed (ddmin's, U4b): used as they are, not pruned again. */
+  steps?: TrailStep[];
   /** An axe violation's rule id, tags and help URL. */
   axe?: { id: string; tags: string[]; helpUrl?: string };
   model?: AppModel;
@@ -170,7 +172,7 @@ export interface ReproInput {
 /** The repro before replay: steps, expected/actual, environment, standards, the test. */
 export function buildRepro(input: ReproInput): Repro {
   const { finding, origin, cell, item, probe, draft } = input;
-  const pruned = pruneTrail(input.trail, finding, input.model);
+  const pruned = input.steps ?? pruneTrail(input.trail, finding, input.model);
   const steps: Repro['steps'] = pruned.map((t, i) => ({
     n: i + 1,
     text: stepText(t),

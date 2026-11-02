@@ -411,7 +411,7 @@ describe('confirming by replay (§5.2)', () => {
       TRAIL,
       start,
     );
-    expect(yes).toEqual({ confirmed: 'replayed', steps: pruned });
+    expect(yes).toMatchObject({ confirmed: 'replayed', steps: pruned });
     expect(asked).toEqual([1]);
     asked.length = 0;
     const onlyFull = await confirm(
@@ -425,6 +425,7 @@ describe('confirming by replay (§5.2)', () => {
       pruned,
       TRAIL,
       start,
+      { ddmin: false },
     );
     expect(onlyFull.confirmed).toBe('replayed');
     expect(onlyFull.steps).toBe(TRAIL);
@@ -438,7 +439,7 @@ describe('confirming by replay (§5.2)', () => {
       TRAIL,
       start,
     );
-    expect(never).toEqual({ confirmed: 'observed', steps: pruned });
+    expect(never).toMatchObject({ confirmed: 'observed', steps: pruned });
     expect(
       (
         await confirm(
@@ -524,5 +525,125 @@ describe('confirming by replay (§5.2)', () => {
       (await confirm(() => Promise.resolve(slow), oracle, finding(), base, pruned, TRAIL, start))
         .confirmed,
     ).toBe('replayed');
+  });
+});
+
+describe('ddmin in the confirmation (U4b, SPEC-phase4 §5.2 step 3)', () => {
+  const pruned = TRAIL.slice(5, 6);
+  const start = { path: '/compose/recipient' };
+  const answer = (over: Partial<ReplayAnswer>): ReplayAnswer => ({
+    ok: true,
+    path: '/compose/recipient',
+    results: [],
+    focus: [],
+    viewport: [],
+    traces: [],
+    missing: [],
+    ...over,
+  });
+  const oracle = {
+    kind: 'probe' as const,
+    probe: 'placeholder-leak' as const,
+    title: 'Page shows "null" instead of real content',
+  };
+  const hit = answer({
+    results: [
+      {
+        probe: 'placeholder-leak',
+        pass: false,
+        items: [
+          { ref: 'compose-to', selector: '', measured: 'shows "null"', expected: 'real content' },
+        ],
+      },
+    ],
+  });
+  const base: Repro = {
+    start: { url: 'x', device: 'desktop' },
+    steps: [],
+    expected: '',
+    actual: '',
+    environment: '',
+    confirmed: 'observed',
+  };
+  /** A replayer where the problem shows only when steps 4 and 6 of TRAIL are both replayed. */
+  const needs =
+    (steps: number[], log: number[] = []) =>
+    (ask: { steps: { ref?: string; path?: string }[] }) => {
+      log.push(ask.steps.length);
+      const refs = new Set(ask.steps.map((s) => s.ref ?? s.path));
+      const wanted = steps.map((n) => TRAIL[n - 1]).map((s) => s?.ref ?? s?.to);
+      return Promise.resolve(wanted.every((r) => refs.has(r)) ? hit : answer({}));
+    };
+
+  it('the pruned steps don’t reproduce, the full trail does: ddmin shrinks the full trail', async () => {
+    // A generous cap here shows where it ends; the default cap (8) is the next test.
+    const r = await confirm(needs([4, 6]), oracle, finding(), base, pruned, TRAIL, start, {
+      cap: 20,
+    });
+    expect(r.confirmed).toBe('replayed');
+    expect(r.steps.map((s) => s.step)).toEqual([4, 6]);
+  });
+
+  it('ddmin stops at its cap of 8 replays', async () => {
+    const log: number[] = [];
+    const r = await confirm(needs([1, 7], log), oracle, finding(), base, pruned, TRAIL, start);
+    expect(r.confirmed).toBe('replayed');
+    // pruned (1 step), full trail, then at most 8 ddmin replays and the final confirmation.
+    expect(log.length).toBeLessThanOrEqual(1 + 1 + 8 + 1);
+  });
+
+  it('a failed final confirmation keeps the steps that reproduced', async () => {
+    let n = 0;
+    // Seen for the full trail and during ddmin; the final confirmation replay fails.
+    const flaky = (ask: { steps: unknown[] }) => {
+      n += 1;
+      if (ask.steps.length === 1) return Promise.resolve(answer({}));
+      return Promise.resolve(n >= 5 ? answer({}) : hit);
+    };
+    const r = await confirm(flaky, oracle, finding(), base, pruned, TRAIL, start, { cap: 3 });
+    expect(r.confirmed).toBe('replayed');
+    expect(r.steps).toBe(TRAIL);
+  });
+
+  it('two steps or fewer, reviewer-only and owner findings are never shrunk', async () => {
+    const two = TRAIL.slice(3, 5);
+    const log: number[] = [];
+    const r = await confirm(needs([4, 5], log), oracle, finding(), base, two, two, start);
+    expect(r.steps).toBe(two);
+    expect(log).toEqual([2]);
+    const none = await confirm(needs([4]), { kind: 'none' }, finding(), base, pruned, TRAIL, start);
+    expect(none.confirmed).toBe('observed');
+    const owner = await confirm(
+      needs([4]),
+      oracle,
+      finding({ owner: true }),
+      base,
+      pruned,
+      TRAIL,
+      start,
+    );
+    expect(owner.confirmed).toBe('owner');
+  });
+
+  it('it stops cleanly when the run stops, and waits while the run is paused for the models', async () => {
+    let stopped = false;
+    let waited = 0;
+    const log: number[] = [];
+    const replayer = (ask: { steps: { ref?: string; path?: string }[] }) => {
+      if (log.length === 2) stopped = true;
+      return needs([4, 6], log)(ask);
+    };
+    const r = await confirm(replayer, oracle, finding(), base, pruned, TRAIL, start, {
+      stopped: () => stopped,
+      ready: () => {
+        waited += 1;
+        return Promise.resolve();
+      },
+    });
+    expect(r.confirmed).toBe('replayed');
+    expect(r.steps).toBe(TRAIL);
+    // The pruned replay, the full trail, one ddmin replay; then the stop ends it.
+    expect(log.length).toBe(3);
+    expect(waited).toBe(3);
   });
 });

@@ -110,8 +110,3 @@ Metro, the way the Fitts plugin does for Vite today.
 (Claude Code adds each cut here, with the reason, as it applies `SPEC-phase4.md` §13's cut
 order.)
 
-- **ddmin for repro steps (§13 #6, cut in U4, Nov 1).** The replay confirmation runs the
-  navigation-aware pruned steps once and the full trail once; it doesn't try removing halves
-  and single steps. Reason: two replays per finding keeps the repro job inside the run, and the
-  pruned steps are already short on every finding the benches show (≤ 3 on demo/chat). What a
-  later phase adds: the one-pass ddmin with up to eight replays, as the spec describes.

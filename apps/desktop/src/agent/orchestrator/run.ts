@@ -2866,8 +2866,9 @@ export class RealRun {
         pruned,
         trail,
         start,
+        { ready: () => this.untilModels(), stopped: () => this.finished },
       );
-      if (steps !== pruned) repro = buildRepro({ ...input, trail: steps });
+      if (steps !== pruned) repro = buildRepro({ ...input, steps });
       repro = { ...repro, confirmed };
       repro.playwright = playwrightTest(f, repro, { probe: check?.probe, item, cell });
     }

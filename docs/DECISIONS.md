@@ -3071,3 +3071,35 @@ Allen's requirement (Nov 1), added to the spec as §6C with a §13 row and a §1
   linked to the "(null)" finding, so the steps group, the link and the detail setting are tested
   offline. The demo/chat crawl e2e checks the search step's measured wait over 1 s, marked slow,
   and that the "(null)" note is linked to its finding.
+
+## Phase 4 — U4b: ddmin for repros
+
+Allen put ddmin back (Nov 2), cut in U4 under §13 #6; it's off ROADMAP's cut list and PROGRESS's
+cuts.
+
+- **One pass: halves, then quarters, then single steps** (`agent/repro/ddmin.ts`, pure). Each
+  removal is replayed on the hidden replayer with the finding's own oracle (the same
+  `probe|title` check `confirm()` uses, or the back-mid-flow value check) and kept only if the
+  problem is still seen. It stops when no single step can go, at the cap, or when the run stops.
+- **The cap is 8 replays per finding**, on top of the confirmation replay(s), and ddmin runs only
+  for findings with an oracle and more than 2 steps; reviewer-only (`observed`) and owner
+  findings are never shrunk. If the pruned steps don't reproduce and the full trail does, ddmin
+  shrinks the full trail under the same cap.
+- **What a cap of 8 reaches**: a 12-step trail where only steps 3 and 9 matter needs 12 replays
+  to get to exactly [3, 9] with halves → quarters → singles (2 halves fail, 4 quarters remove 6
+  steps, then 6 singles); at 8 it stops at [3, 7, 8, 9]. The unit test shows both: [3, 9] with a
+  larger cap, and the cap stopping at 8 with the four steps it confirmed. demo/chat's findings
+  prune to 3 steps or fewer, so ddmin rarely has work there.
+- **`replayed` still means the final steps were seen**: when ddmin shrank the steps, they're
+  replayed once more; if that final confirmation fails, the steps that reproduced before ddmin
+  are kept (still `replayed`, since those were seen). A replayer failure or the run stopping
+  ends ddmin with what it had confirmed.
+- **Never blocks the run**: it's inside the existing background repro job (top 20 by severity).
+  Before every replay it waits while the run is paused for the models (U5a's `untilModels`)
+  and stops when the run has finished. The replayer itself makes no model calls; a site that
+  stopped answering makes the replay fail, which ends ddmin with the confirmed steps.
+- **Two fixes found on the way**: the repro was rebuilt from a trail that had reproduced by
+  pruning it again (so a full-trail repro came out as the pruned steps it had just failed to
+  reproduce with); confirmed steps are now used as they are (`ReproInput.steps`). And when the
+  pruned steps were the very same list as the full trail (a trail already minimal), the loop
+  skipped both and the finding said `observed` without a replay; it now replays that list once.

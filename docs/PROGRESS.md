@@ -15,9 +15,10 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U2  | Understand + the understanding card (§3) | done        | `ba8d406` |
 | U3  | Owner first + memory (§4)                | done        | `bad28a3` |
 | U4  | Repro (§5)                               | done        | `4105a5a` |
+| U4b | ddmin for repros (§5.2 step 3)           | done        | see git   |
 | U5  | Journeys, coverage, device matrix (§6)   | done        | `bb5c828` |
 | U5a | Models unreachable: pause (§6C, added)   | done        | `1f18153` |
-| U5b | The action log (§6A)                     | done        | see git   |
+| U5b | The action log (§6A)                     | done        | `7bc4565` |
 | U5c | Detect more (§6B)                        | todo        |           |
 | U6  | Code-aware fixer (§7)                    | todo        |           |
 | U7  | App Map (§8)                             | todo        |           |
@@ -27,10 +28,12 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 ## Current milestone and next step
 
-**U4b (ddmin, Allen asked Nov 2) next, its own commit; then U5c.** ddmin core is written (agent/repro/ddmin.ts + tests/agent/ddmin.test.ts); the wiring is scratchpad u4b.cjs. Lesson: an edit script's "skip if already applied" guard must not be `includes(b)`; insertions keep their anchor, so a rerun applies them again. Revert and apply once instead.
-(record.ts → `apps/desktop/src/agent/log/`, log.test.ts → `tests/agent/`), `u5b-a.mjs` then
-`u5b-b.mjs` (written before U5a: re-check their anchors in run.ts, e.g. the review() and
-answer() blocks U5a touched, before applying).
+**U5c (detect more, §6B) next** (U4b committed), per the U5c plan below.
+
+Lessons: an edit script's "skip if already applied" guard must not be `includes(b)`; insertions
+keep their anchor, so a rerun applies them again (revert and apply once instead). TaskStop on a
+background e2e can leave its Playwright child running: kill electron.exe before starting
+another, or two runs share the demo server and fail each other.
 
 ## U5c plan (detect more; §6B)
 
@@ -100,7 +103,7 @@ Total so far: **$0.03** of $15.
 
 ## Cuts applied
 
-- U4: ddmin (§13 #6). Pruned steps once, full trail once; no halving. In ROADMAP.
+(none; ddmin was cut in U4 and put back in U4b at Allen's request, Nov 2)
 
 ## Notes for the next context
 
