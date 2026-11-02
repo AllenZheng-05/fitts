@@ -22,8 +22,8 @@ const finding = (over: Partial<Finding>): Finding => ({
 });
 
 describe('bench:chat scoring', () => {
-  it('lists all 25 planted issues', () => {
-    expect(PLANTED.map((p) => p.n)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
+  it('lists all 26 planted issues', () => {
+    expect(PLANTED.map((p) => p.n)).toEqual(Array.from({ length: 26 }, (_, i) => i + 1));
   });
 
   it('matches by place and problem; one finding per issue; counts false positives at severity ≥ 2', () => {

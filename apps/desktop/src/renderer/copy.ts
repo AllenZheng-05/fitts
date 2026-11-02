@@ -1079,6 +1079,11 @@ export const copy = {
     dismissFollowUp: 'Want to tell me why? It helps next time.',
     dismissNoted: 'Noted: {reason}. I’ll remember that for this project.',
     remembered: 'I remember {what} from last time.',
+    // SPEC-phase4 §6: journeys and the device matrix (templates over measurements).
+    tryingJourney: 'Trying: {name}',
+    journeyDone: 'Done: “{name}”, in {n} steps.',
+    journeyFailed: 'I couldn’t finish “{name}”: {reason}.',
+    checkingCell: 'Checking {route} at {cell}',
     reported: 'Noted. “{title}” is in the findings as yours; I’ll look into it.',
     severityNoted: 'Okay, “{title}” is severity {n} now.',
     proposalWaiting: 'Waiting for you to finish the run',

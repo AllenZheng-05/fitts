@@ -586,8 +586,8 @@ export interface Finding {
   box?: { left: number; top: number; width: number; height: number };
   shotSize?: { width: number; height: number };
   /**
-   * The device it shows up on (a DEVICES id), when it only happens at that size: "Show me on the
-   * site" switches to it first (Allen's feedback, round 5).
+   * The device it shows up on (a DEVICES id, or from Phase 4 a device cell's id), when it only
+   * happens at that size: "Show me on the site" switches to it first (Allen's feedback, round 5).
    */
   seenOn?: string;
   /**
@@ -951,6 +951,20 @@ export interface RunState {
   }[];
   /** SPEC-phase4 §6.3: the device cells this run checked. */
   cells?: DeviceCell[];
+  /** SPEC-phase4 §6.2: how much of what the code names has been covered. */
+  coverage?: RunCoverage;
+}
+
+/** SPEC-phase4 §6.2: coverage against the App Model, kept current through the run. */
+export interface RunCoverage {
+  pages: { known: number; reached: number };
+  journeys: { planned: number; done: number; failed: number; blocked: number };
+  controls: { done: number; total: number };
+  cells: { planned: number; run: number };
+  unreached: {
+    route: string;
+    why: 'login' | 'data' | 'out-of-scope' | 'skipped' | 'unlinked' | 'error';
+  }[];
 }
 
 /** SPEC-phase4 §5.1: a finding anyone can reproduce. */
@@ -1081,7 +1095,11 @@ export type ProbeName =
   | 'links'
   | 'network'
   | 'web-vitals'
-  | 'viewport-sweep';
+  | 'viewport-sweep'
+  // SPEC-phase4 §6.3: the device matrix's own checks.
+  | 'text-spacing'
+  | 'resize-text'
+  | 'orientation';
 
 /** One element (or request) a probe measured. `measured` and `expected` are plain language. */
 export interface ProbeItem {

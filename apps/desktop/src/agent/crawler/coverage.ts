@@ -30,7 +30,13 @@ interface Route {
   issues: number;
   /** The owner skipped it: controls found there later are skipped too, and it stays done. */
   skipped?: string;
+  /** SPEC-phase4 §6.2: the App Model named it (seeded at run start). */
+  fromCode?: boolean;
+  /** A link on some page points at it (else it's an orphan: "unlinked"). */
+  linked?: boolean;
 }
+
+export type DiscoverHow = 'link' | 'visit' | 'code';
 
 /** "/compose/recipient?x=1" → "/compose/recipient". Query strings don't make new routes. */
 export const routeOf = (path: string) => (path.split(/[?#]/)[0] ?? '/').replace(/\/+$/, '') || '/';
@@ -68,8 +74,11 @@ export class Coverage {
 
   constructor(private readonly origin: string) {}
 
-  /** Adds a route to the queue (same origin only). Returns true when it's new. */
-  discover(href: string): boolean {
+  /**
+   * Adds a route to the queue (same origin only). Returns true when it's new. `how` says where
+   * it came from (SPEC-phase4 §6.2): a link on a page, a visit, or the App Model's code.
+   */
+  discover(href: string, how: DiscoverHow = 'link'): boolean {
     let path: string;
     try {
       const u = new URL(href, this.origin);
@@ -78,7 +87,12 @@ export class Coverage {
     } catch {
       return false;
     }
-    if (this.routes.has(path)) return false;
+    const known = this.routes.get(path);
+    if (known) {
+      if (how === 'link') known.linked = true;
+      if (how === 'code') known.fromCode = true;
+      return false;
+    }
     const route: Route = {
       path,
       status: 'queued',
@@ -86,6 +100,8 @@ export class Coverage {
       refs: new Map(),
       seen: false,
       issues: 0,
+      ...(how === 'code' ? { fromCode: true } : {}),
+      ...(how === 'link' ? { linked: true } : {}),
     };
     // A third page of the same template (/team/:id) isn't tested again: it's the same page.
     const pattern = patternOf(path);
@@ -102,7 +118,7 @@ export class Coverage {
   /** Records what's on the page: its controls (for its route) and links to other routes. */
   observe(snap: AxSnapshot): void {
     const path = routeOf(snap.path);
-    this.discover(path);
+    this.discover(path, 'visit');
     const route = this.routes.get(path);
     if (!route) return;
     route.seen = true;
@@ -226,6 +242,25 @@ export class Coverage {
       }
     }
     return { done, total };
+  }
+
+  /** SPEC-phase4 §6.2: the routes the code names, and whether the crawl reached each. */
+  codeRoutes(): {
+    path: string;
+    seen: boolean;
+    linked: boolean;
+    skipped?: string;
+    label?: string;
+  }[] {
+    return [...this.routes.values()]
+      .filter((r) => r.fromCode)
+      .map((r) => ({
+        path: r.path,
+        seen: r.seen,
+        linked: Boolean(r.linked),
+        ...(r.skipped ? { skipped: r.skipped } : {}),
+        ...(r.label ? { label: r.label } : {}),
+      }));
   }
 
   /** The site map's rows (§6.4), children after their parent. */

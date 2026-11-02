@@ -2,7 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { Finding } from '@fitts/schema';
+import type { Finding, RunState } from '@fitts/schema';
 import { launchApp, type LaunchedApp } from './helpers/launch';
 
 const DEMO = resolve(__dirname, '../../../../demo/chat');
@@ -159,6 +159,9 @@ async function runState(page: Page) {
       waitingFor?: string;
       gate?: { id: string; action: string; heldRequest: string };
       findings: Finding[];
+      journeys?: RunState['journeys'];
+      cells?: RunState['cells'];
+      coverage?: RunState['coverage'];
     };
   });
 }
@@ -222,6 +225,28 @@ test('the real crawl reaches every route and tries every primary control (covera
   const proposal = chat(page).getByRole('listitem').filter({ hasText: 'Your call.' });
   await expect(proposal.first()).toContainText(/Pages: \d+ reached of 8 the code names/);
   await expect(proposal.first()).toContainText(/Findings: \d+ shown/);
+  // SPEC-phase4 §6: the journeys from the code all ran (done, failed or blocked: none left
+  // planned), the device matrix ran its cells, and the planted 320px overflow on /settings
+  // (#26) was found in the reflow cell, with the cell on the finding.
+  {
+    const now = await runState(page);
+    expect(now.journeys?.length ?? 0).toBeGreaterThan(0);
+    expect(now.journeys?.every((j) => j.status !== 'planned' && j.status !== 'running')).toBe(true);
+    expect(now.cells?.map((c) => c.id)).toEqual(
+      expect.arrayContaining(['reflow-320', 'phone', 'laptop', 'zoom-200', 'text-spacing']),
+    );
+    expect(now.coverage?.cells).toEqual({ planned: now.cells?.length, run: now.cells?.length });
+    const reflow = now.findings.find(
+      (f) =>
+        f.seenOn === 'reflow-320' &&
+        /sideways/i.test(f.title) &&
+        (f.route === '/settings' || f.locations?.some((l) => l.route === '/settings')),
+    );
+    const inCells = now.findings.filter((f) => f.seenOn).map((f) => [f.title, f.route, f.seenOn]);
+    expect(reflow, `findings in cells: ${JSON.stringify(inCells)}`).toBeDefined();
+    expect(reflow?.evidence.join(' ')).toMatch(/at 320px on Reflow · 320×640/);
+  }
+  await expect(proposal.first()).toContainText(/Screen sizes: \d+ checked/);
   await proposal.first().getByRole('button', { name: 'Keep going' }).click();
   await page.getByLabel('Message Fitts').press('Enter');
   await expect(proposal.first()).toContainText('You kept going');

@@ -4,7 +4,7 @@
 // exactly as in the main window (and never released: the replayer has no gate to ask); it's
 // destroyed after the job.
 import { PAGE_PROBES } from '@fitts/probes';
-import type { SiteDevice } from '@fitts/schema';
+import type { DeviceCell, SiteDevice } from '@fitts/schema';
 import type { OpTrace, ReplayAnswer, ReplayAsk, ReplayStep } from '../../agent/protocol';
 import { SiteWindow } from './site-window';
 
@@ -32,7 +32,7 @@ async function resolveRef(win: SiteWindow, step: ReplayStep): Promise<string | u
 export async function replay(
   projectId: string,
   baseUrl: string,
-  device: SiteDevice | null,
+  device: SiteDevice | DeviceCell | null,
   req: ReplayAsk,
 ): Promise<ReplayAnswer> {
   const win = new SiteWindow(

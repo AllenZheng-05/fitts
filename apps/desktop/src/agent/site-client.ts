@@ -1,7 +1,7 @@
 // The agent's only way to touch the user's site: RPC to main (SPEC-phase2 §1). Main runs each
 // operation on the project's site window (and, from P8, through the permission gate).
 import type { PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
-import type { ProbeItem, SiteRect, SourceFrame } from '@fitts/schema';
+import type { DeviceCell, ProbeItem, SiteRect, SourceFrame } from '@fitts/schema';
 import type { AgentMessage, AxSnapshot, FixCall, OpTrace, SiteOp, SiteOpResult } from './protocol';
 import type { ReplayAnswer, ReplayAsk } from './repro/replay';
 
@@ -29,6 +29,14 @@ export interface Site {
   viewportSweep(): Promise<ProbeItem[]>;
   /** Look like a device (an id from DEVICES; null: desktop). Resolves to the one it replaced. */
   device?(id: string | null): Promise<string | null>;
+  /** SPEC-phase4 §6.3: look like a device cell (null: the panel's size). The one it replaced. */
+  cell?(cell: DeviceCell | null): Promise<string | null>;
+  /** Tell main the run's cells, so the picker and the replayer know them by id. */
+  registerCells?(cells: DeviceCell[]): Promise<void>;
+  /** The site's media conditions, as text, for the matrix. */
+  breakpoints?(): Promise<string[]>;
+  /** The cheap probes in a cell: overflow and the cell's own check (text spacing, 200%, landscape). */
+  cellProbes?(cell: DeviceCell): Promise<PageProbeResult[]>;
   value(ref: string): Promise<string | null>;
   links(hrefs: string[]): Promise<Record<string, number>>;
   network(): Promise<RequestRecord[]>;
@@ -116,6 +124,12 @@ export class SiteRpc {
       focusSweep: async () => (await expect({ op: 'focus' }, 'items')).items,
       viewportSweep: async () => (await expect({ op: 'viewport' }, 'items')).items,
       device: async (id) => (await expect({ op: 'device', id }, 'device')).previous,
+      cell: async (cell) => (await expect({ op: 'cell', cell }, 'device')).previous,
+      registerCells: async (cells) => {
+        await expect({ op: 'cells', cells }, 'ok');
+      },
+      breakpoints: async () => (await expect({ op: 'breakpoints' }, 'breakpoints')).media,
+      cellProbes: async (cell) => (await expect({ op: 'cellProbes', cell }, 'probes')).results,
       value: async (ref) => (await expect({ op: 'value', ref }, 'value')).value,
       links: async (hrefs) => (await expect({ op: 'links', hrefs }, 'links')).statuses,
       network: async () => (await expect({ op: 'network' }, 'network')).requests,

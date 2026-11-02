@@ -585,10 +585,20 @@ function valueOf(ref: string, F: Refs): string | null {
   return el && 'value' in el ? String((el as HTMLInputElement).value) : null;
 }
 
+/**
+ * The width the page is being looked at. In mobile emulation Chromium grows the layout viewport
+ * (innerWidth) to fit wide content, so the visual viewport is the honest number; a desktop
+ * window reports both the same.
+ */
+function viewportWidth(width?: number): number {
+  const visual = window.visualViewport?.width;
+  return Math.min(window.innerWidth, visual || Infinity, width || Infinity);
+}
+
 function overflow(F: Refs, width: number): ProbeItem[] {
   const items: ProbeItem[] = [];
   const doc = document.documentElement;
-  if (doc.scrollWidth > window.innerWidth + 1)
+  if (doc.scrollWidth > viewportWidth(width) + 1)
     items.push(
       item(
         F,
@@ -610,6 +620,104 @@ function overflow(F: Refs, width: number): ProbeItem[] {
   return items;
 }
 
+/**
+ * SPEC-phase4 §6.3, WCAG 1.4.12: with the text-spacing CSS injected (line height 1.5,
+ * paragraph spacing 2em, letter 0.12em, word 0.16em), text that is clipped or that overlaps
+ * its neighbour below.
+ */
+function textSpacing(F: Refs): ProbeItem[] {
+  const items: ProbeItem[] = [];
+  for (const el of textElements()) {
+    if (items.length > 8) break;
+    const s = getComputedStyle(el);
+    const clipped =
+      (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) &&
+      /hidden|clip/.test(s.overflow + s.overflowX + s.overflowY) &&
+      s.textOverflow !== 'ellipsis';
+    if (clipped) {
+      items.push(
+        item(
+          F,
+          el,
+          'text clipped with wider spacing',
+          'text that fits at 1.5 line height and wider letter and word spacing',
+        ),
+      );
+      continue;
+    }
+    const next = el.nextElementSibling as HTMLElement | null;
+    if (next && visible(next) && textElements().includes(next)) {
+      const a = el.getBoundingClientRect();
+      const b = next.getBoundingClientRect();
+      if (a.bottom - b.top > 4 && b.top > a.top && s.position === 'static')
+        items.push(
+          item(
+            F,
+            el,
+            'text overlaps the text below it with wider spacing',
+            'text that keeps its room at 1.5 line height',
+          ),
+        );
+    }
+  }
+  return items;
+}
+
+/** SPEC-phase4 §6.3, WCAG 1.4.4: at 200% text (zoom 2), sideways scrolling or clipped text. */
+function resizeText(F: Refs): ProbeItem[] {
+  const items: ProbeItem[] = [];
+  const doc = document.documentElement;
+  if (doc.scrollWidth > viewportWidth() + 1)
+    items.push(
+      item(
+        F,
+        document.body,
+        `page is ${doc.scrollWidth}px wide at 200% text`,
+        'no sideways scrolling at 200% text',
+      ),
+    );
+  for (const el of textElements()) {
+    if (items.length > 8) break;
+    const s = getComputedStyle(el);
+    if (
+      el.scrollWidth > el.clientWidth + 1 &&
+      /hidden|clip/.test(s.overflowX) &&
+      s.textOverflow !== 'ellipsis'
+    )
+      items.push(item(F, el, 'text cut off at 200% text', 'text that fits or wraps at 200% text'));
+  }
+  return items;
+}
+
+/** SPEC-phase4 §6.3, WCAG 1.3.4: in landscape, a page that asks for portrait or hides its content. */
+function orientation(F: Refs): ProbeItem[] {
+  const items: ProbeItem[] = [];
+  const ask =
+    /\b(rotate|turn) (your )?(device|phone|screen)\b|\bportrait (mode|only)\b|\blandscape (mode )?(is )?not supported\b/i;
+  for (const el of textElements()) {
+    if (items.length > 3) break;
+    if (ask.test(el.textContent ?? ''))
+      items.push(
+        item(F, el, 'asks for portrait in landscape', 'content that works in both orientations'),
+      );
+  }
+  const text = (document.body.innerText ?? '').trim();
+  if (
+    items.length === 0 &&
+    text.length < 20 &&
+    document.body.querySelectorAll('button, a, input').length > 0
+  )
+    items.push(
+      item(
+        F,
+        document.body,
+        `only ${text.length} characters of text show in landscape`,
+        'the same content as in portrait',
+      ),
+    );
+  return items;
+}
+
 const api = {
   run,
   focusStart,
@@ -618,6 +726,9 @@ const api = {
   feedbackRead,
   valueOf,
   overflow,
+  textSpacing,
+  resizeText,
+  orientation,
 };
 export type ProbesApi = typeof api;
 (window as unknown as { __fittsProbes: ProbesApi }).__fittsProbes = api;

@@ -1539,7 +1539,7 @@ describe('the portfolio run, replayed (Allen’s feedback, round 6)', () => {
 describe('this run, replayed (Allen’s feedback, round 7)', () => {
   it('a decider that jumps to the checks first is refused until the site is explored, and says nothing for them', async () => {
     // What the run's decider did with a redesign brief: everything but explore, first.
-    const eager = ['new_look', 'looks', 'phone_pass', 'check_links', 'review', 'check_theme'];
+    const eager = ['new_look', 'looks', 'device_pass', 'check_links', 'review', 'check_theme'];
     const decider = {
       next(s: Situation): Promise<Decision> {
         const a = eager.shift();
@@ -1565,7 +1565,7 @@ describe('this run, replayed (Allen’s feedback, round 7)', () => {
     await until(() => state()?.phase === 'done' || proposal(state()) !== undefined, 10_000);
     const said = state()?.chat.flatMap((c) => (c.type === 'fitts.message' ? [c.text] : [])) ?? [];
     // The checks that would have run on nothing were refused, so none announced itself...
-    for (const a of ['looks', 'phone_pass', 'check_links', 'review'])
+    for (const a of ['looks', 'device_pass', 'check_links', 'review'])
       expect(said).not.toContain(`About to ${a}`);
     // ...and the review ran after the crawl, on the pages, so it found the problem.
     expect(state()?.findings.map((f) => f.title)).toContain('Tap target is too small');

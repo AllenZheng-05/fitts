@@ -25,7 +25,13 @@ const TOOLS = [
   tool('explore', 'Crawl: try every primary control, a page at a time.', {
     route: { type: 'string', description: 'A page of this site to open first, or empty.' },
   }),
-  tool('phone_pass', 'Check every explored page at phone size.'),
+  tool('journey', 'Try one of the app’s journeys (from the code) end to end, as a person would.', {
+    journeyId: {
+      type: 'string',
+      description: 'The journey, from `journeys`; empty for the next planned one.',
+    },
+  }),
+  tool('device_pass', 'Check every explored page at every screen size in the device matrix.'),
   tool('check_links', 'Check links and network requests.'),
   tool('review', 'The five-reviewer panel on the explored pages.'),
   tool('check_theme', 'Judge whether the look fits the brief.'),
@@ -74,10 +80,12 @@ export function parseDecision(name: string, args: string): Decision {
     hint?: string;
     text?: string;
     why?: string;
+    journeyId?: string;
   };
   return {
     ability: name as AbilityName,
     ...(a.route?.trim() ? { route: a.route.trim() } : {}),
+    ...(a.journeyId?.trim() ? { journeyId: a.journeyId.trim().slice(0, 80) } : {}),
     ...(a.say?.trim() ? { say: a.say.trim().slice(0, 240) } : {}),
     ...(a.paths?.length ? { paths: a.paths.slice(0, 20) } : {}),
     ...(a.wish?.trim() ? { wish: a.wish.trim().slice(0, 300) } : {}),

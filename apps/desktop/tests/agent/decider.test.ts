@@ -58,7 +58,7 @@ describe('the decision step (SPEC-phase3 §1.2)', () => {
     expect(d).toEqual({ ability: 'explore', route: '/checkout', say: 'Opening checkout.' });
     expect(JSON.stringify(c.requests[0]?.input)).toContain('skip the blog');
     expect(c.requests[0]?.instructions).toContain('The owner steers');
-    expect(c.requests[0]?.tools).toHaveLength(15);
+    expect(c.requests[0]?.tools).toHaveLength(16);
     // SPEC-phase4 §4: the audit is proposed, never finished, and the owner can report a problem.
     const names = (
       c.requests[0]?.tools as { name: string; parameters: { required: string[] } }[]

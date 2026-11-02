@@ -1,4 +1,4 @@
-// Reproduces each of demo/chat's 25 planted issues (demo/chat/PLANTED.md) in an offscreen
+// Reproduces each of demo/chat's 26 planted issues (demo/chat/PLANTED.md) in an offscreen
 // Electron window, the way Fitts's CDP driver will see the app. Usage:
 //   pnpm --filter demo-chat dev        (in another terminal)
 //   electron scripts/check-demo-chat.cjs [port]
@@ -240,6 +240,17 @@ app.whenReady().then(async () => {
     const groups = await js(`document.querySelectorAll('fieldset, h2, h3').length`);
     return n === 14 && groups === 0 && `${n} toggles, no groups`;
   });
+  await check(26, 'Settings scrolls sideways at 320px', async () => {
+    win.setContentSize(320, 640);
+    await sleep(300);
+    const at320 = await js('document.documentElement.scrollWidth - window.innerWidth');
+    win.setContentSize(360, 640);
+    await sleep(300);
+    const at360 = await js('document.documentElement.scrollWidth - window.innerWidth');
+    win.setContentSize(1000, 800);
+    await sleep(200);
+    return at320 > 1 && at360 <= 1 && `${at320}px over at 320, fits at 360`;
+  });
   await go('/contacts');
   await check(25, 'Contacts page has no empty state', async () => {
     await js(`(() => { const i = document.querySelector('[data-ref="contacts-filter"]');
@@ -273,5 +284,5 @@ app.whenReady().then(async () => {
     console.log(`${r.ok ? 'PASS' : 'FAIL'} #${r.n} ${r.name}${r.detail ? ' — ' + r.detail : ''}`);
   const passed = results.filter((r) => r.ok).length;
   console.log(`${passed}/${results.length} planted issues reproduced`);
-  app.exit(passed === 25 && results.length === 25 ? 0 : 1);
+  app.exit(passed === 26 && results.length === 26 ? 0 : 1);
 });

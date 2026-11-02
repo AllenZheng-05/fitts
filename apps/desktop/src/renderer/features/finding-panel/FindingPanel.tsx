@@ -267,7 +267,7 @@ function LivePreview({ run, finding }: { run: RunState; finding: Finding }) {
         />
       ) : (
         // The page when Fitts found it: zoomed to the problem, outlined, and where it sits.
-        <Evidence finding={finding} shot={shot} />
+        <Evidence finding={finding} shot={shot} cells={run.cells} />
       )}
       {!branch && <p className="text-[13px] text-muted">{copy.finding.previewPending}</p>}
     </div>

@@ -6,6 +6,7 @@ import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@f
 import PROBES from '@fitts/probes/page.js?raw';
 import {
   DEVICES,
+  type DeviceCell,
   type PointedElement,
   type ProbeItem,
   type SiteDevice,
@@ -29,6 +30,9 @@ const CONTROLS =
 
 /** Isolated world for Fitts's scripts (refs, rects); the page can't see them. */
 const WORLD = 1001;
+/** WCAG 1.4.12's text spacing, as a sheet the page gets in the text-spacing cell. */
+const TEXT_SPACING_CSS =
+  '* { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; } p { margin-bottom: 2em !important; }';
 
 /** Assigns `e<n>` to elements without a data-ref/data-testid, stable for the page load. */
 const REFS = `(() => {
@@ -108,7 +112,10 @@ export class SiteWindow {
       // -3 is an aborted load (a newer navigation took over), not a failure.
       if (isMainFrame && code !== -3) this.loadFailed = true;
     });
-    wc.on('did-finish-load', () => (this.loadFailed = false));
+    wc.on('did-finish-load', () => {
+      this.loadFailed = false;
+      void this.applySpacing();
+    });
     wc.on('did-navigate', pushHistory);
     wc.on('did-navigate-in-page', pushHistory);
     this.recordNetwork();
@@ -144,7 +151,59 @@ export class SiteWindow {
   }
 
   get device(): SiteDevice | null {
-    return DEVICES.find((d) => d.id === this.deviceId) ?? null;
+    return this.cell ?? DEVICES.find((d) => d.id === this.deviceId) ?? null;
+  }
+  /** The device cell it's emulating (SPEC-phase4 §6.3), when it's one. */
+  private cell: DeviceCell | null = null;
+  /** The text-spacing CSS is on (re-inserted on every page load). */
+  private spacing = false;
+  private spacingKey: string | undefined;
+
+  /** WCAG 1.4.12's spacing, as CSS the page gets after it loads. */
+  private async applySpacing(): Promise<void> {
+    if (!this.spacing) return;
+    try {
+      this.spacingKey = await this.wc.insertCSS(TEXT_SPACING_CSS);
+    } catch {
+      // The page is between loads: the next load tries again.
+    }
+  }
+
+  /** The site's own media conditions (same-origin sheets only), one string per rule. */
+  breakpoints(): Promise<string[]> {
+    return this.evaluate<string[]>(`
+      const out = [];
+      for (const sheet of document.styleSheets) {
+        let rules; try { rules = sheet.cssRules; } catch { continue; }
+        const walk = (list) => { for (const r of list) {
+          if (r.media && r.media.mediaText) out.push(r.media.mediaText);
+          else if (r.conditionText && r.cssText.startsWith('@container')) out.push(r.conditionText);
+          if (r.cssRules && out.length < 400) walk(r.cssRules);
+        } };
+        walk(rules);
+      }
+      return out;`);
+  }
+
+  /** SPEC-phase4 §6.3: the cheap probes for a cell: overflow at its width, and its own check. */
+  async cellProbes(cell: DeviceCell): Promise<PageProbeResult[]> {
+    const out: PageProbeResult[] = [];
+    const overflow = await this.probes<ProbeItem[]>(`return P.overflow(F, ${cell.width});`);
+    out.push({ probe: 'viewport-sweep', pass: overflow.length === 0, items: overflow });
+    if (cell.textSpacing) {
+      const items = await this.probes<ProbeItem[]>('return P.textSpacing(F);');
+      out.push({ probe: 'text-spacing', pass: items.length === 0, items });
+    }
+    if (cell.zoom && cell.zoom > 1) {
+      const items = await this.probes<ProbeItem[]>('return P.resizeText(F);');
+      out.push({ probe: 'resize-text', pass: items.length === 0, items });
+    }
+    if (cell.orientation === 'landscape') {
+      const items = await this.probes<ProbeItem[]>('return P.orientation(F);');
+      out.push({ probe: 'orientation', pass: items.length === 0, items });
+    }
+    out.push(...(await this.runProbes(['contrast', 'target-size'])));
+    return out;
   }
   /** Endpoints whose big JSON body was already counted. */
   private readonly parsed = new Set<string>();
@@ -358,11 +417,21 @@ export class SiteWindow {
    * mobile emulation, so `<meta name="viewport">`, touch and a mobile user agent all apply, the
    * way the site renders on the real thing; frames stay at CSS px (scale 1).
    */
-  async emulate(device: SiteDevice | null): Promise<void> {
+  async emulate(device: SiteDevice | DeviceCell | null): Promise<void> {
     const dbg = this.wc.debugger;
     // The same device again (a layout change remounts the canvas) changes nothing.
     if (!dbg.isAttached() || (device?.id ?? null) === this.deviceId) return;
     this.deviceId = device?.id ?? null;
+    this.cell = device && 'touch' in device ? device : null;
+    // SPEC-phase4 §6.3: what a cell emulates beyond its size.
+    const cell = this.cell;
+    this.wc.setZoomFactor(cell?.zoom ?? 1);
+    this.spacing = Boolean(cell?.textSpacing);
+    const features = [
+      ...(cell?.scheme ? [{ name: 'prefers-color-scheme', value: cell.scheme }] : []),
+      ...(cell?.motion ? [{ name: 'prefers-reduced-motion', value: cell.motion }] : []),
+    ];
+    await dbg.sendCommand('Emulation.setEmulatedMedia', { features }).catch(() => undefined);
     if (device?.mobile) {
       await dbg.sendCommand('Emulation.setDeviceMetricsOverride', {
         width: device.width,

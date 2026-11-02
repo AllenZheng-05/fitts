@@ -1,8 +1,9 @@
 // Which device each site is seen on (SPEC-phase2 §5, device sizes), and how the canvas fits
 // that device into the panel. The default is "Your screen": a desktop browser the size of the
 // display Fitts is on, drawn scaled down to fit the panel.
-import { DEVICES, SCREEN_DEVICE, type SiteDevice } from '@fitts/schema';
+import { DEVICES, SCREEN_DEVICE, type DeviceCell, type SiteDevice } from '@fitts/schema';
 import { create } from 'zustand';
+import { useRun } from './run-store';
 
 /** Where the site's frame sits in the panel: site px × scale, plus the offset. */
 export interface SiteView {
@@ -40,20 +41,23 @@ export function screenDevice(): SiteDevice {
   };
 }
 
-export const deviceFor = (id: string | undefined): SiteDevice =>
-  DEVICES.find((d) => d.id === id) ?? screenDevice();
+/** SPEC-phase4 §6.3: the run's device cells are devices too, by id. */
+export const deviceFor = (id: string | undefined, cells?: DeviceCell[]): SiteDevice =>
+  DEVICES.find((d) => d.id === id) ?? cells?.find((c) => c.id === id) ?? screenDevice();
 
 let screenCache: SiteDevice | undefined;
 
-/** The site's device; "Your screen" unless the user picked another. */
-export const useProjectDevice = (projectId: string): SiteDevice =>
-  useDevice((s) => {
+/** The site's device; "Your screen" unless the user picked another (a run's cell counts). */
+export const useProjectDevice = (projectId: string): SiteDevice => {
+  const cells = useRun(projectId)?.cells;
+  return useDevice((s) => {
     const id = s.byProject[projectId];
-    if (id && id !== SCREEN_DEVICE) return deviceFor(id);
+    if (id && id !== SCREEN_DEVICE) return deviceFor(id, cells);
     // One object per session, so the selector's result stays stable.
     screenCache ??= screenDevice();
     return screenCache;
   });
+};
 
 /** The current frame placement, read outside React (overlays, input). */
 export const siteView = (projectId: string): SiteView =>

@@ -155,6 +155,9 @@ export const PROBE_STANDARDS: Record<ProbeName, string[] | null> = {
   network: null,
   'web-vitals': null,
   'viewport-sweep': ['1.4.10'],
+  'text-spacing': ['1.4.12'],
+  'resize-text': ['1.4.4'],
+  orientation: ['1.3.4'],
 };
 
 /** The criteria for a probe's finding (empty for a usability check). */

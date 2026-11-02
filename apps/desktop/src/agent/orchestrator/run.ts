@@ -7,7 +7,10 @@ import {
   type AppModel,
   type Change,
   type ChatItem,
+  type DeviceCell,
   type Finding,
+  type Journey,
+  type RunCoverage,
   type EdgeStateKind,
   type MemoryRule,
   type Mode,
@@ -22,7 +25,9 @@ import type { AxSnapshot, HeldRequest, OpTrace } from '../protocol';
 import type { SiteRect } from '@fitts/schema';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
-import { Coverage, DESTRUCTIVE, routeOf } from '../crawler/coverage';
+import { Coverage, DESTRUCTIVE, patternOf, routeOf } from '../crawler/coverage';
+import { chooseCells, mergeBreakpoints, widthsFromCss } from '../devices/matrix';
+import { PlanJourneyBrain, journeyOrder, runJourney, type JourneyBrain } from '../crawler/journey';
 import { copy } from '../../renderer/copy';
 import { format } from '../../renderer/lib/format';
 import { ProbeRunner } from '../crawler/probes';
@@ -89,6 +94,8 @@ export interface RunDeps {
   ownerName?: string;
   /** SPEC-phase4 §3: what Fitts understands from the code, when the project has one. */
   appModel?: AppModel;
+  /** SPEC-phase4 §6.1: a brain for one journey (Spark with the screenshot); the plan itself without. */
+  journeyBrain?: (journey: Journey) => JourneyBrain;
   /** SPEC-phase4 §4.3: what the owner told Fitts on earlier runs, and how to add to it. */
   memory?: {
     get(): ProjectMemory | undefined;
@@ -137,7 +144,8 @@ const THEME_ROUTES = 3;
 /** A redesign is checked on at most this many pages (each loads on the worktree's server). */
 const MAX_REDESIGN_PAGES = 10;
 /** The phone pass looks at this many pages. */
-const MAX_PHONE_PAGES = 8;
+/** The device pass checks at most this many pages per cell (SPEC-phase4 §6.3). */
+const MAX_CELL_PAGES = 12;
 /** A route that's a file (a resume PDF, an image), not a page. */
 const FILE_ROUTE = /\.(pdf|png|jpe?g|gif|svg|webp|zip|txt|json|xml)$/i;
 
@@ -185,6 +193,19 @@ export class RealRun {
   private crawlEnded = false;
   /** Abilities that have run to the end, and what the last few did (for the decider). */
   private readonly ran: Partial<Record<AbilityName, boolean>> = {};
+  /** SPEC-phase4 §6.1: each journey's status, by id. */
+  private readonly journeyStatus = new Map<
+    string,
+    {
+      status: 'planned' | 'running' | 'done' | 'failed' | 'blocked';
+      reason?: string;
+      steps?: number;
+    }
+  >();
+  /** SPEC-phase4 §6.3: the device matrix, once the device pass chose it. */
+  private cells: DeviceCell[] = [];
+  private cellsRun = 0;
+  private lastCoverage = '';
   private readonly recent: Outcome[] = [];
   /** The owner's messages for the next decision, and the ones it already saw (§1.4). */
   private inbox: string[] = [];
@@ -270,6 +291,12 @@ export class RealRun {
     private readonly deps: RunDeps,
   ) {
     this.coverage = new Coverage(deps.origin);
+    // SPEC-phase4 §6.2: the code's static routes are known before the first page; dynamic ones
+    // wait for a real link. Journeys are planned from the model (priority 1 and 2 run first).
+    for (const p of deps.appModel?.pages ?? [])
+      if (!p.dynamic && !p.route.includes(':')) this.coverage.discover(p.route, 'code');
+    const { first, later } = journeyOrder(deps.appModel?.journeys ?? []);
+    for (const j of [...first, ...later]) this.journeyStatus.set(j.id, { status: 'planned' });
     this.probes = new ProbeRunner(deps.site, from.runId, (result) =>
       this.emit([{ type: 'probe.result', result }]),
     );
@@ -343,6 +370,9 @@ export class RealRun {
 
   start(): void {
     this.emit([{ type: 'run.started', state: this.state }]);
+    if (this.journeyStatus.size)
+      this.emit([{ type: 'run.patch', patch: { journeys: this.journeyList() } }]);
+    this.syncCoverage();
     this.say('Looking around your site now. I’ll try every control on every page I can reach.');
     const remembered = memoryLine(this.deps.memory?.get());
     if (remembered) this.say(format(copy.fitts.remembered, { what: remembered }));
@@ -491,13 +521,20 @@ export class RealRun {
    * feedback, round 7: a redesign brief sent the decider straight to them).
    */
   private refusal(d: Decision): string | undefined {
-    const needsPages: AbilityName[] = ['phone_pass', 'check_links', 'review', 'looks', 'fix'];
+    const needsPages: AbilityName[] = ['device_pass', 'check_links', 'review', 'looks', 'fix'];
     if (needsPages.includes(d.ability) && !this.crawlEnded)
       return 'explore first: the crawl hasn’t finished';
     if (d.ability === 'check_theme' && this.pages.size === 0)
       return 'explore first: no page has been seen yet';
     // Once fixes are underway the audit is over: what's left is the fixes and the owner.
-    const audit: AbilityName[] = ['explore', 'phone_pass', 'check_links', 'review', 'check_theme'];
+    const audit: AbilityName[] = [
+      'explore',
+      'journey',
+      'device_pass',
+      'check_links',
+      'review',
+      'check_theme',
+    ];
     if (this.fixPhase && audit.includes(d.ability)) return 'fixes are underway; the audit is over';
     return undefined;
   }
@@ -513,9 +550,11 @@ export class RealRun {
     switch (d.ability) {
       case 'explore':
         return this.explore(d.route);
-      case 'phone_pass':
-        await this.phonePass();
-        this.ran.phone_pass = true;
+      case 'journey':
+        return this.journey(d);
+      case 'device_pass':
+        await this.devicePass();
+        this.ran.device_pass = true;
         return outcome('done');
       case 'check_links':
         this.emit([{ type: 'now.changed', nowText: 'Checking links and network' }]);
@@ -633,7 +672,7 @@ export class RealRun {
           if (!this.coverage.complete() && !this.crawlEnded)
             return outcome('refused', 'pages and controls are left to try');
           // And the audit's own checks have run: a run never ends unreviewed.
-          for (const owed of ['phone_pass', 'check_links', 'review'] as const)
+          for (const owed of ['device_pass', 'check_links', 'review'] as const)
             if (!this.ran[owed]) return outcome('refused', `${owed} hasn’t run yet`);
           this.crawlComplete();
         }
@@ -806,6 +845,7 @@ export class RealRun {
       messages: [...this.inbox],
       earlier: this.heard.slice(-10),
       budget: { spentUsd: this.state.cost.spentUsd, capUsd: this.state.cost.capUsd },
+      ...(this.journeyStatus.size ? { journeys: this.journeyList() } : {}),
       ...(memoryLine(this.deps.memory?.get())
         ? {
             memory: `The owner told you on earlier runs: ${memoryLine(this.deps.memory?.get()) ?? ''}`,
@@ -1759,34 +1799,183 @@ export class RealRun {
    * touch, a mobile user agent), the page probes, and a phone screenshot for the reviewers. The
    * device the user was looking at comes back afterwards.
    */
-  private async phonePass(): Promise<void> {
+  /**
+   * The device pass (SPEC-phase4 §6.3): the matrix is chosen from the site's own breakpoints
+   * and media rules (plus the App Model's), then every explored page gets the cheap probes in
+   * every cell. Screenshots only for the phone cell (the reviewers' second view of each page).
+   */
+  private async devicePass(): Promise<void> {
     const site = this.deps.site;
-    const phone = DEVICES.find((d) => d.id === 'phone');
     const routes = [...this.pages.keys()]
       .filter((r) => !FILE_ROUTE.test(r))
-      .slice(0, MAX_PHONE_PAGES);
-    if (!site.device || !phone || routes.length === 0) return;
-    let previous: string | null;
+      .slice(0, MAX_CELL_PAGES);
+    if (!site.cell || routes.length === 0) return;
+    const media = (await site.breakpoints?.().catch(() => [])) ?? [];
+    const text = media.join('\n');
+    const model = this.deps.appModel;
+    const cells = chooseCells({
+      breakpoints: mergeBreakpoints(widthsFromCss(text), model?.breakpoints ?? []),
+      dark: /prefers-color-scheme/.test(text) || Boolean(model?.media.darkMode),
+      reducedMotion: /prefers-reduced-motion/.test(text) || Boolean(model?.media.reducedMotion),
+    });
+    this.cells = cells;
+    this.cellsRun = 0;
+    await site.registerCells?.(cells).catch(() => undefined);
+    this.emit([{ type: 'run.patch', patch: { cells } }]);
+    this.syncCoverage();
+    let original: string | null | undefined;
     try {
-      previous = await site.device(phone.id);
-    } catch {
-      return;
-    }
-    try {
-      for (const route of routes) {
+      for (const cell of cells) {
         if (this.finished) break;
-        this.emit([{ type: 'now.changed', nowText: `Checking ${route} on a phone` }]);
-        await site.navigate(route).catch(() => undefined);
-        await new Promise((r) => setTimeout(r, 600));
-        await this.probes.onDevice(route, phone);
-        const shot = await site.screenshot().catch(() => null);
-        const page = this.pages.get(route);
-        if (shot && page)
-          page.evidence.phoneShot = { jpegBase64: shot.jpegBase64, label: phone.label };
+        let previous: string | null;
+        try {
+          previous = await site.cell(cell);
+        } catch {
+          continue;
+        }
+        original ??= previous;
+        for (const route of routes) {
+          if (this.finished) break;
+          this.emit([
+            {
+              type: 'now.changed',
+              nowText: format(copy.fitts.checkingCell, { route, cell: cell.label }),
+            },
+          ]);
+          await site.navigate(route).catch(() => undefined);
+          await new Promise((r) => setTimeout(r, 350));
+          await this.probes.onCell(route, cell);
+          if (cell.id === 'phone') {
+            const shot = await site.screenshot().catch(() => null);
+            const page = this.pages.get(route);
+            if (shot && page)
+              page.evidence.phoneShot = { jpegBase64: shot.jpegBase64, label: cell.label };
+          }
+        }
+        this.cellsRun += 1;
+        this.syncCoverage();
       }
     } finally {
-      await site.device(previous).catch(() => undefined);
+      if (original !== undefined) await site.device?.(original).catch(() => undefined);
     }
+  }
+
+  /** The journeys for the state and the decider (SPEC-phase4 §6.1). */
+  private journeyList(): NonNullable<RunState['journeys']> & NonNullable<Situation['journeys']> {
+    const all = this.deps.appModel?.journeys ?? [];
+    return [...this.journeyStatus].flatMap(([id, s]) => {
+      const j = all.find((x) => x.id === id);
+      return j
+        ? [
+            {
+              id,
+              name: j.name,
+              priority: j.priority,
+              status: s.status,
+              ...(s.reason ? { reason: s.reason } : {}),
+              ...(s.steps !== undefined ? { steps: s.steps } : {}),
+            },
+          ]
+        : [];
+    });
+  }
+
+  private setJourney(
+    id: string,
+    patch: {
+      status: 'planned' | 'running' | 'done' | 'failed' | 'blocked';
+      reason?: string;
+      steps?: number;
+    },
+  ): void {
+    this.journeyStatus.set(id, patch);
+    this.emit([{ type: 'run.patch', patch: { journeys: this.journeyList() } }]);
+    this.syncCoverage();
+  }
+
+  /**
+   * One journey (SPEC-phase4 §6.1): the decider's pick, else the next planned by priority. Each
+   * step goes through `perform`, so the gate, the modes and the probes apply as in the crawl,
+   * and the pages it visits are observed and remembered like the crawl's. A journey that
+   * doesn't get there is evidence for the reviewers, on the page it ended on.
+   */
+  private async journey(d: Decision): Promise<Outcome> {
+    const outcome = (result: Outcome['result'], note?: string): Outcome => ({
+      ability: 'journey',
+      result,
+      ...(note ? { note } : {}),
+    });
+    const all = this.deps.appModel?.journeys ?? [];
+    const { first, later } = journeyOrder(all);
+    const planned = (j: Journey) => this.journeyStatus.get(j.id)?.status === 'planned';
+    const j =
+      (d.journeyId ? all.find((x) => x.id === d.journeyId && planned(x)) : undefined) ??
+      [...first, ...later].find(planned);
+    if (!j) return outcome('nothing', 'no journey left to try');
+    this.setJourney(j.id, { status: 'running' });
+    this.emit([
+      { type: 'now.changed', nowText: format(copy.fitts.tryingJourney, { name: j.name }) },
+    ]);
+    const site = this.deps.site;
+    const brain = this.deps.journeyBrain?.(j) ?? new PlanJourneyBrain();
+    const snap0 = await site.snapshot().catch(() => undefined);
+    if (snap0 && routeOf(snap0.path) !== routeOf(j.start))
+      await this.perform(
+        {
+          kind: 'navigate',
+          path: j.start,
+          why: format(copy.fitts.tryingJourney, { name: j.name }),
+        },
+        snap0.path,
+      );
+    const result = await runJourney(
+      {
+        brain,
+        snapshot: async () => {
+          const s = await site.snapshot();
+          this.coverage.observe(s);
+          this.syncCoverage();
+          await this.probes.onPage(s);
+          await this.remember(s);
+          this.lastSnap = s;
+          return s;
+        },
+        screenshot: async () => (await site.screenshot().catch(() => undefined))?.jpegBase64,
+        perform: async (action, from) => {
+          await this.perform(action, from);
+          this.deliverQueued();
+          return (await site.snapshot().catch(() => ({ path: from }))).path;
+        },
+        back: async () => (await site.back()).path,
+        stopped: () => this.finished || this.blocked(),
+        forms: (route) => this.deps.appModel?.pages.find((p) => p.route === route)?.forms ?? [],
+        signal: this.abort.signal,
+      },
+      j,
+    );
+    // Paused or stopped mid-way: not the journey's fault; it's tried again later.
+    if (result.status === 'blocked' && result.reason === 'the run stopped' && !this.finished) {
+      this.setJourney(j.id, { status: 'planned' });
+      return outcome('progress', 'interrupted');
+    }
+    this.setJourney(j.id, {
+      status: result.status,
+      ...(result.reason ? { reason: result.reason } : {}),
+      steps: result.steps,
+    });
+    this.say(
+      result.status === 'done'
+        ? format(copy.fitts.journeyDone, { name: j.name, n: result.steps })
+        : format(copy.fitts.journeyFailed, { name: j.name, reason: result.reason ?? '' }),
+    );
+    if (result.status !== 'done')
+      this.pages
+        .get(result.route)
+        ?.evidence.trace.push(
+          `journey “${j.name}” ${result.status} after ${result.steps} actions: ${result.reason ?? ''} (${result.trace.slice(-4).join('; ')})`,
+        );
+    if (this.inbox.length > 0) return outcome('progress', 'the owner spoke');
+    return outcome(result.status === 'done' ? 'done' : 'progress', `${j.name}: ${result.status}`);
   }
 
   /** The fix pipeline, once: only when the project is its own git repo (§9). */
@@ -1861,6 +2050,7 @@ export class RealRun {
       runId: this.state.runId,
       probes: this.probes.results,
       reviews,
+      cells: this.cells,
       stepOf: (route) => {
         const p = this.pages.get(route);
         return { stepIndex: p?.stepIndex ?? 0, atMs: p?.atMs ?? 0 };
@@ -2148,7 +2338,63 @@ export class RealRun {
     const ct = this.coverage.controlsTried();
     if (ct.done !== this.state.controlsTried.done || ct.total !== this.state.controlsTried.total)
       events.push({ type: 'controls.updated', ...ct });
+    // SPEC-phase4 §6.2: coverage against the code, when there is a model to measure against.
+    if (this.deps.appModel) {
+      const coverage = this.runCoverage();
+      const key = JSON.stringify(coverage);
+      if (key !== this.lastCoverage) {
+        this.lastCoverage = key;
+        events.push({ type: 'run.patch', patch: { coverage } });
+      }
+    }
     if (events.length) this.emit(events);
+  }
+
+  /** Pages, journeys, controls and cells against the App Model, with why a page wasn't reached. */
+  private runCoverage(): RunCoverage {
+    const model = this.deps.appModel;
+    const code = this.coverage.codeRoutes();
+    const unreached: RunCoverage['unreached'] = [];
+    for (const r of code) {
+      if (r.seen) continue;
+      const page = model?.pages.find((p) => p.route === r.path);
+      const why: RunCoverage['unreached'][number]['why'] = r.skipped
+        ? 'skipped'
+        : page?.gate === 'login' || page?.gate === 'role'
+          ? 'login'
+          : page?.gate === 'data' || page?.gate === 'flag'
+            ? 'data'
+            : r.label === 'unreachable'
+              ? 'error'
+              : r.linked
+                ? 'error'
+                : 'unlinked';
+      unreached.push({ route: r.path, why });
+    }
+    const seenPatterns = new Set([...this.pages.keys()].map((k) => patternOf(k)));
+    const dynamic = (model?.pages ?? []).filter((p) => p.dynamic || p.route.includes(':'));
+    let dynamicReached = 0;
+    for (const p of dynamic) {
+      if (seenPatterns.has(p.route)) dynamicReached += 1;
+      else unreached.push({ route: p.route, why: 'data' });
+    }
+    const js = [...this.journeyStatus.values()];
+    const count = (s: string) => js.filter((j) => j.status === s).length;
+    return {
+      pages: {
+        known: code.length + dynamic.length,
+        reached: code.filter((r) => r.seen).length + dynamicReached,
+      },
+      journeys: {
+        planned: js.length,
+        done: count('done'),
+        failed: count('failed'),
+        blocked: count('blocked'),
+      },
+      controls: this.coverage.controlsTried(),
+      cells: { planned: this.cells.length, run: this.cellsRun },
+      unreached,
+    };
   }
 
   private async perform(action: Exclude<Action, { kind: 'done' }>, from: string): Promise<void> {
@@ -2302,7 +2548,10 @@ export class RealRun {
           .find((i) => titleOf(check.probe, i) === check.title))
       : undefined;
     const device = f.seenOn ? DEVICES.find((d) => d.id === f.seenOn) : undefined;
-    const cell = device ? { ...device, touch: device.mobile } : undefined;
+    const cell = f.seenOn
+      ? (this.cells.find((c) => c.id === f.seenOn) ??
+        (device ? { ...device, touch: device.mobile } : undefined))
+      : undefined;
     const page = this.pages.get(f.route);
     const trail = this.trail.filter((t) => t.step <= (f.stepIndex || Number.MAX_SAFE_INTEGER));
     const input = {
@@ -2790,8 +3039,10 @@ export class RealRun {
     if (this.state.activity === 'acting') this.setActivity('paused');
     if (this.state.rewindStep !== undefined) this.emit([{ type: 'rewind.set' }]);
     // A problem that only happens at one size is shown at that size (Allen's feedback, round 5).
-    const device = f.seenOn ? DEVICES.find((d) => d.id === f.seenOn) : undefined;
-    if (device) await this.deps.site.device?.(device.id).catch(() => null);
+    const cell = f.seenOn ? this.cells.find((c) => c.id === f.seenOn) : undefined;
+    const device = cell ?? (f.seenOn ? DEVICES.find((d) => d.id === f.seenOn) : undefined);
+    if (cell) await this.deps.site.cell?.(cell).catch(() => null);
+    else if (device) await this.deps.site.device?.(device.id).catch(() => null);
     try {
       await this.deps.site.navigate(f.route);
       if (f.elementRef) await this.deps.site.reveal?.(f.elementRef);

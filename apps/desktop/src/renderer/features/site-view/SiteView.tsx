@@ -21,6 +21,7 @@ import { useUi } from '../../state/ui';
 import { bridge } from '../../lib/bridge';
 import { livePath, useLiveSite, useLiveSites } from '../../state/live-site';
 import { DEVICES, SCREEN_DEVICE, type PointedElement, type SiteStatus } from '@fitts/schema';
+import { useRun } from '../../state/run-store';
 import { format } from '../../lib/format';
 import { Select } from '../../components/fields';
 import { TEST_BUILD } from '../../dev';
@@ -33,6 +34,9 @@ export const MESSAGE_BOX_ID = 'message-box';
 /** See the site on your own screen's size, or a phone, tablet or desktop. */
 function DevicePicker({ projectId }: { projectId: string }) {
   const value = useDevice((s) => s.byProject[projectId] ?? SCREEN_DEVICE);
+  // SPEC-phase4 §6.3: the run's cells join the menu, so "where it happens" is one pick away.
+  const cells = useRun(projectId)?.cells ?? [];
+  const extra = cells.filter((c) => !DEVICES.some((d) => d.id === c.id));
   return (
     <Select
       label={copy.site.device}
@@ -42,6 +46,7 @@ function DevicePicker({ projectId }: { projectId: string }) {
       options={[
         { value: SCREEN_DEVICE, label: screenDevice().label },
         ...DEVICES.map((d) => ({ value: d.id, label: d.label })),
+        ...extra.map((c) => ({ value: c.id, label: c.label })),
       ]}
     />
   );

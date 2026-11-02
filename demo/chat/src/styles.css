@@ -130,6 +130,12 @@ button {
   list-style: none;
 }
 
+/* Planted #26: the settings list won't shrink below 296px, so with the page's 44px of padding
+   it reaches 340px: the page scrolls sideways at 320px wide and fits at 360px and up. */
+.settings {
+  min-width: 296px;
+}
+
 .threads > li + li {
   border-top: 1px solid #e4e1da;
 }

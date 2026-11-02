@@ -15,12 +15,16 @@ journeys' pages before the rest) and to know what a gated page needs.
 
 These are habits, not rules. The owner's messages come first, always.
 
+- Try the app's journeys first (`journey`): the priority 1 ones, then priority 2, from
+  `journeys` (each says whether it's planned, done, failed or blocked). Then explore. Priority 3
+  journeys come after the crawl, when the budget has room.
 - Explore before you review: every page, every primary control. `explore` with a route opens
   that page first; with an empty route it carries on where the crawl is.
 - When `stalled` climbs past 4, change course yourself: explore another page (`nextRoute`), or
   stop exploring if nothing is left worth trying.
-- Once the crawl has ended (`coverage.ended`), finish the audit's checks: `phone_pass`,
-  `check_links`, `review`, `check_theme`.
+- Once the crawl has ended (`coverage.ended`), finish the audit's checks: `device_pass`
+  (every explored page at every screen size in the device matrix), `check_links`, `review`,
+  `check_theme`.
 - Offer a new look only when the theme doesn't fit or the owner asks for one.
 - Fix when there are findings worth fixing and the site has code.
 - When everything is covered and checked, `propose_finish`: it tells the owner you think you're
@@ -69,7 +73,7 @@ told what failed, before it's rolled back; `recent` shows the rollback too.
 Some things a tool will refuse (proposing with pages left, fixing a live site). When `recent`
 shows a refusal, pick something else.
 
-Some steps refuse until the site is explored (`phone_pass`, `check_links`, `review`, `looks`,
+Some steps refuse until the site is explored (`device_pass`, `check_links`, `review`, `looks`,
 `fix` until `coverage.ended`; `check_theme` until a page is seen). A redesign request doesn't
 change that: explore first, then the look.
 

@@ -29,6 +29,7 @@ import { contributorFor, modelFor, reviewerRoster, SPARK_OPEN, type Profile } fr
 import { testKey } from './llm/test-key';
 import { recording } from './llm/fake';
 import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
+import { SparkJourneyBrain } from './crawler/journey';
 import { SparkDecider, sparkConverse } from './orchestrator/decider';
 import { isLiveOrigin, RealRun } from './orchestrator/run';
 import { ReviewerPanel } from './review/reviewers';
@@ -293,6 +294,24 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
           }).model,
       )
     : new ExplorerBrain();
+  // SPEC-phase4 §6.1: journeys see the screenshot each step; without a model, the plan itself.
+  const journeyBrain = useModel
+    ? () =>
+        new SparkJourneyBrain(
+          runCaller,
+          () => ({
+            runId: from.runId,
+            projectId,
+            contributor,
+            allowed: () => runRef.current?.allowed() ?? true,
+          }),
+          () =>
+            modelFor('crawl', profiles.get(projectId) ?? set?.modelProfile ?? 'quality', {
+              contributor,
+              baseten: Boolean(keys.baseten),
+            }).model,
+        )
+    : undefined;
   // Fitts decides what to do next and talks while it works (SPEC-phase3 §1.2, §1.3). Without a
   // model (offline, no key, FITTS_DECIDER=scripted), Phase 2's order and short replies.
   const runCtx = () => ({
@@ -330,6 +349,7 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       ...(converse ? { converse } : {}),
       ...(set?.name ? { ownerName: set.name } : {}),
       ...(models.get(projectId) ? { appModel: models.get(projectId)?.model } : {}),
+      ...(journeyBrain ? { journeyBrain } : {}),
       memory: {
         get: () => memories.get(projectId),
         add: (rule) => {

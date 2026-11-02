@@ -12,7 +12,7 @@ import {
   type ForwardAction,
   type RequestRecord,
 } from '@fitts/probes';
-import type { ProbeItem, ProbeName, ProbeResult, SiteDevice } from '@fitts/schema';
+import type { DeviceCell, ProbeItem, ProbeName, ProbeResult } from '@fitts/schema';
 import type { AxSnapshot } from '../protocol';
 import type { ActionResult, Site } from '../site-client';
 import { routeOf } from './coverage';
@@ -51,7 +51,7 @@ export class ProbeRunner {
     route: string,
     items: ProbeItem[],
     summary?: string,
-    device?: SiteDevice,
+    device?: { id: string },
   ): void {
     this.n += 1;
     const result: ProbeResult = {
@@ -100,25 +100,29 @@ export class ProbeRunner {
   }
 
   /**
-   * The phone pass: the page probes on a route already shown as a phone (RealRun switched the
-   * device and navigated). Only problems the crawl's own pass didn't see are kept, so a finding
-   * on a phone is something that goes wrong there.
+   * The device pass (SPEC-phase4 §6.3): the cheap probes on a route already shown in a cell
+   * (RealRun switched the cell and navigated): overflow and clipped text at the cell's width,
+   * the cell's own check (text spacing, 200% text, landscape), contrast and target size. Only
+   * problems the crawl's own pass (and earlier cells) didn't see are kept, so a finding in a cell
+   * is something that goes wrong there.
    */
-  async onDevice(route: string, device: SiteDevice): Promise<void> {
+  async onCell(route: string, cell: DeviceCell): Promise<void> {
+    if (!this.site.cellProbes) return;
     const seen = new Set(
       this.results
-        .filter((r) => r.route === route && !r.device)
+        .filter((r) => r.route === route)
         .flatMap((r) => r.items.map((i) => `${r.probe}|${i.measured}`)),
     );
-    // Matched on what was measured: element refs are re-issued when the page reloads as a phone.
+    // Matched on what was measured: element refs are re-issued when the page reloads.
     const fresh = (probe: ProbeName, items: ProbeItem[]) =>
       items.filter((i) => !seen.has(`${probe}|${i.measured}`));
     try {
-      for (const r of await this.site.probes(PAGE_PROBES))
-        if (r.probe !== 'font-inventory' && r.probe !== 'web-vitals')
-          this.add(r.probe, route, fresh(r.probe, r.items), undefined, device);
+      for (const r of await this.site.cellProbes(cell)) {
+        const items = fresh(r.probe, r.items);
+        if (items.length) this.add(r.probe, route, items, undefined, cell);
+      }
     } catch {
-      // A page that wouldn't load as a phone: the desktop pass still stands.
+      // A page that wouldn't load in this cell: the desktop pass still stands.
     }
   }
 

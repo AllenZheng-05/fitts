@@ -80,3 +80,33 @@ describe('Coverage: repeated components (Allen’s feedback, round 4)', () => {
     expect(c.remaining()).toEqual({ controls: 1, routes: 2 });
   });
 });
+
+describe('Coverage: routes from the code (SPEC-phase4 §6.2)', () => {
+  it('seeds code routes before any page, and says which a link reached', () => {
+    const c = new Coverage('http://localhost:5173');
+    expect(c.discover('/settings', 'code')).toBe(true);
+    expect(c.discover('/orphan', 'code')).toBe(true);
+    expect(c.nextRoute()).toBe('/settings');
+    c.observe(snap('/', [{ ref: 'e1', role: 'link', name: 'Settings', href: '/settings' }]));
+    const rows = Object.fromEntries(c.codeRoutes().map((r) => [r.path, r]));
+    expect(rows['/settings']).toMatchObject({ seen: false, linked: true });
+    expect(rows['/orphan']).toMatchObject({ seen: false, linked: false });
+    // The visit itself doesn't make a page "linked"; a link on a page does.
+    c.observe(snap('/orphan', []));
+    expect(c.codeRoutes().find((r) => r.path === '/orphan')).toMatchObject({
+      seen: true,
+      linked: false,
+    });
+    // The same route named by both: one row, from the code, linked.
+    c.observe(snap('/x', [{ ref: 'e2', role: 'link', name: 'Orphan', href: '/orphan' }]));
+    expect(c.codeRoutes().find((r) => r.path === '/orphan')?.linked).toBe(true);
+    expect(c.stateRoutes().filter((r) => r.path === '/orphan')).toHaveLength(1);
+  });
+
+  it('a skipped code route says so', () => {
+    const c = new Coverage('http://localhost:5173');
+    c.discover('/admin', 'code');
+    c.skipRoute('/admin', 'you skipped it');
+    expect(c.codeRoutes()[0]).toMatchObject({ path: '/admin', skipped: 'you skipped it' });
+  });
+});

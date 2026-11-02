@@ -4,6 +4,7 @@
 // lane. Deterministic: same inputs, same findings.
 import {
   DEVICES,
+  type DeviceCell,
   type Finding,
   type FindingDraft,
   type Heuristic,
@@ -125,6 +126,30 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
             lens: 'ergonomics',
             severity: 1,
           };
+    case 'text-spacing':
+      return {
+        title: 'Text breaks with wider spacing',
+        finding: `With WCAG’s text spacing applied (1.5 line height, wider letters and words), ${m}.`,
+        fix: 'Let text containers grow with their content; avoid fixed heights and overflow: hidden on text.',
+        lens: 'accessibility',
+        severity: 2,
+      };
+    case 'resize-text':
+      return {
+        title: 'Page breaks at 200% text',
+        finding: `At 200% text size, ${m}.`,
+        fix: 'Size layout in rem and let content wrap, so text can double without clipping.',
+        lens: 'accessibility',
+        severity: 2,
+      };
+    case 'orientation':
+      return {
+        title: 'Page doesn’t work in landscape',
+        finding: `In landscape, the page ${m}.`,
+        fix: 'Support both orientations; never ask people to rotate their device.',
+        lens: 'accessibility',
+        severity: 2,
+      };
     case 'web-vitals':
       return {
         title: 'Slow to show the main content',
@@ -263,6 +288,19 @@ export interface AggregateInput {
   reviews: PersonaReview[];
   /** When Fitts was on each route (for the timeline and rewind). */
   stepOf: (route: string) => { stepIndex: number; atMs: number };
+  /** SPEC-phase4 §6.3: the run's device cells, so a finding can say where it happens. */
+  cells?: DeviceCell[];
+}
+
+/** The cells of the run being aggregated (set by `aggregateWithChecks`). */
+let CELLS: DeviceCell[] = [];
+
+/** What to call a device id: a cell of this run, one of DEVICES, or the id itself. */
+function deviceInfo(id: string): { label: string; mobile: boolean } {
+  const cell = CELLS.find((c) => c.id === id);
+  if (cell) return { label: cell.label, mobile: cell.mobile };
+  const d = DEVICES.find((x) => x.id === id);
+  return d ? { label: d.label, mobile: d.mobile } : { label: id, mobile: false };
 }
 
 const words = (s: string) =>
@@ -296,10 +334,11 @@ export function aggregate(input: AggregateInput): Finding[] {
 }
 
 /** Findings, plus the check that verifies a fix for each probe finding (reviewer-only: none). */
-export function aggregateWithChecks({ runId, probes, reviews, stepOf }: AggregateInput): {
+export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: AggregateInput): {
   findings: Finding[];
   checks: Map<string, Check>;
 } {
+  CELLS = cells ?? [];
   const clusters: Cluster[] = [];
   const byEvidence = new Map<string, Cluster[]>();
 
@@ -471,7 +510,7 @@ function toFinding(
       .slice(0, 3)
       .map(
         (i) =>
-          `${i.measured}${c.device ? ` on ${DEVICES.find((d) => d.id === c.device)?.label ?? c.device}` : ''} (expected ${i.expected})`,
+          `${i.measured}${c.device ? ` on ${deviceInfo(c.device).label}` : ''} (expected ${i.expected})`,
       ),
     ...c.drafts.flatMap((d) => d.draft.evidence).slice(0, 3),
   ];
@@ -558,7 +597,7 @@ export const impactOf = (probe: ProbeName, item: ProbeItem) => template(probe, i
 /** A phone-pass finding says where it happens: "Tap target is too small on a phone". */
 const onDevice = (title: string, device: string | undefined) =>
   device
-    ? `${title} on ${DEVICES.find((d) => d.id === device)?.mobile ? 'a phone' : device}`
+    ? `${title} on ${deviceInfo(device).mobile ? 'a phone' : deviceInfo(device).label}`
     : title;
 
 /** A probe result's problems as `probe|title` keys, with their impact (verification, §9.2). */

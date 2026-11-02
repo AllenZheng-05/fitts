@@ -1,4 +1,4 @@
-import { DEVICES, type Finding } from '@fitts/schema';
+import { DEVICES, type DeviceCell, type Finding } from '@fitts/schema';
 import { useEffect, useState } from 'react';
 import { copy } from '../../copy';
 import { format } from '../../lib/format';
@@ -12,9 +12,20 @@ const ZOOM_MARGIN = 0.9;
  * both what and where. A problem with no element (a page too wide) shows the whole shot, from
  * the device it happens on.
  */
-export function Evidence({ finding, shot }: { finding: Finding; shot: string }) {
+export function Evidence({
+  finding,
+  shot,
+  cells,
+}: {
+  finding: Finding;
+  shot: string;
+  /** SPEC-phase4 §6.3: the run's cells, so a cell id has a label. */
+  cells?: DeviceCell[];
+}) {
   const { box, shotSize } = finding;
-  const device = finding.seenOn ? DEVICES.find((d) => d.id === finding.seenOn) : undefined;
+  const device = finding.seenOn
+    ? (DEVICES.find((d) => d.id === finding.seenOn) ?? cells?.find((c) => c.id === finding.seenOn))
+    : undefined;
   if (!box || !shotSize) {
     return (
       <figure className="flex flex-col gap-1.5">

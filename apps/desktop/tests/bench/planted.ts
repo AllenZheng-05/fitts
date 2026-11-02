@@ -178,6 +178,13 @@ export const PLANTED: Planted[] = [
     refs: ['contacts-list'],
     words: /empty|no (results|matches)|nothing (shows|appears)|blank/,
   },
+  {
+    n: 26,
+    issue: 'Settings scrolls sideways at 320px',
+    routes: ['/settings'],
+    refs: ['settings-list'],
+    words: /sideways|wider than the screen|horizontal(ly)? scroll|320px|reflow|overflow/,
+  },
 ];
 
 const textOf = (f: Finding) => [f.title, f.finding, ...f.evidence].join(' ').toLowerCase();

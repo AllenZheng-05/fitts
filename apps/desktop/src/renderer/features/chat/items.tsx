@@ -821,12 +821,27 @@ function FinishProposal({ item, run }: { item: Item<'finish-proposal'>; run: Run
   const open = shown.filter((f) => f.status === 'open').length;
   const reached = run.routes.filter((r) => r.status === 'done').map((r) => r.path);
   const model = run.appModel;
+  const cov = run.coverage;
   const known = model?.pages.map((pg) => pg.route) ?? [];
-  const unreached = model?.pages.filter((pg) => !reached.includes(pg.route)) ?? [];
+  // SPEC-phase4 §6.2: the run's own coverage when it has one; else what the card can see.
+  const pagesReached = cov ? cov.pages.reached : reached.length;
+  const pagesKnown = cov ? cov.pages.known : known.length;
+  const unreached: { route: string; why: keyof typeof p.why }[] = cov
+    ? cov.unreached
+    : (model?.pages
+        .filter((pg) => !reached.includes(pg.route))
+        .map((pg) => ({
+          route: pg.route,
+          why: pg.gate === 'login' ? 'login' : pg.gate === 'data' ? 'data' : 'unknown',
+        })) ?? []);
   const journeys = model?.journeys.filter((j) => j.enabled !== false) ?? [];
-  const done = run.journeys?.filter((j) => j.status === 'done').length ?? 0;
-  const failed =
-    run.journeys?.filter((j) => j.status === 'failed' || j.status === 'blocked').length ?? 0;
+  const planned = cov ? cov.journeys.planned : journeys.length;
+  const done = cov
+    ? cov.journeys.done
+    : (run.journeys?.filter((j) => j.status === 'done').length ?? 0);
+  const failed = cov
+    ? cov.journeys.failed + cov.journeys.blocked
+    : (run.journeys?.filter((j) => j.status === 'failed' || j.status === 'blocked').length ?? 0);
   const branch = fixed.find((c) => c.branch)?.branch;
   const redesign = fixed.find((c) => c.kind === 'redesign');
   const fixes = fixed.filter((c) => c.kind === 'fix').length;
@@ -843,13 +858,13 @@ function FinishProposal({ item, run }: { item: Item<'finish-proposal'>; run: Run
       </span>
       <ul className="flex flex-col gap-0.5 text-[13px]">
         <li>
-          {known.length
-            ? format(p.pages, { reached: reached.length, known: known.length })
-            : format(p.pagesNoCode, { reached: reached.length })}
+          {pagesKnown
+            ? format(p.pages, { reached: pagesReached, known: pagesKnown })
+            : format(p.pagesNoCode, { reached: pagesReached })}
         </li>
-        {journeys.length > 0 && (
+        {planned > 0 && (
           <li>
-            {format(p.journeys, { done, planned: journeys.length })}
+            {format(p.journeys, { done, planned })}
             {failed > 0 && format(p.journeysFailed, { n: failed })}
           </li>
         )}
@@ -863,10 +878,7 @@ function FinishProposal({ item, run }: { item: Item<'finish-proposal'>; run: Run
             {p.notCovered}:{' '}
             {unreached
               .slice(0, 6)
-              .map(
-                (pg) =>
-                  `${pg.route} (${p.why[pg.gate === 'login' ? 'login' : pg.gate === 'data' ? 'data' : 'unknown']})`,
-              )
+              .map((pg) => `${pg.route} (${p.why[pg.why]})`)
               .join(', ')}
             {unreached.length > 6 ? ', …' : ''}
           </li>

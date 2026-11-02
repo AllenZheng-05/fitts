@@ -14,8 +14,8 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U1  | Source plugin v2 (§2)                    | done        | `ba8d406` |
 | U2  | Understand + the understanding card (§3) | done        | `ba8d406` |
 | U3  | Owner first + memory (§4)                | done        | `bad28a3` |
-| U4  | Repro (§5)                               | done        | see git   |
-| U5  | Journeys, coverage, device matrix (§6)   | in progress |           |
+| U4  | Repro (§5)                               | done        | `4105a5a` |
+| U5  | Journeys, coverage, device matrix (§6)   | done        | see git   |
 | U5b | The action log (§6A)                     | todo        |           |
 | U5c | Detect more (§6B)                        | todo        |           |
 | U6  | Code-aware fixer (§7)                    | todo        |           |
@@ -26,13 +26,13 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 ## Current milestone and next step
 
-**U5 (journeys, coverage, device matrix; §6) in progress.** U4 is committed (all four suites
-green: 144 e2e, 370 unit). Done for U5 so far, as new files only: `agent/devices/matrix.ts`
-(+ `tests/agent/matrix.test.ts`, 9 tests), `agent/crawler/journey.ts` (+
-`tests/agent/journey.test.ts`, 12 tests), `docs/prompts/journey.md`. Next: the shared
-edits per the U5 plan below (schema/events, site ops for cells and breakpoints, `device_pass`
-replacing `phone_pass`, coverage seeding from the App Model, the `journey` ability, the
-three new probes, planted #26), then the suites and the commit.
+**U5 (journeys, coverage, device matrix; §6): built; the crawl e2e passes; the full e2e and
+unit suites are running for the commit.** Everything in the
+plan below is in the tree: matrix + journeys (new files), the three scripts' shared edits
+(schema/probes/protocol/site/manager, abilities/decider/prompt/coverage/probes/aggregate/run/
+index/copy, renderer/demo/bench/check/e2e). Typecheck and lint green; unit and the demo/chat
+e2e were running at the last note. Then: DECISIONS U5 is written; commit "Phase 4 U5: journeys,
+coverage and the device matrix"; next U5b (the action log, §6A).
 
 ## U5 plan (journeys, coverage, device matrix; §6)
 
@@ -91,7 +91,14 @@ Total so far: **$0.03** of $15.
   root (from apps/desktop it says "lint not found").
 - `cross-env … electron-vite build` from apps/desktop needs `npx cross-env`; check
   `out/main/agent.js`'s timestamp after a build you depend on.
-- Full e2e takes about 9 minutes; the demo/chat crawl spec alone about 1.6 minutes.
+- Full e2e takes about 10 minutes; the demo/chat crawl spec alone about 3 minutes since U5 (the
+  device pass adds a minute).
+- Mobile emulation grows `window.innerWidth` to the content width: measure overflow against
+  `visualViewport.width` (U5 lesson). A quick Electron probe script in the scratchpad
+  (`probe-320.cjs`, load about:blank before attaching the debugger) is the fastest way to see
+  what a cell sees.
+- U5b's files are parked in the scratchpad's `u5b-hold/` (record.ts, log.test.ts) until U5 is
+  committed; move them back to `apps/desktop/src/agent/log/` and `tests/agent/`.
 - Milestone commits go straight to main.
 - The recorded Pass 2 fixture: `apps/desktop/tests/fixtures/llm/understand.json`; recorder:
   `FITTS_RECORD_UNDERSTAND=1 pnpm --filter @fitts/desktop exec vitest run tests/agent/record-understand.test.ts`.

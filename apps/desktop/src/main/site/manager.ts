@@ -1,6 +1,7 @@
 // One live site per open project (SPEC-phase2 §4.1, §5): its dev server, its offscreen window,
 // frames and status to the renderer, CDP-style queries, and step shots for rewind.
 import {
+  type DeviceCell,
   DEVICES,
   IPC,
   type Project,
@@ -63,6 +64,22 @@ const ASSET_NAME = /^[\w.-]+\.(jpg|png|svg|html)$/;
 
 export class SiteManager {
   private readonly live = new Map<string, Live>();
+  /** SPEC-phase4 §6.3: each project's device cells from its last run, by id. */
+  private readonly cells = new Map<string, Map<string, DeviceCell>>();
+
+  private cellsOf(projectId: string): Map<string, DeviceCell> {
+    let map = this.cells.get(projectId);
+    if (!map) {
+      map = new Map();
+      this.cells.set(projectId, map);
+    }
+    return map;
+  }
+
+  /** A device Fitts offers, or one of the run's cells, by id. */
+  private deviceFor(projectId: string, id: string | null): SiteDevice | DeviceCell | null {
+    return deviceById(id) ?? (id ? (this.cells.get(projectId)?.get(id) ?? null) : null);
+  }
   /** Status changes also go to the agent (site-down, live projects). */
   onStatus: ((status: SiteStatus) => void) | undefined;
   /** The ownership re-check before a live site opens (§4.2), set by main. */
@@ -298,11 +315,28 @@ export class SiteManager {
       case 'device': {
         // The device by its id, "Your screen" included, so the previous one restores exactly.
         const previous = win.deviceKey;
-        await win.emulate(deviceById(request.id));
+        await win.emulate(this.deviceFor(projectId, request.id));
         // The picker shows what Fitts is looking at.
         this.status(projectId, { device: request.id ?? SCREEN_DEVICE });
         return { op: 'device', previous };
       }
+      case 'cell': {
+        // SPEC-phase4 §6.3: a device cell; remembered by id so the picker and replayer find it.
+        const previous = win.deviceKey;
+        if (request.cell) this.cellsOf(projectId).set(request.cell.id, request.cell);
+        await win.emulate(request.cell);
+        this.status(projectId, { device: request.cell?.id ?? SCREEN_DEVICE });
+        return { op: 'device', previous };
+      }
+      case 'cells': {
+        const map = this.cellsOf(projectId);
+        for (const c of request.cells) map.set(c.id, c);
+        return { op: 'ok' };
+      }
+      case 'breakpoints':
+        return { op: 'breakpoints', media: await win.breakpoints() };
+      case 'cellProbes':
+        return { op: 'probes', results: await win.cellProbes(request.cell) };
       case 'value':
         return { op: 'value', value: await win.value(request.ref) };
       case 'links':
@@ -321,7 +355,7 @@ export class SiteManager {
         return { op: 'revealed' };
       case 'replay': {
         // A second hidden window on the same server and session (SPEC-phase4 §5.2).
-        const device = deviceById(request.ask.start.device ?? null);
+        const device = this.deviceFor(projectId, request.ask.start.device ?? null);
         const answer = await replay(
           projectId,
           live.server.url || win.wc.getURL(),
@@ -591,7 +625,7 @@ export class SiteManager {
     // Only a device Fitts offers, by id: the renderer never sets arbitrary emulation.
     ipcMain.on(IPC.siteDevice, (_e, id: unknown, deviceId: unknown) => {
       if (typeof id !== 'string' || typeof deviceId !== 'string') return;
-      const device = deviceById(deviceId);
+      const device = this.deviceFor(id, deviceId);
       const win = this.window(id);
       if (!win) return;
       void win.emulate(device).catch(() => undefined);

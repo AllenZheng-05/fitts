@@ -3,6 +3,7 @@ import type { Feedback, PageProbeName, PageProbeResult, RequestRecord } from '@f
 import type {
   AppModel,
   AppModelPatch,
+  DeviceCell,
   EngineCall,
   MemoryRule,
   ProjectMemory,
@@ -98,6 +99,14 @@ export type SiteOp =
   | { op: 'viewport' }
   /** Look like a device from DEVICES (null: a desktop browser); answers the one it replaced. */
   | { op: 'device'; id: string | null }
+  /** SPEC-phase4 §6.3: look like a device cell (size, touch, zoom, text spacing, scheme, motion). */
+  | { op: 'cell'; cell: DeviceCell | null }
+  /** The run's cells, so main can show and replay them by id later. */
+  | { op: 'cells'; cells: DeviceCell[] }
+  /** The site's own `@media`/`@container` conditions (same-origin sheets), as text. */
+  | { op: 'breakpoints' }
+  /** The cheap probes for a cell on the page as it is: overflow, and the cell's own check. */
+  | { op: 'cellProbes'; cell: DeviceCell }
   | { op: 'value'; ref: string }
   | { op: 'links'; hrefs: string[] }
   | { op: 'network' }
@@ -263,6 +272,8 @@ export type SiteOpResult =
   | { op: 'items'; items: ProbeItem[] }
   | { op: 'value'; value: string | null }
   | { op: 'device'; previous: string | null }
+  | { op: 'breakpoints'; media: string[] }
+  | { op: 'ok' }
   | { op: 'links'; statuses: Record<string, number> }
   | { op: 'network'; requests: RequestRecord[] }
   | { op: 'released' }

@@ -2865,3 +2865,80 @@ understand the project's CI before coding; and one PR for the whole run.
   to say `replayed` and checks it starts at `/compose/recipient` with at most three steps
   and a test that names `compose-to`; the fixture finding on the mock engine carries a full
   repro so the tab is tested offline.
+
+## Phase 4 — U5: journeys, coverage from the code, the device matrix
+
+- **Journeys are an ability, run before the crawl.** `journey` (SPEC §6.1) takes the decider's
+  pick or the next planned one; the scripted order runs priority 1 and 2 journeys first, then
+  `explore`, then priority 3 while less than half the budget is spent, then the checks. Each
+  step is one Spark call with the screenshot, the goal and plan, the steps so far and the page's
+  controls (`agent/crawler/journey.ts`, `docs/prompts/journey.md`, reasoning low, at most 15
+  actions); the call is logged under the `crawl` task rather than a new ledger task, since it
+  is crawling. Without a model (offline, no key, the e2e build), `PlanJourneyBrain` follows
+  the plan itself: "Tap NEXT" taps the control called NEXT, "Type in Message" types into that
+  field, "Submit the form" taps the submit control, and when the plan runs out the goal counts
+  as met, so journeys run and are tested with no network.
+- **Journeys go through `perform`**, so the gate, the modes, the probes after each action and
+  the trail apply exactly as in the crawl, and every page a journey visits is observed,
+  probed and remembered like the crawl's (coverage counts it). The runner refuses a destructive
+  control the plan didn't name by its words, skips a ref that isn't on the page, and calls a
+  journey stuck after three actions that changed nothing. Typing follows the App Model's form
+  rules: the first time a form is typed into, one invalid value (empty for a required field, a
+  non-email for an email field, letters for a number); after that, valid ones. A pause mid-journey
+  puts it back to planned rather than failing it.
+- **A journey that didn't get there is evidence.** Its last steps and reason are appended to
+  the trace of the page it ended on, which the reviewers read; it becomes a finding when they
+  agree or a probe measured something on the way, as the spec says, with no extra model call.
+  The outcome is in `RunState.journeys` (through `run.patch`) for the proposal card and the
+  decider's `situation.journeys`.
+- **Coverage is seeded from the code.** The App Model's static routes go into `Coverage` at
+  construction (`discover(route, 'code')`); a route is "linked" only when a link on some page
+  points at it (a visit alone doesn't count), so an orphan page the code names reads
+  `unlinked`. `RunState.coverage` (pages known/reached, journeys, controls, cells, and the
+  unreached routes with why: login, data, skipped, unlinked, error) is recomputed in
+  `syncCoverage()` and sent as a patch when it changes; dynamic routes count as "needs data"
+  until a page of that pattern is seen. The proposal card reads `run.coverage` when the run
+  has it and falls back to the model's pages otherwise (the mock engine's fixtures).
+- **`device_pass` replaces `phone_pass`** (the ability, the decider tool, the prompt, the
+  tests). The matrix (`agent/devices/matrix.ts`) is chosen from the site's own `@media` and
+  `@container` width conditions (read from same-origin stylesheets through a new
+  `breakpoints` site op) merged with the App Model's, plus whether the site has
+  `prefers-color-scheme` or `prefers-reduced-motion` rules: 320×640 reflow, phone and phone
+  landscape, B−1 and B for the four most-used breakpoints, 1280 and 1440, 200% text, text
+  spacing, and dark and reduced motion only when the site has them. Cap 10; plain widths
+  within 8px dedupe, with a breakpoint pair pinned (B−1 and B are two layouts on purpose, so a
+  fixed 1280 cell gives way to a 1279/1280 pair). Over the cap, the 1440 desktop goes first,
+  then the landscape phone, then the least-used pairs. demo/chat has no media rules, so its
+  matrix is the seven base cells.
+- **A cell is a device the site window can emulate.** `emulate()` takes a `DeviceCell` as
+  well as a `SiteDevice`: size and touch as before, plus `setZoomFactor(2)` for 200% text,
+  `Emulation.setEmulatedMedia` for the scheme and motion preferences, and WCAG 1.4.12's
+  spacing as a stylesheet inserted on every load in the text-spacing cell. Main remembers each
+  project's cells by id (the `cells` op), so the device picker, "Show me on the site" and the
+  replayer can switch to a cell later; the picker lists the run's cells after the fixed
+  devices. `Finding.seenOn` is the cell id for anything a cell found; the aggregator names the
+  cell in the title ("on a phone" for mobile cells, else the cell's label) and in the evidence.
+- **Cost control as the spec asks:** every reached page (up to eight) gets the cheap probes in
+  every cell through one `cellProbes` op: overflow and clipped text at the cell's width, the
+  cell's own check (`text-spacing`, `resize-text`, `orientation`: three new page-script
+  probes with templates and standards rows), contrast and target size. Only the phone cell
+  takes a screenshot (the reviewers' second view of each page, as before). Only problems the
+  desktop pass and earlier cells didn't see are kept, so a finding in a cell is something that
+  goes wrong there.
+- **Planted #26** on demo/chat: the settings list has `min-width: 296px`, which with the
+  page's 44px of padding reaches 340px: it fits at 360px (the old viewport sweep's narrowest
+  width) and overflows at 320px, so only the reflow cell finds it. PLANTED.md, the bench list
+  and the check script count 26.
+- **Overflow is measured against the visual viewport.** In mobile emulation Chromium grows the
+  layout viewport (`window.innerWidth`) to fit content wider than the screen (a 340px page at
+  320px reports `innerWidth` 341), so the old "scrollWidth > innerWidth" check could never fire
+  in a mobile cell. The page script's `viewportWidth()` takes the smaller of `innerWidth`,
+  `visualViewport.width` and the cell's width; the 200% text check uses the same. Found by
+  measuring demo/chat in an emulated window when the e2e kept missing #26.
+- **The device pass visits up to twelve pages per cell** (the phone pass visited eight) with a
+  350 ms settle each: demo/chat reaches nine, so eight would have skipped Settings. Seven cells
+  × nine pages adds about a minute to the demo/chat crawl in e2e.
+- **Not done in U5, kept for later rather than cut:** saved test logins for gated routes (§6.2,
+  cut order #10) and V8 code coverage in the App Map (#1, "only if U1–U8 are done"). The
+  login-wall card keeps saying logins are coming. If they're not reached before the freeze, they
+  move to ROADMAP's cut list.

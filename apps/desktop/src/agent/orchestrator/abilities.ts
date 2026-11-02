@@ -4,7 +4,10 @@
 
 export type AbilityName =
   | 'explore'
-  | 'phone_pass'
+  /** SPEC-phase4 §6.1: one of the App Model's journeys, end to end. */
+  | 'journey'
+  /** SPEC-phase4 §6.3: every explored page at every cell of the device matrix (was phone_pass). */
+  | 'device_pass'
   | 'check_links'
   | 'review'
   | 'check_theme'
@@ -27,6 +30,8 @@ export interface Decision {
   ability: AbilityName;
   /** `explore`: the page to go to first. */
   route?: string;
+  /** `journey`: which one; empty for the next planned. */
+  journeyId?: string;
   /** `skip_pages`: the pages the owner wants skipped. */
   paths?: string[];
   /** `new_look`: what the owner wants; `revise_looks`: what they said about the looks. */
@@ -91,6 +96,13 @@ export interface Situation {
   app?: { summary: string; pages: string[]; journeys: string[] };
   /** SPEC-phase4 §4.3: what the owner told Fitts on earlier runs, in one line. */
   memory?: string;
+  /** SPEC-phase4 §6.1: the App Model's journeys and how far each got. */
+  journeys?: {
+    id: string;
+    name: string;
+    priority: 1 | 2 | 3;
+    status: 'planned' | 'running' | 'done' | 'failed' | 'blocked';
+  }[];
 }
 
 export interface Decider {
@@ -98,8 +110,10 @@ export interface Decider {
 }
 
 /**
- * Phase 2's order, as a decider (§1.2's fallback): explore until the crawl ends, then the phone
- * pass, links, the review, the theme, a look if there is one, fixes, and the finish proposal.
+ * Phase 2's order, as a decider (§1.2's fallback), with SPEC-phase4 §6.1's journeys: priority 1
+ * and 2 journeys first, explore until the crawl ends, priority 3 journeys while the budget has
+ * room, then the device pass, links, the review, the theme, a look if there is one, fixes, and
+ * the finish proposal.
  */
 export class ScriptedDecider implements Decider {
   next(s: Situation): Promise<Decision> {
@@ -108,8 +122,12 @@ export class ScriptedDecider implements Decider {
 }
 
 export function scriptedNext(s: Situation): AbilityName {
+  const planned = (ok: (priority: number) => boolean) =>
+    s.journeys?.some((j) => j.status === 'planned' && ok(j.priority)) ?? false;
+  if (planned((p) => p <= 2)) return 'journey';
   if (!s.coverage.ended) return 'explore';
-  const order: AbilityName[] = ['phone_pass', 'check_links', 'review', 'check_theme'];
+  if (planned((p) => p === 3) && s.budget.spentUsd < s.budget.capUsd * 0.5) return 'journey';
+  const order: AbilityName[] = ['device_pass', 'check_links', 'review', 'check_theme'];
   for (const a of order) if (!s.ran[a]) return a;
   if (!s.live && !s.ran.looks) return 'looks';
   if (!s.live && !s.ran.fix) return 'fix';
