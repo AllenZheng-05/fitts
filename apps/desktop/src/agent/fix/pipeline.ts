@@ -15,6 +15,7 @@ import type {
   DeviceCell,
   Finding,
   Mode,
+  ProbeItem,
   ProbeName,
   ProbeResult,
   RunEvent,
@@ -32,6 +33,7 @@ import type {
   VerifyResult,
 } from '../protocol';
 import { problems, type Check } from '../review/aggregate';
+import { recheckAsk, recheckItems, type Recheck } from './recheck';
 import type { Direction } from '../review/themefit';
 import type { Site } from '../site-client';
 import {
@@ -89,6 +91,8 @@ export const MAX_REPAIRS = 3;
  * or the owner's approval and "Checked by review": no fix is "verified" without proof.
  */
 const VERIFIABLE = new Set<ProbeName>([...PAGE_PROBES, 'focus-visible', 'viewport-sweep', 'links']);
+/** Checks re-run on the worktree by the replayer (Allen, Nov 2): verified, not reviewed. */
+const RECHECKED = new Set<ProbeName>(['navigation', 'keyboard']);
 const TRACE = new Set<ProbeName>([
   'feedback-timing',
   'back-mid-flow',
@@ -97,8 +101,8 @@ const TRACE = new Set<ProbeName>([
   'placeholder-leak',
 ]);
 
-/** How a fix is checked: a probe on the page, its repro replayed, or a reviewer's look. */
-export type CheckedBy = 'probe' | 'replay' | 'review';
+/** How a fix is checked: a probe on the page, its own check re-run, its repro replayed, or a reviewer's look. */
+export type CheckedBy = 'probe' | 'recheck' | 'replay' | 'review';
 
 /** A trace finding's repro, as the worktree's replayer runs it, and its oracle. */
 export interface TraceReplay {
@@ -138,6 +142,8 @@ export interface PipelineHost {
   cell?(id: string): DeviceCell | undefined;
   /** A trace finding's confirmed repro (§7.5), when the replayer saw it again. */
   traceReplay?(findingId: string): TraceReplay | undefined;
+  /** A navigation or keyboard finding's own check, to run again on the worktree (recheck.ts). */
+  recheck?(findingId: string): Recheck | undefined;
   /**
    * "Checked by review" (§7.5): a reviewer compares the page before and the fixed page
    * (`after`, a JPEG) with what the finding expected.
@@ -211,6 +217,21 @@ const slug = (s: string) =>
 
 const isAuto = (mode: Mode) => mode === 'autonomous' || mode === 'dangerous';
 
+/** Problems at severity ≥ 2 in `results` that the run's own results for the page didn't have. */
+export function freshProblems(
+  results: { probe: ProbeName; pass: boolean; items: ProbeItem[] }[],
+  baseline: ProbeResult[],
+): string[] {
+  const before = new Set<string>();
+  for (const r of baseline)
+    for (const k of problems(r.probe, r.pass ? [] : r.items).keys()) before.add(k);
+  const out: string[] = [];
+  for (const r of results)
+    for (const [k, v] of problems(r.probe, r.pass ? [] : r.items))
+      if (!before.has(k) && v >= 2) out.push(k.split('|')[1] ?? k);
+  return [...new Set(out)];
+}
+
 /** §9.2: pass = the check's problem is gone and nothing new at severity ≥ 2. */
 export function judge(check: Check, after: VerifyResult, baseline: ProbeResult[]): string | null {
   if (!after.ok) return after.error ?? 'verification didn’t run';
@@ -272,9 +293,11 @@ export function fixSection(
       ? `A reviewer compared ${f.route} before and after this change with what was expected. Checked by review, not measured: your tests and CI still decide.`
       : by === 'replay'
         ? `Replayed the repro steps on this branch's dev server: the problem no longer happens.`
-        : check
-          ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).`
-          : 'Re-checked by the reviewer panel.',
+        : by === 'recheck' && check
+          ? `Ran the ${check.probe} check again on this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared on the page.`
+          : check
+            ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).`
+            : 'Re-checked by the reviewer panel.',
     '',
     `### Repro`,
     ...reproLines(f),
@@ -406,6 +429,9 @@ export class FixPipeline {
     if (check && VERIFIABLE.has(check.probe)) {
       // A problem seen in one cell is checked in that cell: without the cell it can't be.
       if (!check.device || this.host.cell?.(check.device)) return 'probe';
+    }
+    if (check && RECHECKED.has(check.probe) && this.host.recheck?.(id)) {
+      if (!check.device || this.host.cell?.(check.device)) return 'recheck';
     }
     if (check && TRACE.has(check.probe) && this.host.traceReplay?.(id)) return 'replay';
     if (owner && this.host.checkByReview) {
@@ -683,6 +709,36 @@ export class FixPipeline {
       })) as VerifyResult;
       const probe = judge(check, after, this.host.baseline(route));
       return probe ? probeVerdict(probe, after) : null;
+    }
+    if (by === 'recheck' && check) {
+      const spec = this.host.recheck?.(f.id);
+      if (!spec)
+        return { reason: 'its check isn’t available', detail: 'its check isn’t available' };
+      const answer = (await this.site.fix({
+        fn: 'replay',
+        job,
+        ask: recheckAsk(spec, check.device ?? null),
+        ...(device ? { device } : {}),
+      })) as ReplayAnswer;
+      const items = recheckItems(spec, answer);
+      if (!Array.isArray(items)) return { reason: items.error, detail: items.error };
+      if (problems(check.probe, items).has(`${check.probe}|${check.title}`)) {
+        const reason = `the ${check.probe} check still reports “${check.title}”`;
+        return {
+          reason,
+          detail: [
+            reason,
+            ...items.slice(0, 6).map((i) => `- ${i.measured} (expected ${i.expected})`),
+          ].join('\n'),
+        };
+      }
+      // Nothing new breaks: the page probes on the same page, against the run's own.
+      const fresh = freshProblems(answer.results, this.host.baseline(route));
+      if (fresh.length) {
+        const reason = `it caused a new problem: ${fresh.join(', ')}`;
+        return { reason, detail: reason };
+      }
+      return null;
     }
     if (by === 'replay') {
       const trace = this.host.traceReplay?.(f.id);

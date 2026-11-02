@@ -43,6 +43,12 @@ export interface ReplayAsk {
   viewport?: boolean;
   /** The ref of a field whose value to read after the steps (back-mid-flow's oracle). */
   fieldValueOf?: string;
+  /** Allen, Nov 2: a fix's recheck (agent/fix/recheck.ts). The Tab sweep after the steps. */
+  keyboard?: boolean;
+  /** The dialog checks after the steps (the steps open it). */
+  dialog?: boolean;
+  /** Last: this path loaded fresh, then reloaded (refresh and soft-404 checks). */
+  facts?: string;
 }
 
 export interface ReplayAnswer {
@@ -58,6 +64,9 @@ export interface ReplayAnswer {
   missing: number[];
   snapshot?: AxSnapshot;
   value?: string | null;
+  keyboard?: { stops: TabStop[]; facts: KeyboardFacts };
+  dialog?: DialogCheck | null;
+  facts?: PageFacts;
 }
 
 /** One interactive element, as the crawler sees it (an accessibility-style snapshot). */

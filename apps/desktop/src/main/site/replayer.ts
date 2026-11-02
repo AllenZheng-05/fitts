@@ -80,11 +80,15 @@ export async function replay(
     const results = await win.runProbes(req.probes ?? PAGE_PROBES).catch(() => []);
     const focus = req.focus ? await win.focusSweep().catch(() => []) : [];
     const viewport = req.viewport ? await win.viewportSweep().catch(() => []) : [];
+    const dialog = req.dialog ? await win.dialogCheck().catch(() => null) : undefined;
+    const keyboard = req.keyboard ? await win.keyboardSweep().catch(() => undefined) : undefined;
     const snapshot = await win.snapshot().catch(() => undefined);
     const value = req.fieldValueOf
       ? await win.value(req.fieldValueOf).catch(() => null)
       : undefined;
     const path = snapshot?.path ?? req.start.path;
+    // Last, since it leaves the page: a fresh load and a reload of this path.
+    const facts = req.facts ? await win.facts(req.facts).catch(() => undefined) : undefined;
     return {
       ok: true,
       path,
@@ -95,6 +99,9 @@ export async function replay(
       missing,
       ...(snapshot ? { snapshot } : {}),
       ...(value !== undefined ? { value } : {}),
+      ...(dialog !== undefined ? { dialog } : {}),
+      ...(keyboard ? { keyboard } : {}),
+      ...(facts ? { facts } : {}),
     };
   } catch (e) {
     return {

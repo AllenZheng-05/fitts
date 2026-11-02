@@ -3304,3 +3304,29 @@ cuts.
   - Its usage goes to the ledger as Wonder tokens.
 - **Tests never reach it:** e2e runs offline (no fixer, no Pass 2 model), and unit tests use a
   fake Muse function.
+
+## Phase 4 — navigation and keyboard findings verifiable (Allen, Nov 2)
+
+- **The finding's own check runs again on the worktree, through the replayer** (which already
+  runs on the worktree's dev server, in the finding's cell). The replayer can now also return a
+  Tab sweep, the dialog checks and a path's fresh load plus reload. The crawl's pure checks
+  (`refreshProblem`, `soft404`, `wrongPlace`, `keyboardProblems`, `dialogProblems`) judge what it
+  measured (`agent/fix/recheck.ts`). Pass means the finding's title is gone from what the same
+  check reports now, and no new severity-2+ problem appears in the page probes against the
+  run's own results for that page. That last part applies to refresh and keyboard; the soft 404
+  and the wrong destination end on another page, so it doesn't. These fixes are "verified",
+  not "Checked by review".
+- **What each kind runs:**
+  - Refresh: a fresh load and a reload of the route, compared with the headings the crawl saw
+    there.
+  - Soft 404: a made-up address (`/fitts-not-a-page-recheck`), compared with the home page's
+    headings.
+  - Wrong destination: the same click, found by ref or by role and name, and where it lands
+    against the link's own destination (a control that's gone fails).
+  - Keyboard: the full Tab sweep on the route.
+  - A dialog finding: the repro steps that opened the dialog, then the four dialog checks. With
+    no steps, or the dialog not opening, the fix fails with that reason.
+- **Still not verifiable:** the redirect kinds (loops, long chains, unexpected logins, dropped
+  queries, the Back trap) need the redirecting click and its hops replayed. Surprise and perf
+  findings stay "Checked by review", as Allen asked.
+- A failed or unmeasured recheck is a reason the fix fails, never a pass.

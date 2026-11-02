@@ -22,7 +22,7 @@ import {
 } from '@fitts/schema';
 import type { BudgetGuard } from '../ledger/budget';
 import type { CostLedger } from '../ledger/ledger';
-import type { AxSnapshot, HeldRequest, OpTrace } from '../protocol';
+import type { AxSnapshot, HeldRequest, OpTrace, ReplayStep } from '../protocol';
 import type { SiteRect } from '@fitts/schema';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
@@ -61,7 +61,8 @@ import type { Converse } from './decider';
 import { applyRules, memoryForReviewers, memoryLine, ruleFor } from '../memory/rules';
 import { ownerFinding, plainDraft, type ReportDraft, type ReportInput } from './report';
 import { buildRepro, oracleFor, pruneTrail, type TrailStep } from '../repro/repro';
-import { confirm as confirmRepro, traceReplay } from '../repro/replay';
+import { confirm as confirmRepro, replaySteps, traceReplay } from '../repro/replay';
+import { recheckFor, type Recheck } from '../fix/recheck';
 import { playwrightTest } from '../repro/playwright';
 import { titleOf } from '../review/aggregate';
 import {
@@ -235,6 +236,8 @@ export class RealRun {
   private cells: DeviceCell[] = [];
   /** SPEC-phase4 §7.5: each trace finding's confirmed repro, for checking its fix. */
   private readonly traceReplays = new Map<string, TraceReplay>();
+  /** Each finding's repro steps as the replayer takes them (a dialog's recheck opens it). */
+  private readonly reproSteps = new Map<string, ReplayStep[]>();
   /** SPEC-phase4 §6A: what Fitts noticed, in order; keys of probe notes already made. */
   private readonly observations: Observation[] = [];
   private readonly noted = new Set<string>();
@@ -1569,6 +1572,23 @@ export class RealRun {
     }).then((answer) => ({ yes: answer === copy.fitts.goAhead, itemId }));
   }
 
+  /** A navigation or keyboard finding's own check, to run again on a fix's worktree. */
+  private recheckOf(id: string): Recheck | undefined {
+    const check = this.checks.get(id);
+    if (!check || (check.probe !== 'navigation' && check.probe !== 'keyboard')) return undefined;
+    const probe = check.probe;
+    const hit = this.probes.results
+      .filter((r) => r.probe === probe && !r.pass && (r.device ?? undefined) === check.device)
+      .flatMap((r) => r.items.map((i) => ({ i, route: r.route })))
+      .find((x) => titleOf(probe, x.i) === check.title);
+    if (!hit) return undefined;
+    return recheckFor(probe, hit.i, hit.route, {
+      headings: (route) => this.probes.headings(route),
+      needsFlow: (route) => this.probes.needsFlow(route),
+      steps: this.reproSteps.get(id) ?? [],
+    });
+  }
+
   /** A device cell of this run (or a built-in device) by id. */
   private cellFor(id: string): DeviceCell | undefined {
     const device = DEVICES.find((d) => d.id === id);
@@ -2310,6 +2330,7 @@ export class RealRun {
         appModel: () => this.deps.appModel,
         cell: (id) => this.cellFor(id),
         traceReplay: (id) => this.traceReplays.get(id),
+        recheck: (id) => this.recheckOf(id),
         askItem: (text) => this.askItem(text),
         ...(this.deps.reviewCheck
           ? {
@@ -3075,6 +3096,7 @@ export class RealRun {
       );
       if (steps !== pruned) repro = buildRepro({ ...input, steps });
       repro = { ...repro, confirmed };
+      this.reproSteps.set(f.id, replaySteps(steps));
       // SPEC-phase4 §7.5: a trace finding seen again can have its fix checked the same way.
       const oracle = oracleFor(f, check);
       if (confirmed === 'replayed' && oracle.kind === 'trace')

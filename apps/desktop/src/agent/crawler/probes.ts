@@ -100,6 +100,11 @@ export class ProbeRunner {
     this.add(r.probe, route, r.items, r.summary ? `${label}: ${r.summary}` : label);
   }
 
+  /** A route's headings when the crawl reached it (a fix's recheck compares against them). */
+  headings(route: string): string[] {
+    return this.headingsOf.get(route) ?? [];
+  }
+
   /** Every page the crawl sees: remember its labels and links; probe it on the first visit. */
   async onPage(snap: AxSnapshot): Promise<void> {
     const route = routeOf(snap.path);
