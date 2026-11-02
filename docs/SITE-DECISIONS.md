@@ -51,3 +51,45 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
   `test:e2e` (Playwright). Playwright uses the system Edge (`channel: 'msedge'`), since no
   Playwright browsers are installed here. The root `pnpm test` isn't changed on this branch
   (the spec limits changes to apps/site); the merge note says the one line to add.
+
+## Step 2 — What Fitts checks
+
+- **Where each list comes from.** Imported from packages/*: the probe names (`ProbeName`, so a new
+  probe fails the catalog test until it's listed), WCAG criteria per probe (`PROBE_STANDARDS`,
+  `WCAG`), the speed limits and throttling (`LIMITS`, `SLOW_4G`, `CPU_SLOWDOWN`) and
+  `PAGE_PROBES`. Copied from apps/desktop, each with a comparison in
+  `tests/unit/catalog.test.ts`:
+  - each probe check's title and heuristic: the test runs the app's `template()` (aggregate.ts)
+    on the check's sample measurement and compares;
+  - how fixes are checked: `VERIFIABLE`, `RECHECKED` and `TRACE` from fix/pipeline.ts (read from
+    the source text, since they aren't exported);
+  - the screen-size cells every run starts from: the test calls the app's `chooseCells()`;
+  - axe's tags (`AXE_TAGS` in packages/probes/src/page.ts, not exported) and Android's 48 dp.
+  The prose (what each check looks at, how it's measured) is written for the site from the code
+  and SPEC-phase4 §6B and §9.3.
+- **Groups.** The spec's lenses, plus "Feedback and flow" for the trace checks (feedback timing,
+  back mid-flow, error messages, labels, placeholder leaks) and the five reviewers, which fit no
+  other lens. Broken links sit under Navigation, request checks under Speed, fonts and spacing
+  under Brand and look, target size under Fitts's law.
+- **Evidence labels.** Probe checks are Measured. The popped-up, jumped and scrolled-by-itself
+  moments (web and Android) are Judged by Muse Wonder. Tab order, focus moved by itself, the
+  empty state, the theme check, the Android brand check and the five reviewers are Reviewers.
+- **After a fix.** From the pipeline's `checkedBy`: measured again, the check run again, or the
+  steps replayed. A probe finding in none of those sets (surprises, states, speed, text spacing,
+  200% text, orientation, Fitts's law, requests) has no way to be checked, so the code leaves it
+  to the owner: "Reported for you to fix". Reviewer and judge findings are fixed only when the
+  owner asks, "Checked by review". PROGRESS says surprise and perf fixes "stay Checked by
+  review"; the code says a probe finding Fitts can't re-check isn't fixable, so the site follows
+  the code.
+- **States.** All three state_pass cases are built (error, empty, slow). Error and slow give
+  measured findings; empty runs the probes (placeholder leaks) and gives the reviewers the shot,
+  so it's listed as Reviewers.
+- **Speed.** The perf pass measures LCP, CLS, TBT and file sizes on the dev server. INP and
+  page-change timing exist in the thresholds but aren't measured yet, so they aren't listed.
+- **Benches.** No bench:chat run on Nov 2 passed every line: all three were over the bench's bar
+  of 2 unplanted findings at severity 2 or more. The site names the latest run (06:55: 29/33,
+  29/48, 29/37, $0.19) and says it missed that line, rather than picking the best recall (03:57,
+  30/33). Android: the 13:00 CST audit (6/10, $1.07) with what it found and missed. Fixes: the
+  U9 fix run (3 of 3, $2.65), saying which two were verified by measuring and that the brand fix
+  was checked by review; its audit's 6/10 is from the same run. Numbers aren't rounded up:
+  88%, 60%, 78% are PROGRESS's.

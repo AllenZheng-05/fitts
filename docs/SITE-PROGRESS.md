@@ -9,7 +9,7 @@ Working log for the fitts.allenzheng.com redesign (docs/SPEC-site.md), on branch
 | --- | ------------------------------------------------------------- | ------ |
 | 0   | Save the spec                                                 | done   |
 | 1   | Home, Download, the field, still image, shell, 404, claims    | done   |
-| 2   | What Fitts checks, from the code, drift test, How well it works | todo |
+| 2   | What Fitts checks, from the code, drift test, How well it works | done |
 | 3   | How it works                                                  | todo   |
 | 4   | Showcase scaffold and the media manifest                      | todo   |
 | 5   | Checks, e2e, and the Fitts audit                              | todo   |
@@ -36,3 +36,12 @@ Working log for the fitts.allenzheng.com redesign (docs/SPEC-site.md), on branch
 
 The field's chunk is mostly Rapier's WebAssembly, inlined by @react-three/rapier. Measured
 transfer sizes from the browser are recorded in step 5.
+
+## Step 2
+
+- `/checks/`: Paul Fitts and the formula, Nielsen's 10 corrected for Phase 4, the catalog (67
+  checks in 11 groups; filter buttons with `aria-pressed`, the count in a `role="status"`
+  region), the evidence rule, and How well it works (three bench runs from PROGRESS).
+- `tests/unit/catalog.test.ts`: 8 tests holding the catalog to the code. Every check's title and
+  heuristic matched the app's `template()` on the first run.
+- The checks chunk is 41 kB (13 kB gzip).
