@@ -8,6 +8,7 @@ import {
   appendFileSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -15,6 +16,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -38,9 +40,50 @@ import { grant, mayEdit, newScope, type FixMode, type Scope } from './allowlist'
 import { museExec, museStatus, type MuseStatus } from './muse';
 import { replay } from '../site/replayer';
 import { Adb, adbRunner, findTool, readAppJson } from '../android/adb';
+import { AndroidWindow } from '../android/window';
 import { nativeImage } from 'electron';
 
 /** An Expo (or React Native) app: it's verified on the Android device, not in a window. */
+/**
+ * A worktree's node_modules may be a junction to the project's own (`dependencies`). It's unlinked
+ * before the worktree goes, so a removal that fails half-way (Windows' long paths) and a recursive
+ * delete after it can never reach into the project's packages.
+ */
+function unlinkDeps(dir: string): void {
+  const mods = join(dir, 'node_modules');
+  try {
+    if (lstatSync(mods).isSymbolicLink()) unlinkSync(mods);
+  } catch {
+    // Not there: nothing to unlink.
+  }
+}
+
+/**
+ * A worktree's link to its repository: its `.git` file and the `gitdir` file in the repository's
+ * worktree folder. Muse Code in WSL can't follow a Windows `gitdir: C:/…` and has rewritten both
+ * to `/mnt/c/…` (`git worktree repair`), after which Windows git can't commit there. The link is
+ * read before a run; the returned function puts back whatever changed.
+ */
+export function keepGitLink(dir: string): () => void {
+  const dotGit = join(dir, '.git');
+  const read = (p: string) => {
+    try {
+      return readFileSync(p, 'utf8');
+    } catch {
+      return undefined;
+    }
+  };
+  const link = read(dotGit);
+  const admin = /^gitdir: (.+)$/m.exec(link ?? '')?.[1]?.trim();
+  if (!link || !admin) return () => undefined;
+  const back = join(admin, 'gitdir');
+  const backLink = read(back);
+  return () => {
+    if (read(dotGit) !== link) writeFileSync(dotGit, link);
+    if (backLink !== undefined && read(back) !== backLink) writeFileSync(back, backLink);
+  };
+}
+
 function isExpo(dir: string): boolean {
   try {
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
@@ -329,6 +372,7 @@ export class FixHost {
       };
     const taskName = `${job.dir.split(sep).pop() ?? 'job'}.task.md`;
     writeFileSync(join(dirname(job.dir), taskName), task);
+    const restoreLink = keepGitLink(job.dir);
     const res = await museExec({
       via: status.via,
       cwd: job.dir,
@@ -337,6 +381,7 @@ export class FixHost {
       ...(model ? { model } : {}),
       ...(maxSteps ? { maxSteps } : {}),
     });
+    restoreLink();
     rmSync(join(dirname(job.dir), taskName), { force: true });
     const changed = (await git(job.dir, 'status', '--porcelain')).stdout
       .split('\n')
@@ -384,6 +429,7 @@ export class FixHost {
     const name = dir.split(sep).pop() ?? 'read';
     writeFileSync(join(base, `${name}.prompt.md`), prompt);
     writeFileSync(join(base, `${name}.schema.json`), JSON.stringify(schema));
+    const restoreLink = keepGitLink(dir);
     try {
       const res = await museExec({
         via: status.via,
@@ -402,6 +448,7 @@ export class FixHost {
         ...(res.error ? { error: res.error } : {}),
       };
     } finally {
+      restoreLink();
       await git(root, 'worktree', 'remove', '--force', dir);
       rmSync(join(base, `${name}.prompt.md`), { force: true });
       rmSync(join(base, `${name}.schema.json`), { force: true });
@@ -496,48 +543,87 @@ export class FixHost {
 
   /**
    * SPEC-phase4 §9.4 on Android: the worktree gets its own Metro on a free port; the dev client
-   * is re-pointed at it (reopening its URL: deterministic, unlike Fast Refresh), each route is
-   * shot, then the app is pointed back at the live Metro (8081).
+   * is re-pointed at it (reopening its URL: deterministic, unlike Fast Refresh) and `fn` runs on
+   * the fixed app; then the app is pointed back at the live Metro (8081), whatever happened.
    */
-  private async androidPages(job: Job, routes: string[]): Promise<VerifyPagesResult> {
+  private async onWorktreeApp<T>(
+    job: Job,
+    fn: (app: {
+      adb: Adb;
+      go: (route: string) => Promise<void>;
+      info: ReturnType<typeof readAppJson>;
+    }) => Promise<T>,
+  ): Promise<T | { error: string }> {
     const adbPath = findTool('adb');
-    if (!adbPath) return { ok: false, error: 'the Android SDK isn’t installed here', pages: [] };
+    if (!adbPath) return { error: 'the Android SDK isn’t installed here' };
     const serial = (await new Adb(adbRunner(adbPath)).devices())[0];
-    if (!serial) return { ok: false, error: 'no Android device is running', pages: [] };
+    if (!serial) return { error: 'no Android device is running' };
     const adb = new Adb(adbRunner(adbPath, serial));
-    const app = readAppJson(job.dir);
+    const info = readAppJson(job.dir);
+    // Expo writes to the project when it starts (tsconfig.json for typed routes); what its Metro
+    // changes is put back afterwards, so only the fix's own edits reach a commit.
+    const changedNow = async () =>
+      new Set(
+        (await git(job.dir, 'status', '--porcelain')).stdout
+          .split('\n')
+          .map((l) => l.slice(3).trim())
+          .filter(Boolean),
+      );
+    const before = await changedNow();
     const port = await this.freePort();
     const server = new DevServer(job.dir, `npx expo start --dev-client --port ${port}`, port);
     const openOn = (p: number) =>
       adb.open(
-        `exp+${app.slug}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${p}`)}`,
+        `exp+${info.slug}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${p}`)}`,
       );
-    const ready = async (timeoutMs: number) => {
+    const controls = async () => /clickable="true"/.test(await adb.dump());
+    const ready = async (timeoutMs: number, reload = false) => {
+      // After a reopen the old app's controls stay up until the reload clears them; a check on
+      // them would measure the app before the fix.
+      if (reload)
+        for (const end = Date.now() + 8000; Date.now() < end && (await controls());)
+          await new Promise((r) => setTimeout(r, 500));
       for (const end = Date.now() + timeoutMs; Date.now() < end;) {
-        if (/clickable="true"/.test(await adb.dump())) return true;
+        if (await controls()) return true;
         await new Promise((r) => setTimeout(r, 1000));
       }
       return false;
     };
     try {
       if (!(await server.start(180_000)))
-        return {
-          ok: false,
-          error: `the worktree's Metro didn't start: ${server.log.slice(-3).join(' ')}`,
-          pages: [],
-        };
+        return { error: `the worktree's Metro didn't start: ${server.log.slice(-3).join(' ')}` };
       await adb.reverse(port);
       await openOn(port);
       // The first bundle from a new Metro takes a while.
-      if (!(await ready(120_000)))
-        return { ok: false, error: 'the app didn’t open on the fixed branch', pages: [] };
-      const pages: VerifyPagesResult['pages'] = [];
-      for (const route of routes) {
-        if (route !== '/' && app.scheme) {
-          await adb.open(`${app.scheme}://${route.replace(/^\//, '')}`);
+      if (!(await ready(120_000, true)))
+        return { error: 'the app didn’t open on the fixed branch' };
+      const go = async (route: string) => {
+        if (route !== '/' && info.scheme) {
+          await adb.open(`${info.scheme}://${route.replace(/^\//, '')}`);
           await ready(15_000);
         }
         await new Promise((r) => setTimeout(r, 1200));
+      };
+      return await fn({ adb, go, info });
+    } finally {
+      await openOn(8081).catch(() => false);
+      server.stop();
+      this.ports.delete(port);
+      for (const file of await changedNow()) {
+        if (before.has(file)) continue;
+        const tracked = (await git(job.dir, 'ls-files', '--error-unmatch', file)).code === 0;
+        if (tracked) await git(job.dir, 'checkout', '--', file);
+        else rmSync(join(job.dir, file), { force: true, recursive: true });
+      }
+    }
+  }
+
+  /** The fixed app's screens, shot (a redesign's or a reviewer-only fix's after pictures). */
+  private async androidPages(job: Job, routes: string[]): Promise<VerifyPagesResult> {
+    const r = await this.onWorktreeApp(job, async ({ adb, go }) => {
+      const pages: VerifyPagesResult['pages'] = [];
+      for (const route of routes) {
+        await go(route);
         const img = nativeImage.createFromBuffer(await adb.screencap());
         pages.push({
           route,
@@ -549,12 +635,33 @@ export class FixHost {
         });
       }
       return { ok: true, pages };
-    } finally {
-      // Back to the live app, whatever happened.
-      await openOn(8081).catch(() => false);
-      server.stop();
-      this.ports.delete(port);
-    }
+    });
+    return 'error' in r ? { ok: false, error: r.error, pages: [] } : r;
+  }
+
+  /** SPEC-phase4 §9.4: the Android probes again, on the fixed app's screen. */
+  private async androidVerify(job: Job, route: string): Promise<VerifyResult> {
+    const r = await this.onWorktreeApp(job, async ({ adb, go, info }) => {
+      await go(route);
+      const win = new AndroidWindow(
+        adb,
+        () => undefined,
+        () => undefined,
+        undefined,
+        {
+          ...(info.appId ? { appId: info.appId } : {}),
+        },
+      );
+      await win.start();
+      try {
+        return { ok: true, results: await win.probes(), focus: [], viewport: [], links: {} };
+      } finally {
+        win.stop();
+      }
+    });
+    return 'error' in r
+      ? { ok: false, error: r.error, results: [], focus: [], viewport: [], links: {} }
+      : r;
   }
 
   /** The worktree's dev server, a hidden window on the route, and the page probes (§9.2). */
@@ -593,6 +700,7 @@ export class FixHost {
     device?: DeviceCell | null,
   ): Promise<VerifyResult> {
     const job = this.job(id);
+    if (isExpo(job.dir)) return this.androidVerify(job, route);
     const port = await this.freePort();
     const server = new DevServer(
       job.dir,
@@ -888,6 +996,7 @@ export class FixHost {
     const job = this.jobs.get(id);
     if (!job) return;
     this.jobs.delete(id);
+    unlinkDeps(job.dir);
     await git(job.root, 'worktree', 'remove', '--force', job.dir);
     await git(job.root, 'branch', '-q', '-D', job.branch);
   }
@@ -961,8 +1070,10 @@ export class FixHost {
     const list = await git(root, 'worktree', 'list', '--porcelain');
     for (const line of list.stdout.split(/\r?\n/)) {
       const path = /^worktree (.+)$/.exec(line)?.[1];
-      if (path && resolve(path).startsWith(runDir + sep))
+      if (path && resolve(path).startsWith(runDir + sep)) {
+        unlinkDeps(resolve(path));
         await git(root, 'worktree', 'remove', '--force', resolve(path));
+      }
     }
     await git(root, 'worktree', 'prune');
     rmSync(runDir, { recursive: true, force: true });

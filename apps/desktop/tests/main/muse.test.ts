@@ -2,7 +2,9 @@
 // Muse Code detection and the command line (SPEC-phase4 §7.4), with a fake runner: no process
 // is started and no key is ever on a command line.
 import { describe, expect, it } from 'vitest';
-import { MUSE_SAFE_FLAGS, museCommand, museStatus } from '../../src/main/fix/muse';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { MUSE_SAFE_FLAGS, museCommand, museStatus, readMuseEvent } from '../../src/main/fix/muse';
 
 type Res = { code: number; stdout: string; stderr: string };
 const runner = (answers: Record<string, Res>) => (cmd: string, args: string[]) =>
@@ -98,5 +100,45 @@ describe('museCommand', () => {
       '--disable-request-user-input',
       '--no-session-log',
     ]);
+  });
+});
+
+describe('readMuseEvent', () => {
+  const tally = () => ({
+    usage: { input: 0, output: 0, cached: 0, reasoning: 0 },
+    summary: '',
+    final: '',
+  });
+  const usageEvent = (input: number, output: number) => ({
+    payload_type: 'run.usage',
+    payload: {
+      models: [
+        { input_tokens: input, output_tokens: output, cached_tokens: 10, reasoning_tokens: 5 },
+        { input_tokens: 1, output_tokens: 1, cached_tokens: 0, reasoning_tokens: 0 },
+      ],
+    },
+  });
+
+  it('reads the final answer from a real run’s events (the echo provider)', () => {
+    const t = tally();
+    const lines = readFileSync(resolve(__dirname, '../fixtures/muse/echo.jsonl'), 'utf8');
+    for (const l of lines.split('\n').filter(Boolean))
+      readMuseEvent(t, JSON.parse(l) as Record<string, unknown>);
+    expect(t.final).toBe('echo: say hi');
+    expect(t.summary).toBe('echo: say hi');
+    expect(t.usage).toEqual({ input: 0, output: 0, cached: 0, reasoning: 0 });
+  });
+
+  it('usage is the latest totals, summed over models, not added up event by event', () => {
+    const t = tally();
+    readMuseEvent(t, usageEvent(100, 20));
+    readMuseEvent(t, usageEvent(300, 50));
+    expect(t.usage).toEqual({ input: 301, output: 51, cached: 10, reasoning: 5 });
+  });
+
+  it('ignores events without the envelope', () => {
+    const t = tally();
+    readMuseEvent(t, { type: 'run.usage', usage: { input_tokens: 9 } });
+    expect(t.usage.input).toBe(0);
   });
 });

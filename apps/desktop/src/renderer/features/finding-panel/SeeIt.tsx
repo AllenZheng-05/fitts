@@ -14,6 +14,32 @@ import { useToasts } from '../../state/toasts';
 import { getEngine } from '../../state/engine';
 import { useUi } from '../../state/ui';
 
+/** U9: the screen before and after a reviewer-checked fix. */
+function FixedPair({ before, after }: { before: string; after: string }) {
+  const s = copy.finding.seeIt;
+  return (
+    <figure className="flex flex-col gap-1.5">
+      <figcaption className="font-semibold">{s.fixedPair}</figcaption>
+      <div className="flex gap-2">
+        {[
+          { src: before, label: s.fixedBefore },
+          { src: after, label: s.fixedAfter },
+        ].map(({ src, label }) => (
+          <div
+            key={label}
+            className="relative flex-1 overflow-hidden rounded-control border border-ink bg-card"
+          >
+            <img src={src} alt={label} className="block w-full" />
+            <span className="absolute bottom-1 left-1 rounded-tag bg-paper px-1 text-[11px] font-semibold">
+              {label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </figure>
+  );
+}
+
 /** "+1.8 s" / "−2.0 s": a frame's time from the moment. */
 const secs = (ms: number) => `${ms >= 0 ? '+' : '−'}${(Math.abs(ms) / 1000).toFixed(1)} s`;
 const pct = (n: number) => `${Math.max(0, Math.min(100, n * 100))}%`;
@@ -116,6 +142,9 @@ export function SeeIt({ run, finding }: { run: RunState; finding: Finding }) {
         )}
       </div>
       {finding.moment && <Moment moment={finding.moment} />}
+      {finding.assets?.shot && finding.assets.after && (
+        <FixedPair before={finding.assets.shot} after={finding.assets.after} />
+      )}
       {repro.steps.length > 0 ? (
         <ol className="flex flex-col gap-1.5">
           {repro.steps.map((st) => (

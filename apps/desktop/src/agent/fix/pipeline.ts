@@ -91,7 +91,19 @@ export const MAX_REPAIRS = 3;
  * verified by replaying their repro on the worktree's server (TRACE); the rest need a person,
  * or the owner's approval and "Checked by review": no fix is "verified" without proof.
  */
-const VERIFIABLE = new Set<ProbeName>([...PAGE_PROBES, 'focus-visible', 'viewport-sweep', 'links']);
+const VERIFIABLE = new Set<ProbeName>([
+  ...PAGE_PROBES,
+  'focus-visible',
+  'viewport-sweep',
+  'links',
+  // SPEC-phase4 §9.4: on Android, re-run on the fixed app's screen through a worktree Metro.
+  'android-target',
+  'android-label',
+  'android-duplicate-label',
+  'android-duplicate-bounds',
+  'android-editable-desc',
+  'android-contrast',
+]);
 /** A9's finding: the brand check's "Doesn't match your brand". */
 export const isBrandFinding = (f: Finding) =>
   f.agreement.who.includes('Brand check') || /match your brand/i.test(f.title);
@@ -806,6 +818,12 @@ export class FixPipeline {
       return { reason, detail: reason };
     }
     const review = (await this.host.checkByReview?.(f, shot)) ?? { fixed: false, why: '' };
+    // The fixed screen, for See it yourself's before and after (U9).
+    // Saving the picture never fails the fix.
+    const url = await Promise.resolve()
+      .then(() => this.site.saveAsset(this.host.state().runId, `after-${f.id}.jpg`, shot))
+      .catch(() => undefined);
+    if (url) this.update(f.id, { assets: { ...f.assets, after: url } });
     if (review.fixed) return null;
     const why = review.why ? `: ${lowerFirst(review.why.replace(/\.$/, ''))}` : '';
     const reason = `the review says it isn’t fixed yet${why}`;

@@ -16,7 +16,7 @@ import {
 import { BrowserWindow, ipcMain, nativeImage, screen, shell, type WebContents } from 'electron';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { detectProject, devCommandOnPort } from '../projects/detect';
+import { detectProject, devCommandOnPort, hasWebBuild } from '../projects/detect';
 import { runDir, SAFE_ID } from '../store/run-log';
 import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
@@ -153,6 +153,17 @@ export class SiteManager {
       } satisfies SiteStatus);
       return;
     }
+    // An Android app's version: its web build at phone width, never the phone itself (the agent
+    // and its checks use the one emulator). Without a web build there's nothing to show.
+    const android = (await detectProject(project.folder ?? ''))?.platform === 'android';
+    if (android && !hasWebBuild(project.folder ?? '')) {
+      this.broadcast(IPC.siteStatus, {
+        projectId: siteId,
+        status: 'unavailable',
+        androidWeb: 'missing',
+      } satisfies SiteStatus);
+      return;
+    }
     const port = await source.reservePort();
     const live: Live = {
       server: new DevServer('', '', port),
@@ -170,7 +181,13 @@ export class SiteManager {
       return;
     }
     if (this.live.get(siteId) !== live) return;
-    live.server = new DevServer(dir, devCommandOnPort(dir, port, this.pluginFile), port);
+    live.server = new DevServer(
+      dir,
+      android
+        ? `npx expo start --web --port ${port}`
+        : devCommandOnPort(dir, port, this.pluginFile),
+      port,
+    );
     this.status(siteId, { url: live.server.url });
     const ok = await live.server.start(90_000);
     if (!ok || this.live.get(siteId) !== live) {
@@ -189,8 +206,12 @@ export class SiteManager {
     this.attachTabs(siteId, live, win, new URL(live.server.url).origin);
     const detection = await detectProject(dir);
     const path = version.path && PATH.test(version.path) ? version.path : undefined;
+    if (android) await win.emulate(deviceById('android')).catch(() => undefined);
     await win.load(path ?? project.startPath ?? detection?.startPath ?? '/').catch(() => undefined);
-    this.status(siteId, { status: 'running' });
+    this.status(siteId, {
+      status: 'running',
+      ...(android ? { androidWeb: 'imitation' as const, device: 'android' } : {}),
+    });
   }
 
   async open(projectId: string): Promise<void> {
@@ -289,6 +310,7 @@ export class SiteManager {
     );
     live.android = win;
     await win.start();
+    await win.ready();
     this.status(projectId, { status: 'running' });
     this.watch(projectId, live);
   }

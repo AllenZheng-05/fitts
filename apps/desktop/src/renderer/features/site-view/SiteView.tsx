@@ -59,11 +59,13 @@ function SitePending({ siteId }: { siteId: string }) {
   return (
     <div role="status" className="flex h-full flex-col items-center justify-center gap-2 p-6">
       <p className="text-[15px] font-semibold">
-        {failed
-          ? copy.site.pendingFailed
-          : siteId.includes('.v.')
-            ? copy.site.pendingVersion
-            : copy.site.pendingStarting}
+        {status?.androidWeb === 'missing'
+          ? copy.site.noWebVersion
+          : failed
+            ? copy.site.pendingFailed
+            : siteId.includes('.v.')
+              ? copy.site.pendingVersion
+              : copy.site.pendingStarting}
       </p>
       {failed && status.log && status.log.length > 0 && (
         <pre className="max-h-40 max-w-full overflow-auto rounded-control bg-card p-3 font-mono text-[12px] text-muted">
@@ -239,6 +241,11 @@ export function SiteView({
           {toolbarEnd}
         </div>
         {header}
+        {live?.androidWeb === 'imitation' && (
+          <p role="note" className="rounded-row bg-sun-tint px-2.5 py-1.5 text-[13px] text-sun-ink">
+            {copy.site.webImitation}
+          </p>
+        )}
         {live?.activeTab && live.activeTab !== 'site' && (
           <div
             role="status"

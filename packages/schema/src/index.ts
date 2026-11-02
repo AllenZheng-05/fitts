@@ -202,6 +202,12 @@ export interface SiteStatus {
   /** The dev server's last lines, for the site-down card. */
   log?: string[];
   /**
+   * An Android app's version (Allen, Nov 2): there's one phone, so a fixed version is shown as
+   * the app's web build at phone width, an imitation of the real app ('imitation'), or not at
+   * all when the app has no web build ('missing').
+   */
+  androidWeb?: 'imitation' | 'missing';
+  /**
    * SPEC-phase3 §3: the mirror's tabs, the site's first (always open), and the one showing.
    * Absent until a page opens a second tab.
    */

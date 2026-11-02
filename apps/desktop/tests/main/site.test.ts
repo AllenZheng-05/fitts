@@ -6,8 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ net: {}, protocol: {}, ipcMain: { on: vi.fn(), handle: vi.fn() } }));
 const { assetPath } = await import('../../src/main/asset-protocol');
-const { detectDevCommand, detectFramework, detectProject, devCommandOnPort, githubRepo } =
-  await import('../../src/main/projects/detect');
+const {
+  detectDevCommand,
+  detectFramework,
+  detectProject,
+  devCommandOnPort,
+  githubRepo,
+  hasWebBuild,
+} = await import('../../src/main/projects/detect');
 const { splitCommand, spawnProcess } = await import('../../src/main/spawn');
 
 let dir: string;
@@ -132,5 +138,18 @@ describe('the Fitts plugin from outside the project (Allen’s feedback, round 5
     expect(devCommandOnPort(dir, 5200, PLUGIN)).toBe(
       'npx vite --config other.config.ts --port 5200 --strictPort',
     );
+  });
+});
+
+describe('an Expo app’s web build (the fixed version’s imitation)', () => {
+  it('needs react-native-web and react-dom', () => {
+    const pkg = (deps: Record<string, string>) =>
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: deps }));
+    pkg({ expo: '~58.0.0', 'react-native': '0.88.1' });
+    expect(hasWebBuild(dir)).toBe(false);
+    pkg({ expo: '~58.0.0', 'react-native-web': '^0.21.4', 'react-dom': '19.3.0' });
+    expect(hasWebBuild(dir)).toBe(true);
+    rmSync(join(dir, 'package.json'));
+    expect(hasWebBuild(dir)).toBe(false);
   });
 });

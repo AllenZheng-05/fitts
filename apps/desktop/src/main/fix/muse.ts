@@ -76,23 +76,54 @@ export async function museStatus(
   }
 }
 
-export interface MuseRun {
+export interface MuseRun extends MuseTally {
   code: number;
-  /** The JSONL events Muse Code printed (\`--json\`). */
+  /** The JSONL events Muse Code printed (`--json`). */
   events: Record<string, unknown>[];
-  usage: { input: number; output: number; cached: number; reasoning: number };
-  summary: string;
-  /** The last message in full (with --output-schema, the JSON answer). */
-  final: string;
   /** Exit 1 or an auth message: Muse Code couldn't sign in. */
   authFailed: boolean;
   error?: string;
 }
 
+/** What a run's events add up to. */
+export interface MuseTally {
+  usage: { input: number; output: number; cached: number; reasoning: number };
+  summary: string;
+  /** The last message in full (with --output-schema, the JSON answer). */
+  final: string;
+}
+
 /**
- * One \`muse exec\` in a worktree. The Meta key goes to stdin, which is then closed; JSONL events
- * stream to \`onEvent\` (for the Now line); usage adds up for the ledger. Killed on \`signal\`, at
- * \`timeoutMs\`, or when the budget card stops the run.
+ * One `--json` event into the tally. Muse Code's envelope puts the kind in `payload_type` and the
+ * data in `payload`. `run.usage` carries the run's totals so far (per model, with call counts), so
+ * the latest one wins; `run.terminal.completed` carries the final answer.
+ */
+export function readMuseEvent(t: MuseTally, e: Record<string, unknown>): void {
+  const p = e['payload'];
+  if (!p || typeof p !== 'object') return;
+  const payload = p as Record<string, unknown>;
+  const models = payload['models'];
+  if (e['payload_type'] === 'run.usage' && Array.isArray(models)) {
+    const sum = (k: string) =>
+      (models as Record<string, unknown>[]).reduce((n, m) => n + (Number(m[k]) || 0), 0);
+    t.usage = {
+      input: sum('input_tokens'),
+      output: sum('output_tokens'),
+      cached: sum('cached_tokens'),
+      reasoning: sum('reasoning_tokens'),
+    };
+  }
+  const text = payload['text'];
+  if (e['payload_type'] === 'run.terminal.completed' && typeof text === 'string' && text) {
+    t.final = text;
+    t.summary = text.slice(0, 600);
+  }
+}
+
+/**
+ * One `muse exec` in a worktree. The Meta key goes to stdin, which is then closed; JSONL events
+ * stream to `onEvent` (for the Now line); usage adds up for the ledger. Killed on `signal`, at
+ * `timeoutMs`, or when the budget card stops the run.
  */
 export function museExec(opts: {
   via: MuseVia;
@@ -127,9 +158,11 @@ export function museExec(opts: {
   const c = museCommand(opts.via, args, opts.via === 'wsl' ? opts.cwd : undefined);
   return new Promise((resolve) => {
     const events: Record<string, unknown>[] = [];
-    const usage = { input: 0, output: 0, cached: 0, reasoning: 0 };
-    let summary = '';
-    let final = '';
+    const tally: MuseTally = {
+      usage: { input: 0, output: 0, cached: 0, reasoning: 0 },
+      summary: '',
+      final: '',
+    };
     let stderr = '';
     let buffer = '';
     let child: ChildProcess;
@@ -139,9 +172,7 @@ export function museExec(opts: {
       resolve({
         code: -1,
         events,
-        usage,
-        summary,
-        final,
+        ...tally,
         authFailed: false,
         error: firstLine((e as Error).message),
       });
@@ -163,22 +194,7 @@ export function museExec(opts: {
         try {
           const e = JSON.parse(line) as Record<string, unknown>;
           events.push(e);
-          const str = (v: unknown) => (typeof v === 'string' ? v : '');
-          const type = str(e['type']);
-          if (type === 'run.usage' || type.endsWith('usage')) {
-            const u = (e['usage'] ?? e) as Record<string, number>;
-            usage.input += Number(u['input_tokens'] ?? u['input'] ?? 0);
-            usage.output += Number(u['output_tokens'] ?? u['output'] ?? 0);
-            usage.cached += Number(u['cached_tokens'] ?? u['cached'] ?? 0);
-            usage.reasoning += Number(u['reasoning_tokens'] ?? u['reasoning'] ?? 0);
-          }
-          if (type === 'run.completed' || type === 'final' || type === 'message') {
-            final = str(e['text']) || str(e['message']) || str(e['summary']) || final;
-            summary = (str(e['summary']) || str(e['text']) || str(e['message']) || summary).slice(
-              0,
-              600,
-            );
-          }
+          readMuseEvent(tally, e);
           opts.onEvent?.(e);
         } catch {
           // Not JSON: Muse Code's own progress text.
@@ -194,9 +210,7 @@ export function museExec(opts: {
       resolve({
         code,
         events,
-        usage,
-        summary,
-        final,
+        ...tally,
         authFailed: authFailed || (code === 1 && events.length === 0),
         ...(code !== 0 ? { error: firstLine(stderr) || `muse exited ${code}` } : {}),
       });

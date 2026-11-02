@@ -31,6 +31,8 @@ const SECOND_LOOK_MS = 1800;
 
 /** How long a screen may take to show its controls after an action or a relaunch. */
 const SETTLE_MS = 10_000;
+/** How long a dev client reload has to clear the screen it started from. */
+const RELOAD_MS = 8000;
 
 const KEYS: Record<string, string> = {
   Enter: 'KEYCODE_ENTER',
@@ -84,6 +86,32 @@ export class AndroidWindow {
     this.density = await this.adb.density();
     this.size = await this.adb.size();
     this.frames();
+  }
+
+  /**
+   * After the dev client is pointed at Metro: the app reloads, and the screen before the reload
+   * (or the splash) can pass for the app. Waits until one of the App Model's screens is showing,
+   * or, with none known, gives the reload a moment and then waits for controls (Nov 2: a bench
+   * crawl that started mid-reload saw one nameless screen and took no actions).
+   */
+  async ready(timeoutMs = 90_000): Promise<boolean> {
+    const titles = (this.screen.screens ?? []).flatMap((s) => (s.title ? [s.title] : []));
+    const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    if (!titles.length) {
+      await pause(3000);
+      return flatten(await this.settled()).some((n) => n.clickable);
+    }
+    const known = async () => {
+      const texts = flatten(await this.tree()).map((n) => n.text.trim().toLowerCase());
+      return titles.some((t) => texts.includes(t.toLowerCase()));
+    };
+    // The reload clears the screen it started from; a screen that never clears had no reload.
+    for (const end = Date.now() + RELOAD_MS; Date.now() < end && (await known());) await pause(500);
+    for (const end = Date.now() + timeoutMs; Date.now() < end && !this.stopped;) {
+      if (await known()) return true;
+      await pause(1000);
+    }
+    return false;
   }
 
   stop(): void {

@@ -2695,9 +2695,16 @@ export class RealRun {
     // A finding about the page as a whole (no element): where its route is named in the code
     // (the router entry), which is the closest a search gets to "this page".
     const routeNeedle = !f.elementRef && f.route.length > 1 ? [`'${f.route}'`, `"${f.route}"`] : [];
+    // SPEC-phase4 §9.4: an Android element is its testID, written as is or built from a stem
+    // (testID={`cart-remove-${key}`}).
+    const ref = f.elementRef ?? '';
+    const testIdNeedles =
+      androidApp(this.lastSnap?.url) && ref && !/^a\d+$/.test(ref)
+        ? [`testID="${ref}"`, ...(ref.includes('-') ? [ref.replace(/-[^-]+$/, '-')] : [])]
+        : [];
     const needles = [
       ...new Set(
-        [node?.name ?? '', ...quoted, ...routeNeedle]
+        [...testIdNeedles, node?.name ?? '', ...quoted, ...routeNeedle]
           .map((s) => s.trim())
           .filter((s) => s.length >= 3),
       ),

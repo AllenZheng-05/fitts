@@ -166,3 +166,54 @@ describe('the AndroidWindow’s surprises and frames (fake adb)', () => {
     }
   });
 });
+
+describe('AndroidWindow.ready (fake adb)', () => {
+  const BLANK = `<?xml version='1.0' ?><hierarchy rotation="0">${node({ bounds: '[0,0][1080,2400]' })}</hierarchy>`;
+  const windowOver = (dumps: string[]) => {
+    let n = 0;
+    const run: AdbRunner = (args) =>
+      Promise.resolve({
+        code: 0,
+        stdout: Buffer.from(
+          args.join(' ').startsWith('exec-out uiautomator')
+            ? (dumps[Math.min(n++, dumps.length - 1)] ?? '')
+            : '',
+        ),
+        stderr: '',
+      });
+    return new AndroidWindow(
+      new Adb(run),
+      () => undefined,
+      () => undefined,
+      undefined,
+      {
+        screens: [{ route: '/', title: 'Basil & Ember' }],
+      },
+    );
+  };
+
+  it('waits out the reload: the old menu, a blank screen while loading, then the menu', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+    try {
+      const dumps = [MENU(false), BLANK, BLANK, BLANK, MENU(false)];
+      const win = windowOver(dumps);
+      const done = win.ready(30_000);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up when no known screen ever shows', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+    try {
+      const win = windowOver([BLANK]);
+      const done = win.ready(5000);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(await done).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

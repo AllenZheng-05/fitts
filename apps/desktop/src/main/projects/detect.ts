@@ -148,3 +148,14 @@ export async function detectProject(folder: string): Promise<Detection | null> {
     ...(deps['expo'] || deps['react-native'] ? { platform: 'android' as const } : {}),
   };
 }
+
+/** An Expo app that can also build for the web (react-native-web and react-dom installed). */
+export function hasWebBuild(folder: string): boolean {
+  try {
+    const pkg = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')) as Pkg;
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    return Boolean(deps['react-native-web'] && deps['react-dom']);
+  } catch {
+    return false;
+  }
+}

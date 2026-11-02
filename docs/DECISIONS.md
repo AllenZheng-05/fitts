@@ -3527,3 +3527,71 @@ cuts.
   - The recorded judge answer for A10 comes from a paid bench:android run with recording on.
   - The offline e2e can't drive an emulator, so A10's offline check is a unit test on that
     recorded answer and the dump fixtures.
+
+## Phase 4 — U9: Android fixes
+
+- **The same pipeline and run branch, verified on the device** (§9.4). For a check, the worktree
+  gets its own Metro on a free port, the dev client is reopened on that Metro's URL, the check
+  runs on the fixed app, and the app is reopened on the live Metro (8081) whatever happened. A
+  reopen is deterministic; Fast Refresh isn't. `adb reverse` adds the worktree's port without
+  touching 8081's.
+  - Probe findings (labels, 48 dp targets, duplicate names and bounds, editable descriptions,
+    placeholder leaks, contrast) are re-measured with a temporary AndroidWindow on the fixed
+    screen and judged as on the web.
+  - Reviewer-only fixes get "after" screenshots for the review check. They are saved as the
+    finding's `after` asset and shown with its `shot` as a before/after pair in See it
+    yourself.
+- **Sources on Android:** a finding's testID is searched as `testID="…"`, then by its stem (for
+  ids built in code, like `cart-remove-${key}`), then by the element's text, as §9.4 says.
+- **A9's brand fix:**
+  - It's reviewer-only (the Brand check's finding), so it's fixed only on the owner's ask and
+    labeled "Checked by review".
+  - Its scope is strict: the App Model's theme token files plus the files named for the
+    wordmark, logo or brand, nothing else, not even other UI files. Main enforces the strict
+    scope with the allowlist's `only`.
+  - Its task tells the fixer where the brand lives (the wordmark's own colors and type, the
+    splash and icon colors in app.json, the fonts the root layout loads). It sets the theme's
+    tokens to that brand without renaming any, and no packages: the fonts are already loaded.
+  - bench:android with `BENCH_ANDROID_FIX=1` compares the fixed theme.ts with PLANTED.md's answer
+    key. Three quarters of the color tokens must be within an RGB distance of 60, and every font
+    token must use the same family (Fraunces, DM Sans).
+- **The recorder keeps every answer** (`<name>-<n>.json` beside the last), so a run's several
+  judge or review answers can all become fixtures.
+- **Which fixes the bench asks for.** The owner asks for the brand fix first, then the
+  single-control probe findings (an unlabeled icon button, two controls in the same place). The
+  first run also asked for "Tap target is too small" and "Different controls, same name". Those
+  findings cover every such control on a screen, so one fix can't clear them all, and the run
+  looped on them for most of an hour.
+- **Muse Code's events, read for real.** `muse exec --json` wraps every event in an envelope
+  (`payload_type` and `payload`). museExec read a top-level `type` that real output never has, so
+  every Muse run reported no usage and no final answer:
+  - The ledger missed Muse's spend.
+  - Understand's Pass 2 through Muse always fell back to the in-process reader.
+  `readMuseEvent` now reads `run.usage` as the run's running totals (the latest wins, summed over
+  models) and `run.terminal.completed`'s text as the final answer. The test fixture is a real run
+  with the `echo` provider, which needs no key.
+- **A worktree's linked node_modules is unlinked before the worktree is removed.** On Windows a
+  worktree removal can fail half-way on a long path. A recursive delete after that can follow the
+  junction into the project's own packages, which is what deleted half of a demo checkout's
+  node_modules during U9. `discard` and `finish` now unlink the junction first.
+- **Muse Code can't break a worktree's link to its repository.** In the second U9 run Muse made
+  all three edits. But something it ran in WSL rewrote the worktree's `.git` link (and the
+  repository's `gitdir` back-link) to `/mnt/c/…`, so Windows git couldn't commit. Every retry
+  then found its own uncommitted edit and said "no change needed". `keepGitLink` reads both
+  files before a Muse run (fixes and Understand's Pass 2) and puts back whatever changed.
+- **What Expo writes is put back.** Starting a worktree's Metro edits the project (tsconfig.json
+  for typed routes), and commits stage everything. So `onWorktreeApp` reverts every file that
+  changed while its Metro ran and wasn't already changed before.
+- **Waiting out the dev client's reload.** Pointing the dev client at Metro reloads the app, and
+  the screen it started from (or the splash) can pass for the app. One bench crawl started
+  mid-reload: it saw one nameless screen ("/screen") and took no actions.
+  - `AndroidWindow.ready()` gives the reload up to 8 s to clear the screen it started from. It
+    then waits for one of the App Model's screen titles.
+  - The worktree check in fix-host waits for the old controls to clear before it waits for new
+    ones, so it can't measure the app from before the fix.
+- **An Android app's fixed version is a web imitation (Allen, Nov 2).** There's one emulator, and
+  the agent and its on-device checks use it. So "the fixed version" of an Expo app is its web
+  build (`expo start --web`) from the branch's view worktree, emulated at Android phone width
+  (360×800). A note above it says it's an imitation, not the real Android app. An app without a
+  web build (react-native-web and react-dom) says so instead of waiting on "Starting…". Fitts
+  never adds packages to a project, so demo/basil-ember-android got its own web build.

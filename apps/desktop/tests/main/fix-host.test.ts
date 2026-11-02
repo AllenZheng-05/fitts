@@ -10,7 +10,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ BrowserWindow: class {}, session: {} }));
 vi.mock('@fitts/probes/page.js?raw', () => ({ default: '' }));
 
-const { FixHost, staticDir, verifyCommand } = await import('../../src/main/fix/fix-host');
+const { FixHost, keepGitLink, staticDir, verifyCommand } =
+  await import('../../src/main/fix/fix-host');
 const { DryRunPrs, dryRunRegistry } = await import('../../src/main/fix/pr');
 
 const git = (cwd: string, ...args: string[]) =>
@@ -532,5 +533,30 @@ describe('the edit allowlist on a real repo (SPEC-phase4 §7.3)', () => {
     ).toEqual({ ok: true });
     expect(await patch('package.json', '"name":"app"', '"name":"app2"')).toEqual({ ok: true });
     await guarded.call('app', { fn: 'discard', job: r.job });
+  });
+});
+
+describe('keepGitLink', () => {
+  it('puts back a worktree link that a WSL tool rewrote to /mnt paths', () => {
+    const root = mkdtempSync(join(tmpdir(), 'fitts-link-'));
+    const admin = join(root, 'repo', '.git', 'worktrees', 'run');
+    const wt = join(root, 'wt');
+    mkdirSync(admin, { recursive: true });
+    mkdirSync(wt);
+    writeFileSync(join(wt, '.git'), `gitdir: ${admin}\n`);
+    writeFileSync(join(admin, 'gitdir'), `${join(wt, '.git')}\n`);
+    const restore = keepGitLink(wt);
+    writeFileSync(join(wt, '.git'), 'gitdir: /mnt/c/repo/.git/worktrees/run\n');
+    writeFileSync(join(admin, 'gitdir'), '/mnt/c/wt/.git\n');
+    restore();
+    expect(readFileSync(join(wt, '.git'), 'utf8')).toBe(`gitdir: ${admin}\n`);
+    expect(readFileSync(join(admin, 'gitdir'), 'utf8')).toBe(`${join(wt, '.git')}\n`);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('does nothing for a folder that isn’t a linked worktree', () => {
+    const root = mkdtempSync(join(tmpdir(), 'fitts-link-'));
+    expect(() => keepGitLink(root)()).not.toThrow();
+    rmSync(root, { recursive: true, force: true });
   });
 });

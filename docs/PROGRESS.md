@@ -23,18 +23,28 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U6  | Code-aware fixer (§7)                    | done        |           |
 | U7  | App Map (§8)                             | done        |           |
 | U8  | Android audit (§9.1–9.3)                 | done        |           |
-| U9  | Android fix (§9.4)                       | todo        |           |
+| U9  | Android fix (§9.4)                       | done        |           |
 | U10 | Release polish                           | todo        |           |
 
 ## Current milestone and next step
 
-**Done since U6:** Muse Code by default; navigation and keyboard verifiable; the paid bench:chat runs (numbers below); the Muse Wonder judge (§13 #4); U7 the App Map. **U8 in progress (Nov 2, ~11:30 CST):**
-  - Committed: demo/basil-ember-android as generated, its wiring and the A9 plant.
-  - Built with Allen's P4-0a (CMake 3.31.6, long paths) from C:/Users/Plasm/bea, and opens on Fitts_Pixel.
-  - Uncommitted but green (typecheck, lint, 519 unit tests): main/android (adb, dump, AndroidWindow, manager routing, gate on the tap, owner taps, screen names from Pass 1's Expo Router titles), the Android probes, the Maestro repro, the Android site view, the Welcome chips, A9's brand check (finding, no directions), bench:android with A1–A9, and real menu fixtures (dump and screencaps, stock and brand).
-  - Running now: the first paid bench:android.
-  - Then: full e2e and the U8 commit, then U9 (the brand fix, on the owner's ask).
-  - Recording the brand-check fixtures with the .env.local recorder was blocked; they come from the bench's FITTS_RECORD_LLM instead, or Allen runs FITTS_RECORD_BRAND=1.
+**Done since U6:** Muse Code by default; navigation and keyboard verifiable; the paid bench:chat runs (numbers below); the Muse Wonder judge (§13 #4); U7 the App Map; U8 the Android audit, with A9's detection and A10; U9 Android fixes (Nov 2).
+
+**U9 (Nov 2):** `BENCH_ANDROID_FIX=1 pnpm bench:android` passed on the fifth paid run:
+  - Audit: 6/10 planted issues.
+  - Fixes: 3 of 3 verified on fitts/run-run-1:
+    - The brand fix (A9), checked by review, with 12/12 color tokens close to PLANTED.md's answer key and the same font families.
+    - The cart button's label (A1).
+    - The overlapping row and favorite controls (A7).
+  - Spent $2.65 (cap $6; each Muse Code pass is about $0.40–1.10, now that its usage is counted).
+  - The first four runs failed on plumbing, fixed in U9 (DECISIONS "Phase 4 — U9"):
+    - Muse rewrote the worktree's git link to /mnt paths, so commits failed.
+    - The crawl started mid-reload.
+    - Muse's usage and final answers were never read.
+    - The $2 cap.
+  - Allen's change (Nov 2): an Android app's fixed version shows as its web build at phone width, marked as an imitation. The emulator stays on the live app. demo/basil-ember-android got a web build for it (`bd9f313`).
+
+**Next:** U10, release polish. Then the after-U10 items (a) and (c) if time allows.
 
   Still owed: p9.bench (U6, on purpose).
 

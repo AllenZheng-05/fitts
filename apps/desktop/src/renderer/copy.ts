@@ -575,6 +575,10 @@ export const copy = {
       momentBefore: 'Before',
       momentAfter: 'After',
       momentAlt: 'The page {when} it changed ({t})',
+      /** U9: a reviewer-checked fix's before and after screens. */
+      fixedPair: 'Before and after the fix',
+      fixedBefore: 'Before',
+      fixedAfter: 'After the fix',
     },
     fixIt: 'Fix it',
     changeFix: 'Change the fix',
@@ -894,6 +898,11 @@ export const copy = {
     device: 'See it on',
     pendingStarting: 'Starting your site…',
     pendingVersion: 'Starting the fixed version of your site. The first time takes a minute.',
+    /** An Android app's fixed version, shown as its web build (Allen, Nov 2). */
+    webImitation:
+      'This is your app’s web build at phone width, an imitation of the fixed app, not the real Android app. The phone stays on the live app while I work.',
+    noWebVersion:
+      'Your app has no web build, so I can’t show the fixed version here. Open the branch on your phone to see it.',
     pendingFailed: 'Your site didn’t start. Here’s the end of its log:',
     step: 'Step {step} of about {total}',
     elapsed: '{time} elapsed',
