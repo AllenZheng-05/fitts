@@ -1,6 +1,7 @@
 import { PROBE_STANDARDS, WCAG, type Criterion } from '@fitts/probes';
 import { useState } from 'react';
 import { PageHeader, Section } from '../components/Section';
+import { Tokens } from '../components/Tokens';
 import { card, chip, chipBase, cx, link, type Tone } from '../components/ui';
 import {
   CATALOG,
@@ -61,7 +62,9 @@ function Nielsen() {
             </span>
             <div>
               <h3 className="font-semibold">{h.name}</h3>
-              <p className="mt-1 text-[15px] leading-relaxed text-ink-2">{h.how}</p>
+              <p className="mt-1 text-[15px] leading-relaxed text-ink-2">
+                <Tokens text={h.how} />
+              </p>
             </div>
           </li>
         ))}
@@ -152,7 +155,9 @@ function CheckCard({ c }: { c: CatalogItem }) {
   return (
     <li className={cx(card, 'flex flex-col p-5')}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h4 className="font-semibold">{c.title}</h4>
+        <h4 className="font-semibold">
+          <Tokens text={c.title} />
+        </h4>
         <span className={cx(chipBase, chip[EVIDENCE_TONE[c.evidence]])}>
           {checks.evidence[c.evidence]}
         </span>
@@ -160,11 +165,15 @@ function CheckCard({ c }: { c: CatalogItem }) {
       <dl className="mt-3 flex flex-col gap-2 text-[15px] leading-relaxed">
         <div className={row}>
           <dt className="font-semibold text-muted">{checks.labels.what}</dt>
-          <dd className="text-ink-2">{c.what}</dd>
+          <dd className="text-ink-2">
+            <Tokens text={c.what} />
+          </dd>
         </div>
         <div className={row}>
           <dt className="font-semibold text-muted">{checks.labels.how}</dt>
-          <dd className="text-ink-2">{c.how}</dd>
+          <dd className="text-ink-2">
+            <Tokens text={c.how} />
+          </dd>
         </div>
         <div className={row}>
           <dt className="font-semibold text-muted">{checks.labels.standard}</dt>

@@ -88,14 +88,9 @@
 }
 
 @layer base {
+  /* No smooth scrolling: focus moves instantly, so a focused control is never out of view. */
   html {
-    scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
-    }
   }
   body {
     margin: 0;

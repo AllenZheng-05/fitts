@@ -13,6 +13,32 @@ test('Tab reaches the skip link first, and it moves to the content', async ({ pa
   await expect(page).toHaveURL(/#main$/);
 });
 
+for (const path of ['/download/', '/checks/'])
+  test(`Tab reaches the skip link and the whole nav on ${path}, in order`, async ({ page }) => {
+    await page.goto(path);
+    const names: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      await page.keyboard.press('Tab');
+      names.push(
+        await page.evaluate(
+          () =>
+            document.activeElement?.getAttribute('aria-label') ??
+            document.activeElement?.textContent?.trim() ??
+            '',
+        ),
+      );
+    }
+    expect(names).toEqual([
+      'Skip to content',
+      'Fitts, home',
+      'How it works',
+      'What Fitts checks',
+      'Showcase',
+      'Download',
+      'Fitts on GitHub',
+    ]);
+  });
+
 test('the checks filters are toggle buttons and the count is announced', async ({ page }) => {
   await page.goto('/checks/');
   const status = page.getByRole('status');

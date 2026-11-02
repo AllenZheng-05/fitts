@@ -28,14 +28,10 @@ export function Download() {
                   size.md,
                   'mt-4',
                 )}
+                aria-label={`${download.get} ${b.name}, ${b.file}`}
               >
                 <DownloadIcon size={18} aria-hidden="true" />
-                <span>
-                  <span className="sr-only">
-                    {download.get} {b.name},{' '}
-                  </span>
-                  {b.file}
-                </span>
+                {b.file}
               </a>
               <p className="mt-4 text-[15px] leading-relaxed text-ink-2">{b.install}</p>
             </li>

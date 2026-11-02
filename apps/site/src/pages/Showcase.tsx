@@ -12,7 +12,7 @@ export function Showcase() {
     <>
       <PageHeader title={showcase.title} lead={showcase.lead} />
       <section aria-label={showcase.labelsTitle} className="mx-auto max-w-6xl px-4 sm:px-6">
-        <h2 className="sr-only">{showcase.labelsTitle}</h2>
+        <h2 className="mb-3 font-display text-2xl font-bold">{showcase.labelsTitle}</h2>
         <ul className="grid gap-3 md:grid-cols-3">
           {showcase.labels
             .filter((l) => l.honesty !== 'merged' || hasPortfolio)

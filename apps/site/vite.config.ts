@@ -1,8 +1,9 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Connect, type Plugin } from 'vite';
 import { pages, SITE_URL, type PageId } from './src/content/site';
 
 const root = import.meta.dirname;
@@ -20,6 +21,14 @@ const HTML: Record<PageId, string> = {
 const pageFor = (path: string): PageId | undefined =>
   (Object.keys(HTML) as PageId[]).find((id) => `/${HTML[id]}` === path);
 
+const PRELOAD_FONTS = /(bricolage-grotesque-latin-wght-normal|Geist-Variable)-[\w-]+\.woff2$/;
+
+/** Page folders without their slash ("/download"), which Cloudflare Pages redirects. */
+const PAGE_DIRS = Object.values(pages)
+  .map((p) => p.path)
+  .filter((p) => p !== '/' && p.endsWith('/'))
+  .map((p) => p.slice(0, -1));
+
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -35,7 +44,13 @@ function pageMeta(): Plugin {
       if (!id) return html;
       const p = pages[id];
       const url = `${SITE_URL}${p.path}`;
+      // The two text fonts start loading with the HTML, so swapping them in shifts nothing late.
+      const fonts = Object.keys(ctx.bundle ?? {}).filter((name) => PRELOAD_FONTS.test(name));
       const tags = [
+        ...fonts.map(
+          (name) =>
+            `<link rel="preload" href="/${name}" as="font" type="font/woff2" crossorigin />`,
+        ),
         `<title>${esc(p.title)}</title>`,
         `<meta name="description" content="${esc(p.description)}" />`,
         id === 'notfound'
@@ -67,9 +82,48 @@ function pageMeta(): Plugin {
   };
 }
 
+/**
+ * The dev and preview servers answer like Cloudflare Pages: "/download" redirects to
+ * "/download/", and an unknown address gets 404.html with status 404 (Vite's default is the home
+ * page with status 200, which made pages look broken on refresh).
+ */
+function pagesLikeCloudflare(): Plugin {
+  const handler =
+    (built: boolean): Connect.NextHandleFunction =>
+    (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const path = url.pathname;
+      if (PAGE_DIRS.includes(path)) {
+        res.statusCode = 308;
+        res.setHeader('Location', `${path}/${url.search}`);
+        res.end();
+        return;
+      }
+      const known =
+        path === '/' ||
+        PAGE_DIRS.some((d) => path === `${d}/`) ||
+        /\.[a-z0-9]+$/i.test(path) ||
+        /^\/(@|src\/|node_modules\/|assets\/)/.test(path);
+      if (known) return next();
+      if (!built) {
+        req.url = '/404.html';
+        return next();
+      }
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end(readFileSync(resolve(root, 'dist/404.html')));
+    };
+  return {
+    name: 'fitts-pages-like-cloudflare',
+    configureServer: (server) => void server.middlewares.use(handler(false)),
+    configurePreviewServer: (server) => void server.middlewares.use(handler(true)),
+  };
+}
+
 // A static site (Cloudflare Pages): `pnpm --filter @fitts/site build` writes dist/.
 export default defineConfig({
-  plugins: [react(), tailwindcss(), pageMeta()],
+  appType: 'mpa',
+  plugins: [react(), tailwindcss(), pageMeta(), pagesLikeCloudflare()],
   resolve: {
     // geist's package exports hide its font files, so point at them directly (as the app does).
     alias: { '@geist-fonts': resolve(root, 'node_modules/geist/dist/fonts') },

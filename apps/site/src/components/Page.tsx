@@ -12,7 +12,7 @@ export function Page({ page, children }: { page: PageId; children: ReactNode }) 
     <>
       <a
         href="#main"
-        className="sr-only z-50 rounded-control bg-ink px-4 py-2 text-card focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        className="pointer-events-none fixed top-3 left-3 z-50 flex min-h-11 items-center rounded-control bg-ink px-4 font-semibold text-card opacity-0 focus:pointer-events-auto focus:opacity-100"
       >
         {nav.skip}
       </a>

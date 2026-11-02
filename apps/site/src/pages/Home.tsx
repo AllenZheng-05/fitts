@@ -11,7 +11,7 @@ export function Home() {
     <>
       <Hero />
       <section aria-labelledby="video-title" className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
-        <h2 id="video-title" className="sr-only">
+        <h2 id="video-title" className="mb-6 font-display text-3xl font-extrabold tracking-tight">
           {home.videoTitle}
         </h2>
         <Video />
@@ -75,12 +75,10 @@ function Hero() {
                 size.lg,
                 'w-full sm:min-w-44',
               )}
+              aria-label={home.download.replace('{os}', label)}
             >
               <Download size={20} aria-hidden="true" />
-              <span>
-                <span className="sr-only">{home.download.replace('{os}', '')}</span>
-                {label}
-              </span>
+              {label}
             </a>
           </li>
         ))}
@@ -130,7 +128,7 @@ function Video() {
     <div
       className={cx(
         card,
-        'mx-auto flex max-w-4xl flex-col items-center justify-center gap-4 bg-sun-tint px-6 py-12 text-center shadow-hero sm:aspect-video',
+        'flex flex-col items-center justify-center gap-4 bg-sun-tint px-6 py-12 text-center shadow-hero sm:aspect-video',
       )}
     >
       <span

@@ -145,3 +145,30 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
 - **Clips** load only near the screen (`preload="none"`, `src` set by an IntersectionObserver),
   play muted, looping and inline, pause off screen, don't autoplay with reduced motion, and keep
   a visible Pause/Play button (WCAG 2.2.2) named with the clip's title.
+
+## Step 5 — Checks and the Fitts audit
+
+- **Browsers for tests.** Playwright runs the system Edge (`PW_CHANNEL=chrome` for Chrome);
+  no browser download. CI doesn't run the site's e2e yet (see the merge note).
+- **The preview and dev servers answer like Cloudflare Pages** (`pagesLikeCloudflare` in
+  vite.config.ts, and `appType: 'mpa'`): a page folder without its slash gets a 308 to it, and
+  an unknown address gets 404.html with status 404. Without it, the dev server served the home
+  page for `/download`, which Fitts (rightly) reported as a page that breaks on refresh.
+- **No smooth scrolling.** It moved focused controls out of view for a moment and made controls
+  move between Fitts choosing and tapping them. Anchors now jump.
+- **No visually hidden text inside controls.** Controls are named with `aria-label` (the visible
+  text stays inside the name, WCAG 2.5.3); the Home video and Showcase legend headings are
+  visible. The skip link no longer switches from `sr-only` to fixed: it sits at the top left,
+  transparent and click-through until it has focus. The profiles table keeps its `sr-only`
+  caption (a caption isn't a control, and Fitts didn't flag it).
+- **Quoted placeholder values are `<code>`** (`Tokens.tsx`) on /checks: "(null)", "undefined"
+  and the rest are literal values. Fitts's placeholder probe skips code, so the examples stop
+  reading as leaks; nothing else about the page changed.
+- **Fonts preloaded.** Bricolage and Geist (the text fonts) are preloaded from each page's HTML;
+  Geist Mono isn't (it's small print).
+- **The footer's audit line** says what the run found and how it was answered, and links to the
+  audit section here.
+- **What wasn't changed**: the download and outside links (Fitts's site window doesn't follow
+  them), the keyboard reach finding (doesn't reproduce; tested), the 11 font sizes (the app's type
+  scale) and the shapes behind text (the design; the halo keeps contrast). Each is in
+  SITE-PROGRESS with the reason.

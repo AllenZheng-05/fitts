@@ -106,11 +106,11 @@ function Video({ m, className }: { m: Media; className: string }) {
       <button
         type="button"
         onClick={toggle}
+        aria-label={`${playing ? words.pause : words.play}: ${m.title}`}
         className="absolute bottom-3 left-3 flex min-h-11 items-center gap-2 rounded-pill border-[1.5px] border-ink bg-card px-4 text-[14px] font-semibold shadow-button [text-shadow:none] hover:bg-paper"
       >
         {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
         {playing ? words.pause : words.play}
-        <span className="sr-only">: {m.title}</span>
       </button>
     </div>
   );

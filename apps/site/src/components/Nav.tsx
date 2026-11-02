@@ -74,11 +74,11 @@ export function Nav({ page }: { page: PageId }) {
           type="button"
           aria-expanded={open}
           aria-controls={menuId}
+          aria-label={nav.menu}
           onClick={() => setOpen((o) => !o)}
           className="flex size-11 flex-none items-center justify-center rounded-control border-[1.5px] border-ink bg-card hover:bg-paper lg:hidden"
         >
           {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-          <span className="sr-only">{nav.menu}</span>
         </button>
       </nav>
 

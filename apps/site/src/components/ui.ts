@@ -46,5 +46,6 @@ export const chip: Record<Tone, string> = {
 export const chipBase =
   'inline-flex items-center gap-1.5 self-start rounded-pill px-2.5 py-0.5 text-[13px] font-bold [text-shadow:none]';
 
+/** A standalone text link, at least 24 px tall (WCAG 2.5.8). */
 export const link =
-  'font-semibold text-cobalt-ink underline underline-offset-4 hover:text-cobalt-deep';
+  'inline-flex min-h-6 items-center font-semibold text-cobalt-ink underline underline-offset-4 hover:text-cobalt-deep';

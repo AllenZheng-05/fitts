@@ -65,14 +65,25 @@ test.describe('320px reflow', () => {
     });
 });
 
-test('the 404 page says so and is axe clean', async ({ page }) => {
-  // Cloudflare Pages serves 404.html, with status 404, for any unknown address. vite preview
-  // doesn't, so the page is loaded by name here.
-  await page.goto('/404.html');
+test('an unknown address gets the 404 page, with status 404', async ({ page }) => {
+  // The preview server answers as Cloudflare Pages does (vite.config.ts pagesLikeCloudflare).
+  const res = await page.goto('/no-such-page');
+  expect(res?.status()).toBe(404);
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('There’s no page here');
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze();
   expect(axe.violations).toEqual([]);
+});
+
+test('a page address without its slash redirects to it, and reloads as itself', async ({
+  page,
+}) => {
+  for (const p of PAGES.filter((x) => x.path !== '/')) {
+    await page.goto(p.path.slice(0, -1));
+    await expect(page).toHaveURL(new RegExp(`${p.path}$`));
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(p.h1);
+  }
 });
 
 test('sitemap lists the five pages', async ({ request }) => {

@@ -13,6 +13,7 @@ export const links = {
   issues: `${REPO}/issues`,
   license: `${REPO}/blob/main/LICENSE`,
   roadmap: `${REPO}/blob/main/docs/ROADMAP.md`,
+  auditLog: `${REPO}/blob/main/docs/SITE-PROGRESS.md#the-fitts-audit`,
   plantedChat: `${REPO}/blob/main/demo/chat/PLANTED.md`,
   plantedAndroid: `${REPO}/blob/main/demo/basil-ember-android/PLANTED.md`,
   portfolio: 'https://allenzheng.com',
@@ -183,8 +184,10 @@ export const footer = {
   report: 'Report a problem',
   portfolio: 'allenzheng.com',
   audited: 'This site was audited by Fitts',
-  /** The audit's result, filled in once Fitts has audited this site (SPEC-site step 5). */
-  auditResult: '',
+  /** The audit's result (SPEC-site step 5; the details are in docs/SITE-PROGRESS.md). */
+  auditResult:
+    'on Nov 2, 2026, it raised 21 findings and 2 suggestions across 5 pages. 19 are fixed; 4 were Fitts’s own mistakes or deliberate choices, each explained.',
+  auditLink: 'What it found, and what changed',
 };
 
 export const media = {
