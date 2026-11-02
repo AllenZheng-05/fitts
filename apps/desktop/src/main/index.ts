@@ -72,6 +72,13 @@ void app.whenReady().then(() => {
         ? join(process.resourcesPath, 'plugin', 'fitts.vite.mjs')
         : join(__dirname, '../../resources/plugin/fitts.vite.mjs'),
     },
+    {
+      mode: (id) => host.mode(id),
+      ownerAnswer: (id, itemId) => host.ownerAnswer(id, itemId),
+      // The ask card's yes (copy.fitts.goAhead).
+      yes: 'Go ahead',
+      metaKey: () => secrets.all().meta,
+    },
   );
   host.siteOps = async (projectId, op) =>
     op.op === 'fix'

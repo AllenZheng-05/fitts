@@ -100,6 +100,31 @@ export function seenAgain(
 }
 
 /**
+ * One set of steps as the replayer runs them, and whether an answer shows the problem again
+ * (back-mid-flow: the field lost what was typed). Also how a trace fix is checked (§7.5).
+ */
+export function traceReplay(
+  oracle: Oracle,
+  finding: Pick<Finding, 'elementRef'>,
+  start: ReplayAsk['start'],
+  steps: TrailStep[],
+): { ask: ReplayAsk; seen(answer: ReplayAnswer): boolean } {
+  const typedStep = steps.find((t) => t.kind === 'type');
+  return {
+    ask: askFor(oracle, start, replaySteps(steps), typedStep?.ref),
+    seen: (answer) => {
+      if (oracle.kind === 'trace' && oracle.probe === 'back-mid-flow') {
+        const typed = typedStep?.text;
+        return (
+          answer.ok && typed !== undefined && answer.value !== undefined && answer.value !== typed
+        );
+      }
+      return seenAgain(oracle, answer, finding);
+    },
+  };
+}
+
+/**
  * Replays the pruned steps; if they don't reproduce, the whole trail once. Returns the repro
  * with `confirmed` set, and the steps that reproduced (for the Playwright test).
  */
@@ -139,23 +164,14 @@ export async function confirm(
     await opts.ready?.();
     if (opts.stopped?.()) return 'stop';
     replays += 1;
+    const trace = traceReplay(oracle, finding, start, steps);
     let answer: ReplayAnswer;
     try {
-      const lastRef = steps.find((t) => t.kind === 'type')?.ref;
-      answer = await replayer(askFor(oracle, start, replaySteps(steps), lastRef));
+      answer = await replayer(trace.ask);
     } catch {
       return 'stop';
     }
-    if (oracle.kind === 'trace' && oracle.probe === 'back-mid-flow') {
-      const typed = steps.find((t) => t.kind === 'type')?.text;
-      return answer.ok &&
-        typed !== undefined &&
-        answer.value !== undefined &&
-        answer.value !== typed
-        ? 'seen'
-        : 'not-seen';
-    }
-    return seenAgain(oracle, answer, finding) ? 'seen' : 'not-seen';
+    return trace.seen(answer) ? 'seen' : 'not-seen';
   };
   for (const [i, steps] of [pruned, full].entries()) {
     // The full trail only when it differs from the pruned steps (the same list is replayed once).

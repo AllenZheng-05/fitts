@@ -8,9 +8,11 @@
 // commit on the branch (or opens a revert PR once the run's PR is merged); retry runs the job
 // again.
 import type {
+  AppModel,
   Brief,
   Change,
   ChatItem,
+  DeviceCell,
   Finding,
   Mode,
   ProbeName,
@@ -20,11 +22,30 @@ import type {
 } from '@fitts/schema';
 import { PAGE_PROBES } from '@fitts/probes';
 import { specFonts } from '@fitts/styles';
-import type { AssetsResult, CiRun, TestRun, VerifyPagesResult, VerifyResult } from '../protocol';
+import type {
+  AssetsResult,
+  CiRun,
+  ReplayAnswer,
+  ReplayAsk,
+  TestRun,
+  VerifyPagesResult,
+  VerifyResult,
+} from '../protocol';
 import { problems, type Check } from '../review/aggregate';
 import type { Direction } from '../review/themefit';
 import type { Site } from '../site-client';
-import { ciLine, fixBudget, repairBudget, taskFile, type FixTools, type LoopEnd } from './fixer';
+import {
+  ciLine,
+  fixBudget,
+  MUSE_RULES,
+  repairBudget,
+  scopeFiles,
+  taskContext,
+  taskFile,
+  type FixTools,
+  type LoopEnd,
+  type MuseRun,
+} from './fixer';
 import {
   fixedByRedesign,
   judgeRedesign,
@@ -62,11 +83,29 @@ export const MAX_FIX_JOBS = 1;
 export const MAX_REPAIRS = 3;
 
 /**
- * Probes a worktree's server can re-run on a page (§9.2). Findings from traces (network,
- * feedback timing, errors, back mid-flow, labels) need the flow replayed, which verification
- * doesn't do yet, so they aren't fixed automatically: no fix is "verified" without proof.
+ * Probes a worktree's server can re-run on a page (§9.2), in the finding's own device cell
+ * (SPEC-phase4 §7.5). Trace findings (feedback timing, errors, back mid-flow, labels) are
+ * verified by replaying their repro on the worktree's server (TRACE); the rest need a person,
+ * or the owner's approval and "Checked by review": no fix is "verified" without proof.
  */
 const VERIFIABLE = new Set<ProbeName>([...PAGE_PROBES, 'focus-visible', 'viewport-sweep', 'links']);
+const TRACE = new Set<ProbeName>([
+  'feedback-timing',
+  'back-mid-flow',
+  'error-message',
+  'label-consistency',
+  'placeholder-leak',
+]);
+
+/** How a fix is checked: a probe on the page, its repro replayed, or a reviewer's look. */
+export type CheckedBy = 'probe' | 'replay' | 'review';
+
+/** A trace finding's repro, as the worktree's replayer runs it, and its oracle. */
+export interface TraceReplay {
+  ask: ReplayAsk;
+  /** The problem was seen again in this answer. */
+  seen(answer: ReplayAnswer): boolean;
+}
 
 /** What the pipeline needs from the run. */
 export interface PipelineHost {
@@ -93,6 +132,19 @@ export interface PipelineHost {
   review?(changeId: string, adjust: (text: string) => Promise<void>): Promise<'ok' | 'restart'>;
   /** A change settled: verified, or rolled back with its reason (the decider hears about it). */
   settled?(change: Change): void;
+  /** SPEC-phase4 §7.1: the App Model, for the fixer's context and the allowlist. */
+  appModel?(): AppModel | undefined;
+  /** SPEC-phase4 §7.5: a device cell of this run, by id. */
+  cell?(id: string): DeviceCell | undefined;
+  /** A trace finding's confirmed repro (§7.5), when the replayer saw it again. */
+  traceReplay?(findingId: string): TraceReplay | undefined;
+  /**
+   * "Checked by review" (§7.5): a reviewer compares the page before and the fixed page
+   * (`after`, a JPEG) with what the finding expected.
+   */
+  checkByReview?(finding: Finding, after: string): Promise<{ fixed: boolean; why: string }>;
+  /** A Go ahead / Skip it question whose chat item main can check the owner's answer to. */
+  askItem?(text: string): Promise<{ yes: boolean; itemId: string }>;
 }
 
 export type Fixer = (
@@ -143,6 +195,8 @@ interface Pending {
   hint?: string;
   /** The mode when the fix was started (a change since Autonomous asks before the PR). */
   mode: Mode;
+  /** The owner asked for this fix themselves (reviewer-only findings need that). */
+  owner?: boolean;
 }
 
 /** "No change made…" → "no change made…" (a reason inside a sentence). */
@@ -193,7 +247,12 @@ function probeVerdict(reason: string, after: VerifyResult): Verdict {
 }
 
 /** A fix's section of the run's PR (§9.3): heuristic and severity, problem, fix, evidence, repro. */
-export function fixSection(f: Finding, check: Check | undefined, summary: string): string {
+export function fixSection(
+  f: Finding,
+  check: Check | undefined,
+  summary: string,
+  by: CheckedBy = 'probe',
+): string {
   return [
     `## ${f.title}`,
     '',
@@ -208,10 +267,14 @@ export function fixSection(f: Finding, check: Check | undefined, summary: string
     `### Evidence`,
     ...f.evidence.map((e) => `- ${e}`),
     '',
-    `### Checked`,
-    check
-      ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).`
-      : 'Re-checked by the reviewer panel.',
+    by === 'review' ? `### Checked by review` : `### Checked`,
+    by === 'review'
+      ? `A reviewer compared ${f.route} before and after this change with what was expected. Checked by review, not measured: your tests and CI still decide.`
+      : by === 'replay'
+        ? `Replayed the repro steps on this branch's dev server: the problem no longer happens.`
+        : check
+          ? `Re-ran the ${check.probe} probe on ${check.routes[0] ?? f.route} against this branch's dev server: “${check.title}” is gone, and no new problems at severity 2 or higher appeared (360, 768 and 1280px).`
+          : 'Re-checked by the reviewer panel.',
     '',
     `### Repro`,
     ...reproLines(f),
@@ -328,13 +391,29 @@ export class FixPipeline {
     private readonly redesigner?: Redesigner,
   ) {}
 
-  /** Findings with a check Fitts can run (the others need a person to verify). */
-  fixable(findingIds: string[]): string[] {
-    return findingIds.filter((id) => {
-      const check = this.checks.get(id);
-      // A phone-only problem would "pass" at desktop size without a real fix.
-      return check !== undefined && VERIFIABLE.has(check.probe) && !check.device;
-    });
+  /**
+   * Findings whose fix Fitts can check: a probe it can re-run (in the finding's own cell), or a
+   * trace finding with a confirmed repro. With `owner` (the owner asked for these fixes
+   * themselves), reviewer-only and owner findings too: "Checked by review" (§7.5).
+   */
+  fixable(findingIds: string[], opts: { owner?: boolean } = {}): string[] {
+    return findingIds.filter((id) => this.checkedBy(id, opts.owner === true) !== undefined);
+  }
+
+  /** How a finding's fix would be checked, or undefined when it can't be. */
+  private checkedBy(id: string, owner: boolean): CheckedBy | undefined {
+    const check = this.checks.get(id);
+    if (check && VERIFIABLE.has(check.probe)) {
+      // A problem seen in one cell is checked in that cell: without the cell it can't be.
+      if (!check.device || this.host.cell?.(check.device)) return 'probe';
+    }
+    if (check && TRACE.has(check.probe) && this.host.traceReplay?.(id)) return 'replay';
+    if (owner && this.host.checkByReview) {
+      const f = this.host.state().findings.find((x) => x.id === id);
+      // Reviewer-only and owner findings; a probe finding Fitts can't check stays a person's.
+      if (f && (!check || f.owner)) return 'review';
+    }
+    return undefined;
   }
 
   /** The run's branch, once a job has made it. */
@@ -461,12 +540,12 @@ export class FixPipeline {
     return this.running > 0 || this.queue.length > 0 || this.redesigning;
   }
 
-  start(findingIds: string[]): void {
+  start(findingIds: string[], opts: { owner?: boolean } = {}): void {
     const s = this.host.state();
-    for (const id of this.fixable(findingIds)) {
+    for (const id of this.fixable(findingIds, opts)) {
       const f = s.findings.find((x) => x.id === id);
       if (!f || (f.status !== 'open' && f.status !== 'rolled-back')) continue;
-      this.queue.push({ findingId: id, mode: s.mode });
+      this.queue.push({ findingId: id, mode: s.mode, ...(opts.owner ? { owner: true } : {}) });
       this.update(id, { status: 'fixing' });
     }
     this.pump();
@@ -500,6 +579,8 @@ export class FixPipeline {
       ...(c.reason ? { retryReason: c.reason } : {}),
       ...(hint ? { hint } : {}),
       mode: this.host.state().mode,
+      // Try again is the owner's own ask.
+      owner: true,
     });
     this.pump();
   }
@@ -534,6 +615,10 @@ export class FixPipeline {
 
   private fixTools(job: string): FixTools {
     return {
+      list: async (dir) => (await this.site.fix({ fn: 'list', job, dir })) as string[],
+      requestScope: (path, why) => this.requestScope(job, path, why),
+      muse: async (task) =>
+        (await this.site.fix({ fn: 'muse', job, task: `${task}\n\n${MUSE_RULES}` })) as MuseRun,
       read: async (path) => (await this.site.fix({ fn: 'read', job, path })) as string,
       search: async (text) =>
         (await this.site.fix({ fn: 'search', job, text })) as {
@@ -551,6 +636,93 @@ export class FixPipeline {
   }
 
   /**
+   * request_scope (§7.3): main grants what the mode allows; otherwise the owner is asked, and
+   * main grants it only on their own "Go ahead" to the question that names the file.
+   */
+  private async requestScope(
+    job: string,
+    path: string,
+    why: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const first = (await this.site.fix({ fn: 'grant', job, path })) as {
+      ok: boolean;
+      error?: string;
+    };
+    if (first.ok || !this.host.askItem) return first;
+    const f = this.host.state().findings.find((x) => x.status === 'fixing');
+    const { yes, itemId } = await this.host.askItem(
+      `To fix “${f?.title ?? 'this'}” I need to change ${path} because ${lowerFirst(why.replace(/\.$/, '')) || 'the fix lives there'}. OK?`,
+    );
+    if (!yes) return { ok: false, error: `the owner said no to changing ${path}` };
+    return (await this.site.fix({ fn: 'grant', job, path, itemId })) as {
+      ok: boolean;
+      error?: string;
+    };
+  }
+
+  /**
+   * Whether the change fixed it, by how it's checked (§7.5): the probe re-run in the finding's
+   * cell, its repro replayed on the worktree's server, or a reviewer's look at the fixed page.
+   * Null when it's fixed; then the project's tests and CI checks still have to pass.
+   */
+  private async fixedBy(
+    by: CheckedBy,
+    f: Finding,
+    check: Check | undefined,
+    job: string,
+  ): Promise<Verdict | null> {
+    const route = check?.routes[0] ?? f.route;
+    const device = check?.device ? (this.host.cell?.(check.device) ?? null) : null;
+    if (by === 'probe' && check) {
+      const after = (await this.site.fix({
+        fn: 'verify',
+        job,
+        route,
+        hrefs: check.hrefs,
+        ...(device ? { device } : {}),
+      })) as VerifyResult;
+      const probe = judge(check, after, this.host.baseline(route));
+      return probe ? probeVerdict(probe, after) : null;
+    }
+    if (by === 'replay') {
+      const trace = this.host.traceReplay?.(f.id);
+      if (!trace)
+        return { reason: 'its repro isn’t available', detail: 'its repro isn’t available' };
+      const answer = (await this.site.fix({
+        fn: 'replay',
+        job,
+        ask: trace.ask,
+        ...(device ? { device } : {}),
+      })) as ReplayAnswer;
+      if (!answer.ok) {
+        const reason = `its steps couldn’t be replayed: ${answer.error ?? 'the replay failed'}`;
+        return { reason, detail: reason };
+      }
+      if (!trace.seen(answer)) return null;
+      const reason = 'the problem still happens when I replay its steps';
+      const steps = trace.ask.steps.map(
+        (st, i) => `${i + 1}. ${st.kind} ${st.target?.name ?? st.ref ?? st.path ?? st.text ?? ''}`,
+      );
+      return { reason, detail: [`${reason}:`, ...steps].join('\n') };
+    }
+    const pages = (await this.site.fix({
+      fn: 'verifyPages',
+      job,
+      routes: [route],
+    })) as VerifyPagesResult;
+    const shot = pages.pages[0]?.jpegBase64;
+    if (!pages.ok || !shot) {
+      const reason = `the fixed page couldn’t be shown: ${pages.error ?? 'no picture'}`;
+      return { reason, detail: reason };
+    }
+    const review = (await this.host.checkByReview?.(f, shot)) ?? { fixed: false, why: '' };
+    if (review.fixed) return null;
+    const why = review.why ? `: ${lowerFirst(review.why.replace(/\.$/, ''))}` : '';
+    const reason = `the review says it isn’t fixed yet${why}`;
+    return { reason, detail: reason };
+  }
+
+  /**
    * One fix: the fixer, then verification. A change that fails a check stays in the worktree
    * and the fixer gets it back with what failed, up to MAX_REPAIRS times (Allen's feedback:
    * a redesign that worked was thrown away over one lint error). Then it passes or is reset.
@@ -558,8 +730,9 @@ export class FixPipeline {
   private async job(p: Pending): Promise<void> {
     const f = this.host.state().findings.find((x) => x.id === p.findingId);
     const check = this.checks.get(p.findingId);
+    const by = this.checkedBy(p.findingId, p.owner === true);
     // The redesign may have fixed it while it waited in the queue.
-    if (!f || !check || f.status !== 'fixing') return;
+    if (!f || !by || f.status !== 'fixing') return;
     // SPEC-phase4 §6C: no fix starts while the run is paused for the models.
     await this.host.ready?.();
     this.host.emit([{ type: 'now.changed', nowText: `Fixing “${f.title}”` }]);
@@ -570,6 +743,9 @@ export class FixPipeline {
     try {
       const run = await this.ensureRun();
       const baseline = await this.baselineChecks(run.job);
+      const model = this.host.appModel?.();
+      // SPEC-phase4 §7.3: this finding's own files are what the fix may change (main enforces it).
+      await this.site.fix({ fn: 'scope', job: run.job, files: scopeFiles(f, model) });
       const tools = this.fixTools(run.job);
       const budget = fixBudget(f, check);
       let failure: Verdict | null = null;
@@ -582,6 +758,7 @@ export class FixPipeline {
             ...(p.hint ? { hint: p.hint } : {}),
             ...this.checksFor(baseline),
             ...(failure ? { failure: failure.detail } : {}),
+            context: taskContext(f, model),
           }),
           tools,
           {
@@ -602,17 +779,10 @@ export class FixPipeline {
         }
         await this.host.ready?.();
         this.host.emit([{ type: 'now.changed', nowText: `Checking the fix for “${f.title}”` }]);
-        const route = check.routes[0] ?? f.route;
-        const after = (await this.site.fix({
-          fn: 'verify',
-          job: run.job,
-          route,
-          hrefs: check.hrefs,
-        })) as VerifyResult;
-        const probe = judge(check, after, this.host.baseline(route));
-        failure = probe ? probeVerdict(probe, after) : await this.testsAfter(run.job, baseline);
+        failure =
+          (await this.fixedBy(by, f, check, run.job)) ?? (await this.testsAfter(run.job, baseline));
         if (failure === null) {
-          await this.pass(p, f, check, run, summary);
+          await this.pass(p, f, check, run, summary, by);
           passed = true;
           break;
         }
@@ -646,9 +816,10 @@ export class FixPipeline {
   private async pass(
     p: Pending,
     f: Finding,
-    check: Check,
+    check: Check | undefined,
     run: { job: string; branch: string },
     summary: string,
+    by: CheckedBy = 'probe',
   ) {
     const diff = diffOf((await this.site.fix({ fn: 'diff', job: run.job })) as string);
     const commit = (await this.site.fix({
@@ -672,8 +843,9 @@ export class FixPipeline {
       ...(commit.sha ? { sha: commit.sha } : {}),
       attempts: this.attempts.get(f.id) ?? 1,
       ...(this.runPr ? { prNumber: this.runPr.number, prUrl: this.runPr.url } : {}),
+      ...(by === 'review' ? { checked: 'review' as const } : {}),
     };
-    this.sections.set(changeId, fixSection(f, check, summary));
+    this.sections.set(changeId, fixSection(f, check, summary, by));
     this.change(change, !p.changeId);
     this.update(f.id, {
       status: this.runPr ? 'pr-opened' : 'verified',
@@ -681,7 +853,10 @@ export class FixPipeline {
       costUsd,
       ...(this.runPr ? { prNumber: this.runPr.number, prUrl: this.runPr.url } : {}),
     });
-    if (p.changeId) this.host.say(`That worked: “${f.title}” is fixed and checked.`);
+    if (p.changeId)
+      this.host.say(
+        `That worked: “${f.title}” is fixed and ${by === 'review' ? 'checked by review' : 'checked'}.`,
+      );
     if (!p.changeId)
       this.host.emit([
         { type: 'chat.item', item: { id: this.host.id(), type: 'fix.result', changeId } },

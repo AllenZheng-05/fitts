@@ -40,7 +40,7 @@ const fn = (name: string, description: string, props: Record<string, string>) =>
 });
 
 const REDESIGN_TOOLS = [
-  ...TOOLS.filter((t) => t.name !== 'done'),
+  ...TOOLS.filter((t) => !['done', 'list_files', 'request_scope'].includes(t.name)),
   fn('list_files', 'List a folder (relative to the project root; "" for the root).', {
     dir: '',
   }),

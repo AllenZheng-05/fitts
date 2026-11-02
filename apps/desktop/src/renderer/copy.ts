@@ -287,6 +287,11 @@ export const copy = {
     continueReview: 'Continue review · {n} of {total} decided',
     approved: 'Approved {n} of {total}',
     fixed: 'Fixed and verified ✓ · {title}',
+    /** SPEC-phase4 §7.5: a reviewer-only fix is never "verified". */
+    fixedByReview: 'Fixed · checked by review · {title}',
+    /** Root-cause groups on the approval card (SPEC-phase4 §7.5). */
+    rootCause: '{n} of these share {key}: one change fixes them all.',
+    fixGroup: 'Fix these {n}',
     viewPr: 'View PR #{n}',
     prDryRun: 'That was a practice run, so there’s no pull request on GitHub to open.',
     undo: 'Undo',
@@ -599,6 +604,7 @@ export const copy = {
     changePrefill: 'For the button names, instead…',
     changePrefillGeneric: 'For this fix, instead…',
     fixed: 'Fixed and verified ✓ · {check} passes',
+    fixedByReview: 'Fixed · checked by review, not measured',
     fixing: 'Fixing… re-checking at phone, tablet and desktop widths',
     fixingProgress: 'Fixing',
     dismissed: 'You marked this not a problem.',
@@ -727,6 +733,7 @@ export const copy = {
       findings: 'Findings',
       cost: 'Cost',
       statusVerified: 'fixed and verified',
+      statusCheckedByReview: 'fixed, checked by review',
       statusRolledBack: 'rolled back',
       statusUndone: 'undone',
       pullRequest: 'Pull request',

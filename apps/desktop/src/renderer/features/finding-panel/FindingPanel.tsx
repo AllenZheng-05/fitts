@@ -408,7 +408,9 @@ function Footer({ run, finding, batch }: { run: RunState; finding: Finding; batc
     return (
       <div className={`${bar} bg-mint-tint`}>
         <span className="flex-[1_1_180px] font-bold text-mint-ink">
-          {format(copy.finding.fixed, { check: checkFor(finding) })}
+          {change.checked === 'review'
+            ? copy.finding.fixedByReview
+            : format(copy.finding.fixed, { check: checkFor(finding) })}
         </span>
         {change.prNumber && (
           <Button size="md" onClick={() => openPr(change)}>

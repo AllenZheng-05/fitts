@@ -304,6 +304,8 @@ describe('the fix pipeline (§9)', () => {
       'prepare',
       'tests',
       'ci',
+      // SPEC-phase4 §7.3: the finding's own files, before the fixer runs.
+      'scope',
       'patch',
       'verify',
       'diff',
@@ -520,7 +522,9 @@ describe('the fix pipeline (§9)', () => {
 });
 
 describe('what can be fixed automatically', () => {
-  it('a problem seen only on a phone is not: verification runs at desktop size', () => {
+  // SPEC-phase4 §7.5: a phone-only problem is checked in its cell (fix-u6.test.ts); without
+  // the cell (a host that doesn't know it) it would only be checked at desktop size.
+  it('a problem seen only in a cell the run can’t emulate is not', () => {
     const pipeline = new FixPipeline(
       {} as never,
       {} as Site,

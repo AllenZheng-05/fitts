@@ -49,7 +49,9 @@ import { copy } from '../../renderer/copy';
 import { format } from '../../renderer/lib/format';
 import { ProbeRunner } from '../crawler/probes';
 import { aggregateWithChecks, type Check } from '../review/aggregate';
-import { FixPipeline, type Fixer, type Redesigner } from '../fix/pipeline';
+import { FixPipeline, type Fixer, type Redesigner, type TraceReplay } from '../fix/pipeline';
+import type { ReviewCheckInput } from '../fix/review-check';
+import { rootCauses } from '../fix/groups';
 import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
 import { type Direction, type Inspiration, type ThemeFit } from '../review/themefit';
 import { outlineSvg, type Media } from '../llm/media';
@@ -59,7 +61,7 @@ import type { Converse } from './decider';
 import { applyRules, memoryForReviewers, memoryLine, ruleFor } from '../memory/rules';
 import { ownerFinding, plainDraft, type ReportDraft, type ReportInput } from './report';
 import { buildRepro, oracleFor, pruneTrail, type TrailStep } from '../repro/repro';
-import { confirm as confirmRepro } from '../repro/replay';
+import { confirm as confirmRepro, traceReplay } from '../repro/replay';
 import { playwrightTest } from '../repro/playwright';
 import { titleOf } from '../review/aggregate';
 import {
@@ -130,6 +132,8 @@ export interface RunDeps {
   fixer?: Fixer;
   /** The redesigner (§8.3): applies a picked direction. Without one, directions are advice. */
   redesigner?: Redesigner;
+  /** SPEC-phase4 §7.5: "Checked by review" for a reviewer-only fix (Muse Wonder, before/after). */
+  reviewCheck?: (input: ReviewCheckInput) => Promise<{ fixed: boolean; why: string }>;
   /** A new round of directions from the owner's feedback (SPEC-phase3 §2.3). */
   reviseLooks?: (
     input: {
@@ -229,6 +233,8 @@ export class RealRun {
   >();
   /** SPEC-phase4 §6.3: the device matrix, once the device pass chose it. */
   private cells: DeviceCell[] = [];
+  /** SPEC-phase4 §7.5: each trace finding's confirmed repro, for checking its fix. */
+  private readonly traceReplays = new Map<string, TraceReplay>();
   /** SPEC-phase4 §6A: what Fitts noticed, in order; keys of probe notes already made. */
   private readonly observations: Observation[] = [];
   private readonly noted = new Set<string>();
@@ -1170,8 +1176,21 @@ export class RealRun {
     ).length;
     const id = this.id();
     this.approvalId = id;
+    const groups = rootCauses(
+      this.state.findings.filter((f) => fixable.includes(f.id)),
+      (f) => this.checks.get(f.id)?.title,
+    );
     this.emit([
-      { type: 'chat.item', item: { id, type: 'approval.batch', findingIds: fixable, serious } },
+      {
+        type: 'chat.item',
+        item: {
+          id,
+          type: 'approval.batch',
+          findingIds: fixable,
+          serious,
+          ...(groups.length ? { groups } : {}),
+        },
+      },
       { type: 'waiting.changed', waitingFor: 'approval' },
     ]);
     this.setActivity('waiting-on-user');
@@ -1197,8 +1216,9 @@ export class RealRun {
       this.emit([{ type: 'waiting.changed' }]);
       if (!this.finished) this.setActivity('acting');
     }
-    // What Fitts can't check a fix for, it says so instead of quietly doing nothing.
-    const fixable = this.pipeline.fixable(findingIds);
+    // What Fitts can't check a fix for, it says so instead of quietly doing nothing. The owner
+    // asked for these themselves, so reviewer-only findings can be "Checked by review" (§7.5).
+    const fixable = this.pipeline.fixable(findingIds, { owner: true });
     const cant = this.state.findings.filter(
       (f) => findingIds.includes(f.id) && !fixable.includes(f.id),
     );
@@ -1206,7 +1226,7 @@ export class RealRun {
       this.say(format(copy.fitts.cantFix, { title: f.title, fix: f.fix }));
     if (fixable.length === 0) return;
     this.fixPhase = true;
-    this.pipeline.start(fixable);
+    this.pipeline.start(fixable, { owner: true });
     if (!this.pipeline.busy) this.fixesSettled();
   }
 
@@ -1541,14 +1561,32 @@ export class RealRun {
     );
   }
 
+  /** ask(), with the question's chat item: main checks the owner's own answer to it (§7.3). */
+  private askItem(text: string): Promise<{ yes: boolean; itemId: string }> {
+    let itemId = '';
+    return this.choose(text, [copy.fitts.goAhead, copy.fitts.skipIt], (id) => {
+      itemId = id;
+    }).then((answer) => ({ yes: answer === copy.fitts.goAhead, itemId }));
+  }
+
+  /** A device cell of this run (or a built-in device) by id. */
+  private cellFor(id: string): DeviceCell | undefined {
+    const device = DEVICES.find((d) => d.id === id);
+    return (
+      this.cells.find((c) => c.id === id) ??
+      (device ? { ...device, touch: device.mobile } : undefined)
+    );
+  }
+
   /**
    * A blocking question with its own buttons; resolves with the one pressed, or the last option
    * (the "no") when the run moves on without an answer.
    */
-  private choose(text: string, options: string[]): Promise<string> {
+  private choose(text: string, options: string[], onId?: (id: string) => void): Promise<string> {
     const no = options[options.length - 1] ?? '';
     return new Promise((resolve) => {
       const id = this.id();
+      onId?.(id);
       this.emit([
         {
           type: 'chat.item',
@@ -2269,6 +2307,30 @@ export class RealRun {
         restingActivity: () => (this.finished ? 'idle' : 'acting'),
         review: (changeId, adjust) => this.reviewRedesign(changeId, adjust),
         settled: (change) => this.changeSettled(change),
+        appModel: () => this.deps.appModel,
+        cell: (id) => this.cellFor(id),
+        traceReplay: (id) => this.traceReplays.get(id),
+        askItem: (text) => this.askItem(text),
+        ...(this.deps.reviewCheck
+          ? {
+              checkByReview: (f: Finding, after: string) => {
+                const before = this.pages.get(f.route)?.evidence.shot?.jpegBase64;
+                return (
+                  this.deps.reviewCheck?.({
+                    finding: {
+                      title: f.title,
+                      finding: f.finding,
+                      fix: f.fix,
+                      route: f.route,
+                      ...(f.repro?.expected ? { expected: f.repro.expected } : {}),
+                    },
+                    ...(before ? { before } : {}),
+                    after,
+                  }) ?? Promise.resolve({ fixed: false, why: '' })
+                );
+              },
+            }
+          : {}),
       },
       this.deps.site,
       this.deps.fixer,
@@ -3013,6 +3075,10 @@ export class RealRun {
       );
       if (steps !== pruned) repro = buildRepro({ ...input, steps });
       repro = { ...repro, confirmed };
+      // SPEC-phase4 §7.5: a trace finding seen again can have its fix checked the same way.
+      const oracle = oracleFor(f, check);
+      if (confirmed === 'replayed' && oracle.kind === 'trace')
+        this.traceReplays.set(f.id, traceReplay(oracle, f, start, steps));
       repro.playwright = playwrightTest(f, repro, { probe: check?.probe, item, cell });
     }
     const now = this.state.findings.find((x) => x.id === f.id);

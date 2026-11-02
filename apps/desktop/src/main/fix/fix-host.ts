@@ -34,6 +34,30 @@ import { SiteWindow } from '../site/site-window';
 import { run } from '../spawn';
 import { ciChecks, FORMATTABLE, LINTABLE, type PackageManager } from './ci';
 import { prBackend, type PrBackend } from './pr';
+import { grant, mayEdit, newScope, type FixMode, type Scope } from './allowlist';
+import { museExec, museStatus, type MuseStatus } from './muse';
+import { replay } from '../site/replayer';
+import type { DeviceCell } from '@fitts/schema';
+import type { ReplayAsk } from '../../agent/protocol';
+
+/**
+ * What the fix host needs from the run (SPEC-phase4 §7.3): the run's mode, the owner's own
+ * answers (main keeps them; the agent can't make one up), and the Meta key for Muse Code.
+ */
+export interface FixPolicy {
+  mode(projectId: string): FixMode;
+  ownerAnswer(projectId: string, itemId: string): { question: string; answer: string } | undefined;
+  /** The answer that means yes ("Go ahead"). */
+  yes: string;
+  metaKey(): string | undefined;
+}
+
+const DEFAULT_POLICY: FixPolicy = {
+  mode: () => 'autonomous',
+  ownerAnswer: () => undefined,
+  yes: 'Go ahead',
+  metaKey: () => undefined,
+};
 
 const git = (cwd: string, ...args: string[]) => run('git', args, { cwd, timeoutMs: 120_000 });
 
@@ -43,6 +67,8 @@ interface Job {
   dir: string;
   branch: string;
   runId: string;
+  /** SPEC-phase4 §7.3: the files this job's fix may change. */
+  scope: Scope;
 }
 
 const TEXT = /\.(tsx?|jsx?|css|scss|html|json|md|vue|svelte)$/;
@@ -70,10 +96,40 @@ export class FixHost {
       vendorDir?: string;
       pluginFile?: string;
     } = {},
+    private readonly policy: FixPolicy = DEFAULT_POLICY,
   ) {}
+
+  private museCached: Promise<MuseStatus> | undefined;
 
   async call(projectId: string, call: FixCall): Promise<unknown> {
     switch (call.fn) {
+      case 'scope': {
+        const job = this.job(call.job);
+        job.scope = newScope(call.files);
+        return { ok: true };
+      }
+      case 'grant': {
+        const job = this.job(call.job);
+        const owner = call.itemId ? this.policy.ownerAnswer(job.projectId, call.itemId) : undefined;
+        return grant(
+          call.path,
+          job.scope,
+          this.policy.mode(job.projectId),
+          owner ? { ...owner, yes: this.policy.yes } : undefined,
+        );
+      }
+      case 'museStatus':
+        this.museCached ??= museStatus();
+        return this.museCached;
+      case 'muse':
+        return this.muse(call.job, call.task, call.model, call.maxSteps);
+      case 'replay': {
+        const next = this.verifying.then(() =>
+          this.replayOn(call.job, call.ask, call.device ?? null),
+        );
+        this.verifying = next.catch(() => undefined);
+        return next;
+      }
       case 'available':
         return this.available(projectId);
       case 'prepare':
@@ -93,7 +149,9 @@ export class FixHost {
       case 'diff':
         return this.diff(call.job);
       case 'verify': {
-        const next = this.verifying.then(() => this.verify(call.job, call.route, call.hrefs));
+        const next = this.verifying.then(() =>
+          this.verify(call.job, call.route, call.hrefs, call.device ?? null),
+        );
         this.verifying = next.catch(() => undefined);
         return next;
       }
@@ -202,7 +260,7 @@ export class FixHost {
       throw new Error(`git worktree add failed: ${add.stderr.trim().slice(0, 200)}`);
     await this.dependencies(root, dir);
     const id = relative(join(root, '.fitts-worktrees'), dir).split(sep).join('/');
-    this.jobs.set(id, { projectId, root, dir, branch: name, runId });
+    this.jobs.set(id, { projectId, root, dir, branch: name, runId, scope: newScope() });
     const sha = await git(dir, 'rev-parse', 'HEAD');
     return { job: id, branch: name, sha: sha.stdout.trim() };
   }
@@ -233,6 +291,59 @@ export class FixHost {
     const mods = join(root, 'node_modules');
     if (existsSync(mods) && !existsSync(join(dir, 'node_modules')))
       symlinkSync(mods, join(dir, 'node_modules'), 'junction');
+  }
+
+  /**
+   * SPEC-phase4 §7.4: one Muse Code run in the job's worktree. The task goes in a file next to
+   * the worktree (never inside the user's repo); the Meta key goes on stdin. Afterwards every
+   * changed file is checked against the allowlist and a disallowed one is put back, before any
+   * verification, so a hostile or careless run can't get past it.
+   */
+  private async muse(id: string, task: string, model?: string, maxSteps?: number) {
+    const job = this.job(id);
+    const status = await (this.museCached ??= museStatus());
+    if (status.status !== 'ready' || !status.via)
+      return {
+        ok: false,
+        authFailed: false,
+        error: `Muse Code is ${status.status}`,
+        patched: 0,
+        files: [],
+        refused: [],
+      };
+    const taskName = `${job.dir.split(sep).pop() ?? 'job'}.task.md`;
+    writeFileSync(join(dirname(job.dir), taskName), task);
+    const res = await museExec({
+      via: status.via,
+      cwd: job.dir,
+      promptFile: `../${taskName}`,
+      apiKey: this.policy.metaKey(),
+      ...(model ? { model } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
+    });
+    rmSync(join(dirname(job.dir), taskName), { force: true });
+    const changed = (await git(job.dir, 'status', '--porcelain')).stdout
+      .split('\n')
+      .map((l) => l.slice(3).trim())
+      .filter(Boolean);
+    const refused: string[] = [];
+    for (const file of changed) {
+      if (mayEdit(file, job.scope, this.policy.mode(job.projectId)).ok) continue;
+      refused.push(file);
+      const tracked = (await git(job.dir, 'ls-files', '--error-unmatch', file)).code === 0;
+      if (tracked) await git(job.dir, 'checkout', '--', file);
+      else rmSync(join(job.dir, file), { force: true, recursive: true });
+    }
+    return {
+      ok: res.code === 0,
+      authFailed: res.authFailed,
+      ...(res.error ? { error: res.error } : {}),
+      summary: res.summary,
+      usage: res.usage,
+      patched: changed.length - refused.length,
+      files: changed.filter((f) => !refused.includes(f)),
+      refused,
+    };
   }
 
   /** A path inside the worktree (no escaping it, no .git, no node_modules). */
@@ -267,7 +378,14 @@ export class FixHost {
   /** Creates or replaces a whole source file inside the worktree (a redesign's new theme). */
   write(id: string, path: string, content: string): { ok: boolean; error?: string } {
     if (!TEXT.test(path)) return { ok: false, error: `${path} isn't a source file` };
-    const full = this.inside(this.job(id), path);
+    const job = this.job(id);
+    const allowed = mayEdit(
+      relative(job.dir, resolve(job.dir, path)),
+      job.scope,
+      this.policy.mode(job.projectId),
+    );
+    if (!allowed.ok) return allowed;
+    const full = this.inside(job, path);
     // Keep the file's line endings when replacing it.
     const crlf = existsSync(full) && readFileSync(full, 'utf8').includes('\r\n');
     mkdirSync(dirname(full), { recursive: true });
@@ -282,7 +400,15 @@ export class FixHost {
 
   /** Replaces exactly one occurrence of `find` (an exact excerpt) with `replace`. */
   patch(id: string, path: string, find: string, replace: string): { ok: boolean; error?: string } {
-    const full = this.inside(this.job(id), path);
+    const job = this.job(id);
+    // SPEC-phase4 §7.3: a guarantee here, where the patch lands, never in a prompt.
+    const allowed = mayEdit(
+      relative(job.dir, resolve(job.dir, path)),
+      job.scope,
+      this.policy.mode(job.projectId),
+    );
+    if (!allowed.ok) return allowed;
+    const full = this.inside(job, path);
     if (!existsSync(full)) return { ok: false, error: `${path} doesn't exist` };
     const text = readFileSync(full, 'utf8');
     // The model sees LF; files may be CRLF.
@@ -307,7 +433,40 @@ export class FixHost {
   }
 
   /** The worktree's dev server, a hidden window on the route, and the page probes (§9.2). */
-  async verify(id: string, route: string, hrefs: string[]): Promise<VerifyResult> {
+  /** SPEC-phase4 §7.5: a repro replayed on the job's own dev server (trace verification). */
+  private async replayOn(id: string, ask: ReplayAsk, device: DeviceCell | null) {
+    const job = this.job(id);
+    const port = await this.freePort();
+    const server = new DevServer(
+      job.dir,
+      verifyCommand(job.dir, port, this.assetSources.pluginFile),
+      port,
+    );
+    try {
+      if (!(await server.start(90_000)))
+        return {
+          ok: false,
+          error: 'the dev server didn’t start',
+          path: '',
+          results: [],
+          focus: [],
+          viewport: [],
+          traces: [],
+          missing: [],
+        };
+      return await replay(job.projectId, server.url, device, ask);
+    } finally {
+      server.stop();
+      this.ports.delete(port);
+    }
+  }
+
+  async verify(
+    id: string,
+    route: string,
+    hrefs: string[],
+    device?: DeviceCell | null,
+  ): Promise<VerifyResult> {
     const job = this.job(id);
     const port = await this.freePort();
     const server = new DevServer(
@@ -333,6 +492,8 @@ export class FixHost {
         () => undefined,
       );
       win.setActive(false);
+      // SPEC-phase4 §7.5: a finding seen in one device cell is checked in that cell.
+      if (device) await win.emulate(device).catch(() => undefined);
       await win.load(route).catch(() => undefined);
       await new Promise((r) => setTimeout(r, 800));
       const results = await win.runProbes(PAGE_PROBES);
@@ -652,7 +813,7 @@ export class FixHost {
       const add = await git(root, 'worktree', 'add', '-q', dir, '-b', name, branch);
       if (add.code !== 0)
         throw new Error(`git worktree add failed: ${add.stderr.trim().slice(0, 200)}`);
-      this.jobs.set(id, { projectId, root, dir, branch: name, runId });
+      this.jobs.set(id, { projectId, root, dir, branch: name, runId, scope: newScope() });
     }
     const rev = await git(dir, 'revert', '--no-edit', sha ?? 'HEAD');
     if (rev.code !== 0) {

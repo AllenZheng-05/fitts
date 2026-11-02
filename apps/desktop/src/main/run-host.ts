@@ -48,6 +48,21 @@ export class RunHost {
   private ready = false;
   private queue: MainMessage[] = [];
   private readonly states = new Map<string, RunState>();
+  /** What the owner answered, by project and item (the renderer's own calls only). */
+  private readonly ownerAnswers = new Map<string, string>();
+
+  /** The run's mode (Plan only when there's no run: nothing changes without one). */
+  mode(projectId: string): RunState['mode'] {
+    return this.states.get(projectId)?.mode ?? 'plan';
+  }
+
+  /** A question the owner answered themselves, with its text (SPEC-phase4 §7.3). */
+  ownerAnswer(projectId: string, itemId: string): { question: string; answer: string } | undefined {
+    const answer = this.ownerAnswers.get(`${projectId}\u0000${itemId}`);
+    const item = this.states.get(projectId)?.chat.find((c) => c.id === itemId);
+    if (answer === undefined || item?.type !== 'question') return undefined;
+    return { question: item.text, answer };
+  }
   private readonly logs = new Map<string, RunLog>();
   private quitting = false;
   private nextRequest = 1;
@@ -134,7 +149,14 @@ export class RunHost {
 
   start(): void {
     ipcMain.on(IPC.engineCall, (_e, call: unknown) => {
-      if (isEngineCall(call)) this.send({ kind: 'call', call });
+      if (!isEngineCall(call)) return;
+      // SPEC-phase4 §7.3: the owner's own answers, kept here, where the agent can't make one up.
+      if (call.method === 'answerQuestion') {
+        const [itemId, answer] = call.args;
+        if (typeof itemId === 'string' && typeof answer === 'string')
+          this.ownerAnswers.set(`${call.projectId}\u0000${itemId}`, answer);
+      }
+      this.send({ kind: 'call', call });
     });
     ipcMain.handle(IPC.engineStates, () => Object.fromEntries(this.states));
     app.on('before-quit', () => {

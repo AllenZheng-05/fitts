@@ -462,3 +462,75 @@ describe('a redesign’s assets', () => {
     expect(staticDir(root)).toBe(join(root, 'public'));
   });
 });
+
+describe('the edit allowlist on a real repo (SPEC-phase4 §7.3)', () => {
+  it('refuses a patch outside it; package.json changes only with the owner’s own "Go ahead"', async () => {
+    const answers = new Map<string, { question: string; answer: string }>();
+    const guarded = new FixHost(
+      (id) => ({ id, kind: 'local', folder: root }) as never,
+      () => new DryRunPrs(),
+      {},
+      {
+        mode: () => 'autonomous',
+        ownerAnswer: (_p, itemId) => answers.get(itemId),
+        yes: 'Go ahead',
+        metaKey: () => undefined,
+      },
+    );
+    const r = (await guarded.call('app', {
+      fn: 'prepare',
+      runId: 'run-allow',
+      findingId: 'f1',
+      branch: 'fitts/allow',
+    })) as { job: string };
+    await guarded.call('app', {
+      fn: 'scope',
+      job: r.job,
+      files: ['src/styles.css', 'package.json'],
+    });
+    const patch = (path: string, find: string, replace: string) =>
+      guarded.call('app', { fn: 'patch', job: r.job, path, find, replace }) as Promise<{
+        ok: boolean;
+        error?: string;
+      }>;
+    // The finding's own file: allowed.
+    expect(await patch('src/styles.css', 'padding: 0;', 'padding: 12px;')).toEqual({ ok: true });
+    // package.json, listed as a "default" by the fixer: still refused, in Autonomous.
+    const refused = await patch('package.json', '"name":"app"', '"name":"pwned"');
+    expect(refused.ok).toBe(false);
+    expect(refused.error).toMatch(/request_scope/);
+    // A grant without the owner, or with a "Go ahead" to some other question, doesn't count.
+    expect(
+      (
+        (await guarded.call('app', { fn: 'grant', job: r.job, path: 'package.json' })) as {
+          ok: boolean;
+        }
+      ).ok,
+    ).toBe(false);
+    answers.set('q-other', { question: 'Can I change src/x.ts?', answer: 'Go ahead' });
+    expect(
+      (
+        (await guarded.call('app', {
+          fn: 'grant',
+          job: r.job,
+          path: 'package.json',
+          itemId: 'q-other',
+        })) as { ok: boolean }
+      ).ok,
+    ).toBe(false);
+    expect((await patch('package.json', '"name":"app"', '"name":"pwned"')).ok).toBe(false);
+    expect(
+      readFileSync(join(root, '.fitts-worktrees', 'run-allow', 'f1', 'package.json'), 'utf8'),
+    ).toContain('"name":"app"');
+    // The owner's own "Go ahead" on the question that names it.
+    answers.set('q-pkg', {
+      question: 'To fix it I need to change package.json because the script is wrong. OK?',
+      answer: 'Go ahead',
+    });
+    expect(
+      await guarded.call('app', { fn: 'grant', job: r.job, path: 'package.json', itemId: 'q-pkg' }),
+    ).toEqual({ ok: true });
+    expect(await patch('package.json', '"name":"app"', '"name":"app2"')).toEqual({ ok: true });
+    await guarded.call('app', { fn: 'discard', job: r.job });
+  });
+});

@@ -3186,7 +3186,7 @@ cuts.
 ## Phase 4 — demo/basil-ember (Allen, Nov 2)
 
 - **The AI-generated restaurant site is a demo target, as generated.** Muse Code built it from
-  one prompt (`prompt.md`) in C:UsersPlasmProjectsasil-ember-gen; it's copied into
+  one prompt (`prompt.md`) in `C:/Users/Plasm/Projects/basil-ember-gen`; it's copied into
   demo/basil-ember byte for byte, without node_modules, its .git or dist (its own .gitignore
   leaves dist out), and committed on its own. The monorepo's .gitignore leaves its
   `tsconfig.tsbuildinfo` out and git stores `prompt.md` with LF line endings; nothing else
@@ -3208,3 +3208,78 @@ cuts.
   .gitignore instead of replacing it, and leaves `*.tsbuildinfo` behind, so basil-ember's mirror
   is its own files plus the one-file plugin. The Android app (U8) joins the list the same way.
   Publishing and cloning are Allen's (NEEDS-ALLEN P4-0).
+
+## Phase 4 — U6: a fixer that knows the code
+
+- **The allowlist lives in main** (`main/fix/allowlist.ts`, checked in `fix-host` `patch` and
+  `write`, and after a Muse Code run). Each fix job starts with `scope`: the finding's source
+  file, its source chain's files (not node_modules), the page's file from the App Model and the
+  App Model's token files. Global CSS and the app's own UI files (`src/`, `app/`, `pages/`,
+  `components/`, `styles/`) are allowed in every mode but Plan. Sensitive files never enter a
+  scope. "Related files" (§7.1, style modules the component imports) aren't computed ahead:
+  they're under `src/` anyway, and `outline` lists a file's imports.
+- **request_scope goes through main twice.** The agent asks main to `grant` the file; main
+  grants it outright only when the mode allows (a non-sensitive file in Autonomous or
+  Dangerous). Otherwise the agent asks the owner ("To fix X I need to change F because …. OK?")
+  and calls `grant` again with the question's item id. Main reads the owner's answer from what
+  the renderer itself sent (`run-host` records `answerQuestion`), checks it's "Go ahead" and
+  that the question names the file. The agent can't invent an answer. A hostile fixer can't
+  write `package.json` in Autonomous (integration test on a real repo).
+- **Which findings are fixable:**
+  - A probe Fitts can re-run, in the finding's own device cell (the `!check.device` exclusion is
+    gone). A cell the run can't name isn't fixable.
+  - A trace finding (feedback timing, back mid-flow, error message, label consistency, a later
+    placeholder leak) whose repro was replayed and seen again: its fix is checked by replaying
+    the same steps on the worktree's dev server with the same oracle.
+  - With the owner's own ask ("Fix it", Review each, Try again), reviewer-only and owner
+    findings. Those are checked by Muse Wonder comparing the route's before shot with the fixed
+    page, and labeled "Checked by review" in the chat, the Finding panel, the PR section and the
+    report, never "verified". An unreadable verdict counts as no. Autonomous never starts them,
+    and the approval batch doesn't include them: they're one at a time, on the owner's ask.
+  - The U5c kinds (keyboard, navigation, surprise, state, perf) aren't in VERIFIABLE yet. Their
+    checks need the sweep, reload or fault on the worktree, which `verify` doesn't run. Axe is
+    (it's a page probe). Their findings stay for a person, or for "Checked by review" when the
+    owner asks.
+- **Root-cause groups:** the approval card shows, for each group of 2 or more (the same source
+  line, then the same CSS token, then the same probe problem on different pages), "N of these
+  share K: one change fixes them all", with a "Fix these N" button. The batch's own buttons
+  are unchanged.
+- **Muse Code** runs as the fixer only with `FITTS_FIXER=muse`, and the in-process fixer stays
+  the default (the user's instruction). The Muse run:
+  - Its task goes in a file next to the worktree, never in the repo.
+  - The key goes on stdin (`--api-key-stdin`), with `--disable-web-tools
+    --disable-request-user-input --no-session-log`. `--sandbox-network` is left off: 1.4.14's
+    help lists no values for it.
+  - The allowlist is enforced after the fact (disallowed changes are put back before
+    verification).
+  - Its usage goes to the ledger as Wonder tokens.
+
+  When it isn't ready, can't sign in, or changes nothing allowed, the in-process fixer takes the
+  job ("Muse Code couldn't sign in, so I'm fixing this one myself." on the Now line). Hooks to
+  enforce the allowlist during a Muse run weren't used.
+- **The fixer's new tools:** `list_files`, `outline` (Babel: imports, exports, components and
+  functions with line ranges), `find_component` (searches for its definition forms) and
+  `request_scope`. The redesigner keeps its own `list_files` and doesn't get `request_scope`
+  (a redesign's files are global CSS and UI files).
+
+## Phase 4 — U8 change of plan (Allen, Nov 2)
+
+- **The Android demo is Basil & Ember's ordering app**, in `demo/basil-ember-android`, not a
+  team chat in `demo/android-chat`. The web and Android demos tell one story: the same
+  restaurant's branding, menu, prices and address. U8 hadn't started, so nothing is renamed;
+  SPEC §9.1's `android-chat` means this folder from here on. Its eight planted issues replace
+  A1–A8:
+  - an icon-only cart button with no label
+  - a 36 dp Remove target
+  - low-contrast descriptions
+  - no "Added to cart" feedback
+  - a Cancel order with no confirmation (a DELETE the gate holds)
+  - "Add to cart" / "Add to order" / "Start your bag"
+  - two clickables with identical bounds
+  - "Ready around undefined"
+
+  All are measurable by the §9 checks or the gate. PLANTED.md is the answer key for
+  `bench:android`.
+- **Generated in one pass by a lower-power model** (Allen's wish): Sonnet wrote the whole app
+  from one prompt, saved as its `prompt.md`. Then Fitts's wiring (workspace, mirror, bench) is
+  added in its own commit, as with basil-ember.

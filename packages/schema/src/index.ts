@@ -620,6 +620,8 @@ export interface Change {
   /** Its commit on the run's branch, and the commit that undid it (§9.4). */
   sha?: string;
   revertSha?: string;
+  /** SPEC-phase4 §7.5: a reviewer-only fix, checked by a reviewer's look, never measured. */
+  checked?: 'review';
   /** Undone after the run's PR was merged: the revert PR. */
   revertPrNumber?: number;
   /** How many passes the fixer took: the first, plus repairs after a failed check (§9.2). */
@@ -807,7 +809,15 @@ export type ChatItem =
       options: string[];
       answer?: string;
     }
-  | { id: string; type: 'approval.batch'; findingIds: string[]; serious: number; answer?: string }
+  | {
+      id: string;
+      type: 'approval.batch';
+      findingIds: string[];
+      serious: number;
+      answer?: string;
+      /** SPEC-phase4 §7.5: findings one change fixes (a shared source line, token or problem). */
+      groups?: { key: string; kind: 'source' | 'token' | 'problem'; findingIds: string[] }[];
+    }
   | { id: string; type: 'fix.result'; changeId: string }
   | { id: string; type: 'brief' }
   | { id: string; type: 'quick-replies'; options: string[]; used?: boolean }

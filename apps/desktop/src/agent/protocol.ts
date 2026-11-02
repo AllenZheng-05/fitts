@@ -175,7 +175,27 @@ export type FixCall =
   | { fn: 'patch'; job: string; path: string; find: string; replace: string }
   | { fn: 'write'; job: string; path: string; content: string }
   | { fn: 'diff'; job: string }
-  | { fn: 'verify'; job: string; route: string; hrefs: string[] }
+  | {
+      fn: 'verify';
+      job: string;
+      route: string;
+      hrefs: string[];
+      /** SPEC-phase4 §7.5: the device cell the finding was seen in. */
+      device?: DeviceCell | null;
+    }
+  /** SPEC-phase4 §7.3: the finding's own files, which the fix may change (sensitive ones never). */
+  | { fn: 'scope'; job: string; files: string[] }
+  /**
+   * request_scope's answer: a file the fix may change from now on. Sensitive files (and any
+   * file in the ask modes) need `itemId`: the question the owner answered "Go ahead" to.
+   */
+  | { fn: 'grant'; job: string; path: string; itemId?: string }
+  /** SPEC-phase4 §7.4: Muse Code's status (cached). */
+  | { fn: 'museStatus' }
+  /** One Muse Code fix run in the job's worktree; the diff is checked against the allowlist. */
+  | { fn: 'muse'; job: string; task: string; model?: string; maxSteps?: number }
+  /** SPEC-phase4 §7.5: a repro replayed on the job's own dev server (trace verification). */
+  | { fn: 'replay'; job: string; ask: ReplayAsk; device?: DeviceCell | null }
   /** `size`: the before shots' size, so before and after line up. */
   | {
       fn: 'verifyPages';

@@ -60,7 +60,7 @@ function statusText(change: Change): string {
     case 'retrying':
       return r.statusRetrying;
     default:
-      return r.statusVerified;
+      return change.checked === 'review' ? r.statusCheckedByReview : r.statusVerified;
   }
 }
 

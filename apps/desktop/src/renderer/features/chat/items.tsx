@@ -430,6 +430,17 @@ function ApprovalBatch({ item, run }: { item: Item<'approval.batch'>; run: RunSt
           ? format(copy.items.approvalBodyAllSerious, { n })
           : format(copy.items.approvalBody, { serious: serious.length, small: n - serious.length })}
       </p>
+      {item.answer === undefined &&
+        item.groups?.map((g) => (
+          <div key={g.key} className="flex flex-wrap items-center gap-2">
+            <span className="flex-[1_1_200px] text-[13px]">
+              {format(copy.items.rootCause, { n: g.findingIds.length, key: g.key })}
+            </span>
+            <Button size="inline" onClick={() => engine.approveFixes(run.projectId, g.findingIds)}>
+              {format(copy.items.fixGroup, { n: g.findingIds.length })}
+            </Button>
+          </div>
+        ))}
       {item.answer !== undefined ? (
         <span className="text-[13px] font-semibold text-mint-ink">
           {format(copy.items.approved, {
@@ -492,7 +503,9 @@ function FixResult({ item, run }: { item: Item<'fix.result'>; run: RunState }) {
             ? // Undone after the run's PR was merged: a revert PR (§9.4).
               format(copy.items.reverted, { n: change.revertPrNumber })
             : copy.items.undone
-          : format(copy.items.fixed, { title: change.title })}
+          : format(change.checked === 'review' ? copy.items.fixedByReview : copy.items.fixed, {
+              title: change.title,
+            })}
       </span>
       {!undone && change.prNumber && (
         <Button size="inline" onClick={() => openPr(change)}>

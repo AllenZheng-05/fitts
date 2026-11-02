@@ -34,7 +34,14 @@ import {
   type Provider,
 } from './llm/call';
 import { Reachability } from './llm/reachability';
-import { contributorFor, modelFor, reviewerRoster, SPARK_OPEN, type Profile } from './llm/router';
+import {
+  contributorFor,
+  modelFor,
+  reviewerRoster,
+  SPARK_OPEN,
+  WONDER,
+  type Profile,
+} from './llm/router';
 import { testKey } from './llm/test-key';
 import { recording } from './llm/fake';
 import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
@@ -44,7 +51,10 @@ import { isLiveOrigin, RealRun } from './orchestrator/run';
 import { ReviewerPanel } from './review/reviewers';
 import { composeDirections, themeFit } from './review/themefit';
 import { briefFromSummary, interviewTurn } from './interview/interview';
-import { runFixer } from './fix/fixer';
+import { runFixer, type MuseRun } from './fix/fixer';
+import { reviewCheck } from './fix/review-check';
+import { PHASE_OF } from './ledger/ledger';
+import { PRICE_TABLE, tokenUsd } from './llm/pricing';
 import { runRedesigner } from './fix/redesign';
 import { Media } from './llm/media';
 import { voiceEntry } from './llm/voice-cost';
@@ -307,6 +317,52 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
     allowed: () => runRef.current?.allowed() ?? true,
   });
   const profile = () => profiles.get(projectId) ?? set?.modelProfile ?? 'quality';
+  /**
+   * One fix on Muse Code (§7.4), billed to the ledger from its usage; the in-process fixer
+   * takes over when Muse Code isn't ready, couldn't sign in, or made no allowed change.
+   */
+  const museFix = async (
+    task: string,
+    tools: Parameters<typeof runFixer>[4],
+    opts: Parameters<typeof runFixer>[5],
+  ) => {
+    opts.onStep?.('Fixing with Muse Code');
+    const res: MuseRun | undefined = await tools.muse?.(task).catch(() => undefined);
+    if (res?.usage)
+      ledger.record({
+        ts: new Date().toISOString(),
+        runId: from.runId,
+        projectId,
+        task: 'fix',
+        phase: PHASE_OF.fix,
+        provider: 'meta',
+        model: WONDER,
+        contributor,
+        inputTokens: res.usage.input,
+        cachedTokens: res.usage.cached,
+        outputTokens: res.usage.output,
+        reasoningTokens: res.usage.reasoning,
+        usd: tokenUsd(WONDER, res.usage),
+        latencyMs: 0,
+        findingId: opts.findingId,
+        priceTable: PRICE_TABLE,
+      });
+    if (res?.ok && res.patched > 0)
+      return { patched: res.patched, summary: res.summary ?? 'Muse Code made the change.' };
+    opts.onStep?.(
+      res?.authFailed
+        ? 'Muse Code couldn’t sign in, so I’m fixing this one myself.'
+        : 'Fixing this one myself',
+    );
+    return runFixer(
+      runCaller,
+      callCtx(),
+      modelFor('fix', profile(), { contributor, baseten: Boolean(keys.baseten) }).model,
+      task,
+      tools,
+      opts,
+    );
+  };
   const panel = online()
     ? new ReviewerPanel(runCaller, callCtx, () =>
         reviewerRoster(profile(), { contributor, baseten: Boolean(keys.baseten) }),
@@ -437,6 +493,10 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
                   patched: 0,
                   summary: 'deliberately skipped (rollback check)',
                 });
+              // SPEC-phase4 §7.4: Muse Code first when chosen and ready; the in-process fixer
+              // runs whenever it can't (not installed, couldn't sign in, changed nothing).
+              if (process.env['FITTS_FIXER'] === 'muse' && tools.muse)
+                return museFix(task, tools, opts);
               return runFixer(
                 runCaller,
                 callCtx(),
@@ -446,6 +506,8 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
                 opts,
               );
             },
+            reviewCheck: (input: Parameters<typeof reviewCheck>[3]) =>
+              reviewCheck(runCaller, callCtx(), WONDER, input),
             redesigner: (
               task: string,
               tools: Parameters<typeof runRedesigner>[4],
