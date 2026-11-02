@@ -16,7 +16,7 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U3  | Owner first + memory (§4)                | done        | `bad28a3` |
 | U4  | Repro (§5)                               | done        | `4105a5a` |
 | U5  | Journeys, coverage, device matrix (§6)   | done        | `bb5c828` |
-| U5a | Models unreachable: pause (§6C, added)   | done        | see git   |
+| U5a | Models unreachable: pause (§6C, added)   | done        | `1f18153` |
 | U5b | The action log (§6A)                     | todo        |           |
 | U5c | Detect more (§6B)                        | todo        |           |
 | U6  | Code-aware fixer (§7)                    | todo        |           |
