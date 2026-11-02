@@ -33,6 +33,30 @@ describe('surpriseProblems', () => {
     expect(surpriseProblems([dialog(4300)], [4000]).notes).toEqual([]);
   });
 
+  it('a dialog 0.6 s after a tap is a note for the judge, without claiming nothing prompted it', () => {
+    const added = (role: string): SurpriseEvent => ({
+      type: 'added',
+      at: 4600,
+      ref: 'rate',
+      selector: '#rate',
+      name: 'Rate us',
+      role,
+      fixed: true,
+      zIndex: 1000,
+      coverage: 0.4,
+    });
+    expect(surpriseProblems([added('dialog')], [4000]).notes).toEqual([
+      {
+        kind: 'popped-up',
+        ref: 'rate',
+        at: 4600,
+        measured: 'a dialog ("Rate us") popped up 0.6 s after the last tap',
+      },
+    ]);
+    // A plain overlay that soon after a tap is most likely its answer: nothing.
+    expect(surpriseProblems([added('')], [4000]).notes).toEqual([]);
+  });
+
   it('a layout shift with no recent input jumped; with input it did not', () => {
     const shift = (hadRecentInput: boolean): SurpriseEvent => ({
       type: 'shift',

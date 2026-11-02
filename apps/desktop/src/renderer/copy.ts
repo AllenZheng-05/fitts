@@ -564,6 +564,11 @@ export const copy = {
       stepsCopied: 'Steps copied',
       testCopied: 'Playwright test copied',
       noticed: 'What I noticed along the way',
+      /** SPEC-phase4 §6B.5: the moment the judge saw. */
+      moment: 'The moment it happened',
+      momentBefore: 'Before',
+      momentAfter: 'After',
+      momentAlt: 'The page {when} it changed ({t})',
     },
     fixIt: 'Fix it',
     changeFix: 'Change the fix',

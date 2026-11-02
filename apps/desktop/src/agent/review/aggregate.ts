@@ -15,6 +15,7 @@ import {
   type Severity,
 } from '@fitts/schema';
 import { keyboardKind, surpriseKind } from '@fitts/probes';
+import { JUDGE_PERSONA } from './judge';
 import { navigationKind } from '../crawler/navigation';
 import type { PersonaReview } from './reviewers';
 
@@ -526,6 +527,30 @@ export interface Check {
   device?: string;
 }
 
+/** The routes broken links point at ("/help returns 404"), by path. */
+export function brokenTargets(probes: ProbeResult[]): Set<string> {
+  const out = new Set<string>();
+  for (const r of probes) {
+    if (r.probe !== 'links' || r.pass) continue;
+    for (const i of r.items) {
+      const href = /^(\S+) (returns \d+|doesn't load)$/.exec(i.measured)?.[1];
+      if (!href) continue;
+      try {
+        out.add(new URL(href, 'http://x').pathname);
+      } catch {
+        // Not a URL: nothing to skip.
+      }
+    }
+  }
+  return out;
+}
+
+/** One key for every phone-size cell (their findings all read "on a phone"); others by id. */
+function deviceKey(device: string | undefined): string {
+  if (!device) return '';
+  return deviceInfo(device).mobile ? 'phone' : device;
+}
+
 export function aggregate(input: AggregateInput): Finding[] {
   return aggregateWithChecks(input).findings;
 }
@@ -541,11 +566,16 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
 
   // 1. Probe failures: one finding per problem (probe + what's wrong), across every route it
   //    shows up on ("same issue, 3 screens" is one finding with locations).
+  // A page a broken link leads to is that link's problem (bench:chat, Nov 2): its own probes
+  // (the server's error page: no lang, no landmarks) aren't the site's.
+  const broken = brokenTargets(probes);
   for (const r of probes) {
     if (r.pass) continue;
+    if (r.probe !== 'links' && broken.has(r.route)) continue;
     for (const item of r.items) {
       const t = template(r.probe, item);
-      const key = `${r.probe}|${t.title}|${r.device ?? ''}`;
+      // Phone-size cells share one finding per problem (the title says "on a phone" for each).
+      const key = `${r.probe}|${t.title}|${deviceKey(r.device)}`;
       let c = clusters.find((x) => x.key === key);
       if (!c) {
         c = {
@@ -614,13 +644,17 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
   // 3. Same draft finding on several routes (no probe): one finding with locations.
   const merged: Cluster[] = [];
   for (const c of clusters) {
-    const twin = !c.probe
-      ? merged.find(
-          (m) =>
-            !m.probe &&
-            m.drafts.some((d) => c.drafts.some((e) => similar(d.draft.title, e.draft.title))),
-        )
-      : undefined;
+    // A judged moment is one event on one page (§6B.5): never merged with another page's.
+    const judgedOnly = c.drafts.every((d) => d.persona === JUDGE_PERSONA);
+    const twin =
+      !c.probe && !judgedOnly
+        ? merged.find(
+            (m) =>
+              !m.probe &&
+              !m.drafts.every((d) => d.persona === JUDGE_PERSONA) &&
+              m.drafts.some((d) => c.drafts.some((e) => similar(d.draft.title, e.draft.title))),
+          )
+        : undefined;
     if (!twin) {
       merged.push(c);
       continue;
@@ -694,12 +728,18 @@ function toFinding(
   const severity = severityOf(impact, c.routes.size, reviewers);
   // Evidence check: grounded in something Fitts measured or did (a probe, the trace, the page's
   // controls), and either a probe finding or agreed by 2 of 5 reviewers.
+  // SPEC-phase4 §6B.5: the judge's vote on a surprise event Fitts measured (an observation it
+  // cites) counts as one reviewer, and the event itself as measured evidence.
+  const judged =
+    c.drafts.some((d) => d.persona === JUDGE_PERSONA) &&
+    [...c.evidenceIds].some((id) => id.startsWith('obs-'));
   const grounded =
     Boolean(c.probe) ||
+    judged ||
     [...c.evidenceIds].some(
       (id) => id.endsWith('#trace') || id.endsWith('#snapshot') || id.includes('-ev'),
     );
-  const shown = grounded && (Boolean(c.probe) || reviewers >= 2);
+  const shown = grounded && (Boolean(c.probe) || reviewers >= 2 || judged);
   const routes = [...c.routes];
   const at = stepOf(c.route);
   const evidence = [

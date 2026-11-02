@@ -1,0 +1,31 @@
+{
+  "name": "judge-surprise",
+  "model": "muse-wonder-1.0",
+  "recordedAt": "2026-11-02T10:09:58.079Z",
+  "response": {
+    "outputText": "{\"expected\": false, \"heuristic\": \"H3\", \"severity\": 3, \"why\": \"A tip box appears above the Send Text link and pushes it 58px down without being asked for, just as the person is trying to use it.\"}",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_c238d1de-afb4-4a25-92b5-fc51bb8cfeda",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "{\"expected\": false, \"heuristic\": \"H3\", \"severity\": 3, \"why\": \"A tip box appears above the Send Text link and pushes it 58px down without being asked for, just as the person is trying to use it.\"}",
+            "annotations": [],
+            "logprobs": []
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "model": "muse-wonder-1.0",
+    "usage": {
+      "input": 9005,
+      "cached": 0,
+      "output": 1407,
+      "reasoning": 1343
+    }
+  }
+}

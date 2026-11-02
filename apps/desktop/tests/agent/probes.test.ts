@@ -111,3 +111,40 @@ describe('ProbeRunner', () => {
     expect(runner.results.every((r) => r.evidenceId.startsWith('run-1-ev'))).toBe(true);
   });
 });
+
+describe('surprise events belong to the page they happened on (bench:chat, Nov 2)', () => {
+  it('a tip that slid in on /compose/confirm, read after moving on to /, is filed under /compose/confirm', async () => {
+    const site = {
+      surprise: () =>
+        Promise.resolve({
+          events: [
+            {
+              type: 'shift' as const,
+              at: 4000,
+              hadRecentInput: false,
+              path: '/compose/confirm',
+              sources: [
+                { ref: 'compose-send', selector: 'a', name: 'Send Text', fromY: 300, toY: 358 },
+              ],
+            },
+          ],
+          inputs: [1000],
+          clock: 50,
+        }),
+    } as unknown as Site;
+    const seen: { route: string; kinds: string[]; clock?: number }[] = [];
+    const runner = new ProbeRunner(
+      site,
+      'run-1',
+      () => undefined,
+      (route, notes, clock) =>
+        seen.push({
+          route,
+          kinds: notes.map((n) => n.kind),
+          ...(clock !== undefined ? { clock } : {}),
+        }),
+    );
+    await runner.surprise('/');
+    expect(seen).toEqual([{ route: '/compose/confirm', kinds: ['jumped'], clock: 50 }]);
+  });
+});

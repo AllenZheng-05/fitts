@@ -14,12 +14,78 @@ import { useToasts } from '../../state/toasts';
 import { getEngine } from '../../state/engine';
 import { useUi } from '../../state/ui';
 
+/** "+1.8 s" / "−2.0 s": a frame's time from the moment. */
+const secs = (ms: number) => `${ms >= 0 ? '+' : '−'}${(Math.abs(ms) / 1000).toFixed(1)} s`;
+const pct = (n: number) => `${Math.max(0, Math.min(100, n * 100))}%`;
+
+/**
+ * SPEC-phase4 §6B.5: the moment a surprise was judged, before and after, with the element
+ * outlined by SAM (or its DOM box when SAM couldn't).
+ */
+function Moment({ moment }: { moment: NonNullable<Finding['moment']> }) {
+  const s = copy.finding.seeIt;
+  const first = moment.frames[0];
+  const last = moment.frames.at(-1);
+  if (!first || !last) return null;
+  const sides = [
+    { frame: first, outline: moment.outlines?.first, label: s.momentBefore },
+    { frame: last, outline: moment.outlines?.last, label: s.momentAfter },
+  ];
+  const box = moment.box;
+  return (
+    <figure className="flex flex-col gap-1.5">
+      <figcaption className="font-semibold">{s.moment}</figcaption>
+      <div className="flex gap-2">
+        {sides.map(({ frame, outline, label }) => (
+          <div
+            key={label}
+            className="relative flex-1 overflow-hidden rounded-control border border-ink bg-card"
+          >
+            <img
+              src={frame.url}
+              alt={format(s.momentAlt, { when: label.toLowerCase(), t: secs(frame.t) })}
+              className="block w-full"
+            />
+            {outline ? (
+              <img src={outline} alt="" className="absolute inset-0 h-full w-full" />
+            ) : (
+              box && (
+                <span
+                  aria-hidden
+                  className="absolute rounded-tag border-2 border-coral"
+                  style={{
+                    left: pct(box.left / moment.width),
+                    top: pct(box.top / moment.height),
+                    width: pct(box.width / moment.width),
+                    height: pct(box.height / moment.height),
+                  }}
+                />
+              )
+            )}
+            <span className="absolute bottom-1 left-1 rounded-tag bg-paper px-1 font-mono text-[11px]">
+              {label} · {secs(frame.t)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </figure>
+  );
+}
+
 export function SeeIt({ run, finding }: { run: RunState; finding: Finding }) {
   const repro = finding.repro;
   const toast = useToasts((s) => s.show);
   const [chainOpen, setChainOpen] = useState(false);
   const s = copy.finding.seeIt;
-  if (!repro) return <p className="text-[13px] text-muted">{s.none}</p>;
+  if (!repro)
+    return finding.moment ? (
+      <div className="flex flex-col gap-2.5 text-[13px]">
+        <Moment moment={finding.moment} />
+        <p className="text-muted">{s.none}</p>
+      </div>
+    ) : (
+      <p className="text-[13px] text-muted">{s.none}</p>
+    );
   const stepsText = [
     `${s.start}: ${repro.start.url} (${repro.start.device})`,
     ...repro.steps.map((st) => `${st.n}. ${st.text.replace(/\*\*/g, '')}`),
@@ -49,6 +115,7 @@ export function SeeIt({ run, finding }: { run: RunState; finding: Finding }) {
           </Chip>
         )}
       </div>
+      {finding.moment && <Moment moment={finding.moment} />}
       {repro.steps.length > 0 ? (
         <ol className="flex flex-col gap-1.5">
           {repro.steps.map((st) => (

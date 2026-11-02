@@ -15,7 +15,7 @@ export function Inbox() {
   useEffect(() => {
     void api.conversations().then(setConversations);
   }, []);
-  // Planted #29: "Rate us" pops up 4 s after opening the inbox (once a session), focus stays
+  // Planted #29: "Rate us" pops up 1.5 s after opening the inbox (once a session), focus stays
   // behind it, Tab walks out of it, Esc does nothing, and its close is a mouse-only span. It
   // goes away on its own after 20 s so the rest of the page stays usable.
   useEffect(() => {
@@ -23,7 +23,7 @@ export function Inbox() {
     const show = setTimeout(() => {
       sessionStorage.setItem('rated', '1');
       setRate(true);
-    }, 4000);
+    }, 1500);
     const hide = setTimeout(() => setRate(false), 24_000);
     return () => {
       clearTimeout(show);

@@ -8,10 +8,18 @@ import { launchApp, type LaunchedApp } from './helpers/launch';
 
 const DEMO = resolve(__dirname, '../../../../demo/chat');
 const PORT = '5191';
+const JUDGE_FIXTURE = resolve(__dirname, '../fixtures/llm/judge-surprise.json');
 let launched: LaunchedApp;
 
 test.beforeEach(async () => {
-  launched = await launchApp({ env: { FITTS_E2E_PICK_FOLDER: DEMO, FITTS_SITE_PORT: PORT } });
+  launched = await launchApp({
+    env: {
+      FITTS_E2E_PICK_FOLDER: DEMO,
+      FITTS_SITE_PORT: PORT,
+      // SPEC-phase4 §6B.5: the surprise judge answers from its recorded fixture (no network).
+      FITTS_JUDGE_FIXTURE: JUDGE_FIXTURE,
+    },
+  });
   await launched.page.setViewportSize({ width: 1440, height: 900 });
 });
 
@@ -268,6 +276,25 @@ test('the real crawl reaches every route and tries every primary control (covera
       found.length,
       `found #${found.join(', #')} in ${JSON.stringify(titles)}`,
     ).toBeGreaterThanOrEqual(6);
+  }
+  // SPEC-phase4 §6B.5: the surprise judge (its recorded answer) turns #29's "Rate us" sheet and
+  // #30's tip into judged findings that carry the moment's frames.
+  {
+    const state = await runState(page);
+    const shown = state.findings.filter((f) => (f.lane ?? 'shown') === 'shown');
+    const byJudge = shown.filter((f) => f.agreement.who.includes('Judge'));
+    const moments = (state.observations ?? [])
+      .filter((o) => ['popped-up', 'jumped', 'scrolled-by-itself'].includes(o.kind))
+      .map((o) => [o.route, o.kind, o.ref, o.findingId ?? '-', o.text.slice(0, 90)]);
+    for (const n of [29, 30]) {
+      const planted = PLANTED.find((p) => p.n === n);
+      const judged = planted && byJudge.find((f) => matches(f, planted));
+      expect(
+        judged,
+        `#${n} judged in ${JSON.stringify(byJudge.map((f) => [f.title, f.route, f.elementRef]))}; moments noticed: ${JSON.stringify(moments)}`,
+      ).toBeDefined();
+      expect(judged?.moment?.frames.length ?? 0).toBeGreaterThan(0);
+    }
   }
   // SPEC-phase4 §6A: the search step carries its measured wait (planted #13: 1.5 s with no
   // loading indicator), and the "(null)" note is linked to its finding.

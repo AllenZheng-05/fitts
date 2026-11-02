@@ -22,6 +22,7 @@ import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
 import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
+import { EVENT_SIDE_MS, FrameRing } from './frames';
 import { replay } from './replayer';
 import { measurePerf } from './perf';
 import { mapDebugSrc } from './source-chain';
@@ -65,6 +66,8 @@ const ASSET_NAME = /^[\w.-]+\.(jpg|png|svg|html)$/;
 
 export class SiteManager {
   private readonly live = new Map<string, Live>();
+  /** Each site window's recent frames (SPEC-phase4 §6B.5). */
+  private readonly rings = new Map<string, FrameRing>();
   /** SPEC-phase4 §6.3: each project's device cells from its last run, by id. */
   private readonly cells = new Map<string, Map<string, DeviceCell>>();
 
@@ -346,7 +349,27 @@ export class SiteManager {
         return { op: 'facts', facts: await win.facts(request.path) };
       case 'surprise': {
         const s = await win.surpriseEvents();
-        return { op: 'surprise', events: s.events, inputs: s.inputs };
+        return {
+          op: 'surprise',
+          events: s.events,
+          inputs: s.inputs,
+          ...(s.clock !== undefined ? { clock: s.clock } : {}),
+        };
+      }
+      case 'frames': {
+        // The 2 s after the event have to have been painted first.
+        const wait = Math.min(EVENT_SIDE_MS + 250, request.at + EVENT_SIDE_MS + 150 - Date.now());
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+        const ring = this.rings.get(projectId);
+        return {
+          op: 'frames',
+          frames: (ring?.around(request.at) ?? []).map((f) => ({
+            at: f.at,
+            jpegBase64: f.jpeg.toString('base64'),
+            width: f.width,
+            height: f.height,
+          })),
+        };
       }
       case 'fault': {
         // Never on a live site: rewriting responses is for the project's own dev server.
@@ -485,6 +508,13 @@ export class SiteManager {
 
   /** The site's own frames show only while its tab does (SPEC-phase3 §3). */
   private siteFrame(id: string, jpeg: Buffer, w: number, h: number): void {
+    // SPEC-phase4 §6B.5: the last 4 s at about 8 fps, for the surprise judge.
+    let ring = this.rings.get(id);
+    if (!ring) {
+      ring = new FrameRing();
+      this.rings.set(id, ring);
+    }
+    ring.push({ at: Date.now(), jpeg, width: w, height: h });
     const tabs = this.live.get(id)?.tabs;
     if (!tabs || tabs.active === SITE_TAB) this.broadcast(IPC.siteFrame, id, jpeg, w, h);
   }

@@ -18,7 +18,7 @@ import {
   type RunEvent,
   type RunState,
 } from '@fitts/schema';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { profileFor } from '../renderer/mock/profiles';
 import { copy } from '../renderer/copy';
 import { MockRunEngine } from '../renderer/state/mock-engine';
@@ -43,7 +43,7 @@ import {
   type Profile,
 } from './llm/router';
 import { testKey } from './llm/test-key';
-import { recording } from './llm/fake';
+import { FakeLlmClient, recording, type Fixture } from './llm/fake';
 import { ExplorerBrain, SparkBrain, type Brain } from './crawler/brain';
 import { SparkJourneyBrain } from './crawler/journey';
 import { SparkDecider, sparkConverse } from './orchestrator/decider';
@@ -53,6 +53,7 @@ import { composeDirections, themeFit } from './review/themefit';
 import { briefFromSummary, interviewTurn } from './interview/interview';
 import { runFixer, type MuseRun } from './fix/fixer';
 import { reviewCheck } from './fix/review-check';
+import { judgeSurprise, type JudgeInput } from './review/judge';
 import { PHASE_OF } from './ledger/ledger';
 import { PRICE_TABLE, tokenUsd } from './llm/pricing';
 import { runRedesigner } from './fix/redesign';
@@ -477,6 +478,29 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       ...(online() && keys.meta && process.env['FITTS_NO_MEDIA'] !== '1'
         ? { media: new Media(keys.meta, ledger) }
         : {}),
+      // SPEC-phase4 §6B.5: the surprise judge (Muse Wonder). Offline tests answer it from the
+      // recorded fixture (FITTS_JUDGE_FIXTURE), never the network.
+      ...(online()
+        ? { judge: (input: JudgeInput) => judgeSurprise(runCaller, callCtx(), WONDER, input) }
+        : process.env['FITTS_OFFLINE'] === '1' && process.env['FITTS_JUDGE_FIXTURE']
+          ? {
+              judge: (input: JudgeInput) =>
+                judgeSurprise(
+                  new LlmCaller(
+                    () =>
+                      new FakeLlmClient([
+                        JSON.parse(
+                          readFileSync(process.env['FITTS_JUDGE_FIXTURE'] ?? '', 'utf8'),
+                        ) as Fixture,
+                      ]),
+                    ledger,
+                  ),
+                  callCtx(),
+                  WONDER,
+                  input,
+                ),
+            }
+          : {}),
       // A live site has no code: no fixer or redesigner, so nothing is offered that can't be done.
       ...(online() && !isLiveOrigin(origin)
         ? {

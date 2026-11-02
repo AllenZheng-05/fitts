@@ -52,7 +52,16 @@ import { aggregateWithChecks, type Check } from '../review/aggregate';
 import { FixPipeline, type Fixer, type Redesigner, type TraceReplay } from '../fix/pipeline';
 import type { ReviewCheckInput } from '../fix/review-check';
 import { rootCauses } from '../fix/groups';
-import type { ReviewerPanel, RouteEvidence } from '../review/reviewers';
+import {
+  JUDGE_CAP,
+  JUDGE_PERSONA,
+  JUDGED,
+  judgeDraft,
+  type JudgeInput,
+  type JudgeVerdict,
+} from '../review/judge';
+import type { PersonaReview, ReviewerPanel, RouteEvidence } from '../review/reviewers';
+import type { SurpriseNote } from '@fitts/probes';
 import { type Direction, type Inspiration, type ThemeFit } from '../review/themefit';
 import { outlineSvg, type Media } from '../llm/media';
 import { buildBoard, specFonts } from '@fitts/styles';
@@ -133,6 +142,8 @@ export interface RunDeps {
   fixer?: Fixer;
   /** The redesigner (§8.3): applies a picked direction. Without one, directions are advice. */
   redesigner?: Redesigner;
+  /** SPEC-phase4 §6B.5: the surprise judge (Muse Wonder over the moment's frames). */
+  judge?: (input: JudgeInput) => Promise<JudgeVerdict | null>;
   /** SPEC-phase4 §7.5: "Checked by review" for a reviewer-only fix (Muse Wonder, before/after). */
   reviewCheck?: (input: ReviewCheckInput) => Promise<{ fixed: boolean; why: string }>;
   /** A new round of directions from the owner's feedback (SPEC-phase3 §2.3). */
@@ -236,6 +247,13 @@ export class RealRun {
   private cells: DeviceCell[] = [];
   /** SPEC-phase4 §7.5: each trace finding's confirmed repro, for checking its fix. */
   private readonly traceReplays = new Map<string, TraceReplay>();
+  /** SPEC-phase4 §6B.5: the judge's pending looks, its votes and the moments it saw. */
+  private readonly judging: Promise<void>[] = [];
+  private readonly judgeReviews: PersonaReview[] = [];
+  private readonly moments = new Map<string, NonNullable<Finding['moment']>>();
+  private judged = 0;
+  /** "Tapped “Send”": the last thing Fitts did, for the judge. */
+  private lastAction: string | undefined;
   /** Each finding's repro steps as the replayer takes them (a dialog's recheck opens it). */
   private readonly reproSteps = new Map<string, ReplayStep[]>();
   /** SPEC-phase4 §6A: what Fitts noticed, in order; keys of probe notes already made. */
@@ -356,19 +374,23 @@ export class RealRun {
           ),
         );
       },
-      (route, notes) => {
-        this.notice(
-          notes.map((n) => ({
-            id: this.nextObsId(),
-            step: this.state.step,
-            route,
-            ...(this.cellNow ? { cell: this.cellNow } : {}),
-            kind: n.kind,
-            text: format(copy.noticed.surprise, { measured: n.measured }),
-            ...(n.ref ? { ref: n.ref } : {}),
-            severityHint: n.kind === 'popped-up' || n.kind === 'jumped' ? 3 : 2,
-          })),
-        );
+      (route, notes, clock) => {
+        const observations: Observation[] = notes.map((n) => ({
+          id: this.nextObsId(),
+          step: this.state.step,
+          route,
+          ...(this.cellNow ? { cell: this.cellNow } : {}),
+          kind: n.kind,
+          text: format(copy.noticed.surprise, { measured: n.measured }),
+          ...(n.ref ? { ref: n.ref } : {}),
+          severityHint: n.kind === 'popped-up' || n.kind === 'jumped' ? 3 : 2,
+        }));
+        this.notice(observations);
+        // SPEC-phase4 §6B.5: the judge looks at popped-up, jumped and scrolled moments.
+        notes.forEach((n, i) => {
+          const o = observations[i];
+          if (o && clock !== undefined) this.judgeMoment(route, n, o.id, clock + n.at);
+        });
       },
     );
     if (deps.appModel) {
@@ -473,7 +495,13 @@ export class RealRun {
       ]);
       this.checkBudget();
     });
-    void this.loop();
+    // What popped up or moved while the owner was talking to Fitts (the site was open during
+    // the interview) is read before the audit's first load replaces the page (bench:chat, Nov 2:
+    // demo/chat's "Rate us" shows once, 4 s after the inbox opens). Events carry their own page.
+    void this.probes
+      .surprise('/')
+      .catch(() => undefined)
+      .finally(() => void this.loop());
   }
 
   private checkBudget(): void {
@@ -1572,6 +1600,99 @@ export class RealRun {
     }).then((answer) => ({ yes: answer === copy.fitts.goAhead, itemId }));
   }
 
+  /**
+   * SPEC-phase4 §6B.5: one surprise moment judged. The frames 2 s each side are saved as assets
+   * (at most 8), Muse Wonder judges them with the last action and the brief, and SAM outlines
+   * the element on the first and last (the DOM box when it can't). Unexpected → the judge's
+   * draft, citing the observation. At most JUDGE_CAP per run; first-load banners are already
+   * once per site (the probe runner). An unreadable answer leaves the note a note.
+   */
+  private judgeMoment(route: string, note: SurpriseNote, obsId: string, at: number): void {
+    const judge = this.deps.judge;
+    const frames = this.deps.site.frames?.bind(this.deps.site);
+    if (!judge || !frames || !JUDGED.has(note.kind) || this.judged >= JUDGE_CAP) return;
+    this.judged += 1;
+    const lastAction = this.lastAction;
+    const look = async () => {
+      let shots = await frames(at).catch(() => []);
+      // Older than the ring (read before the audit: it popped up during the interview): what
+      // the page shows now, while the thing is still there, is the evidence.
+      if (shots.length === 0) {
+        const now = await this.deps.site.screenshot().catch(() => undefined);
+        if (now?.jpegBase64) shots = [{ at: Date.now(), ...now }];
+      }
+      if (shots.length === 0 || this.finished) return;
+      const first = shots[0];
+      const last = shots.at(-1);
+      if (!first || !last) return;
+      const saved: { t: number; url: string }[] = [];
+      for (const [i, s] of shots.entries()) {
+        const url = await this.deps.site
+          .saveAsset(this.state.runId, `moment-${obsId}-${i}.jpg`, s.jpegBase64)
+          .catch(() => undefined);
+        if (url) saved.push({ t: s.at - at, url });
+      }
+      const verdict = await judge({
+        note,
+        route,
+        frames: shots.map((s) => ({ t: s.at - at, jpegBase64: s.jpegBase64 })),
+        ...(lastAction ? { lastAction } : {}),
+        brief: this.state.brief,
+      });
+      if (!verdict || verdict.expected) return;
+      this.judgeReviews.push({
+        route,
+        persona: JUDGE_PERSONA,
+        drafts: [judgeDraft(note, verdict, obsId)],
+      });
+      const box = note.ref
+        ? await this.deps.site
+            .rects([note.ref])
+            .then((r) => r[note.ref])
+            .catch(() => undefined)
+        : undefined;
+      const moment: NonNullable<Finding['moment']> = {
+        frames: saved,
+        width: first.width,
+        height: first.height,
+        ...(box ? { box } : {}),
+      };
+      this.moments.set(obsId, moment);
+      // SAM on the first and last frames; a failure keeps the DOM box, silently.
+      const media = this.deps.media;
+      if (!media || !box) return;
+      const ctx = {
+        runId: this.state.runId,
+        projectId: this.state.projectId,
+        allowed: () => this.allowed(),
+      };
+      const outlines: { first?: string; last?: string } = {};
+      for (const [key, shot] of [
+        ['first', first],
+        ['last', last],
+      ] as const) {
+        const path = await media
+          .outline(
+            ctx,
+            { jpegBase64: shot.jpegBase64, width: shot.width, height: shot.height },
+            box,
+          )
+          .catch(() => null);
+        if (!path) continue;
+        const url = await this.deps.site
+          .saveAsset(
+            this.state.runId,
+            `moment-${obsId}-${key}.svg`,
+            Buffer.from(outlineSvg(path, shot.width, shot.height)).toString('base64'),
+          )
+          .catch(() => undefined);
+        if (url) outlines[key] = url;
+      }
+      if (outlines.first || outlines.last) moment.outlines = outlines;
+    };
+    this.judging.push(look().catch(() => undefined));
+  }
+
   /** A navigation or keyboard finding's own check, to run again on a fix's worktree. */
   private recheckOf(id: string): Recheck | undefined {
     const check = this.checks.get(id);
@@ -2412,7 +2533,10 @@ export class RealRun {
     }
     for (const r of reviews.filter((x) => x.unusable))
       this.say(format(copy.fitts.reviewerUnreadable, { persona: r.persona, route: r.route }));
-    const { findings, checks } = aggregateWithChecks({
+    // The judge's looks finish first: its votes count like one reviewer (§6B.5).
+    await Promise.all(this.judging);
+    reviews.push(...this.judgeReviews);
+    const { findings: aggregated, checks } = aggregateWithChecks({
       runId: this.state.runId,
       probes: this.probes.results,
       reviews,
@@ -2423,6 +2547,12 @@ export class RealRun {
       },
     });
     this.checks = checks;
+    // A finding resting on a judged moment carries it, for See it yourself's strip.
+    const findings = aggregated.map((f) => {
+      const id = f.evidenceIds?.find((e) => this.moments.has(e));
+      const moment = id ? this.moments.get(id) : undefined;
+      return moment ? { ...f, moment } : f;
+    });
     // The owner's rules first (§4.3): what they said is fine goes to the owner-ok lane.
     const ruled = applyRules(findings, this.deps.memory?.get(), (f) => checks.get(f.id)?.probe);
     const withReplay = await this.withSources(ruled.map((f) => this.withReplay(f)));
@@ -2799,6 +2929,9 @@ export class RealRun {
       return;
     }
     this.acting = action.kind === 'click' ? { name: action.name, route: routeOf(from) } : undefined;
+    if (action.kind === 'click') this.lastAction = `Tapped “${action.name}”`;
+    else if (action.kind === 'type') this.lastAction = `Typed into “${action.name}”`;
+    else if (action.kind === 'navigate') this.lastAction = `Opened ${action.path ?? from}`;
     let outcome: { path: string; navigated: boolean; trace?: OpTrace } | undefined;
     try {
       if (action.kind === 'navigate') {

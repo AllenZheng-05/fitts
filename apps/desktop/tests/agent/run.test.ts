@@ -162,6 +162,7 @@ function setup({
   reportIssue,
   retryModels,
   panel,
+  judge,
 }: {
   site?: ReturnType<typeof fakeSite>;
   brain?: Brain;
@@ -180,6 +181,7 @@ function setup({
   reportIssue?: RunDeps['reportIssue'];
   retryModels?: RunDeps['retryModels'];
   panel?: RunDeps['panel'];
+  judge?: RunDeps['judge'];
 } = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
@@ -193,6 +195,7 @@ function setup({
       ...(reportIssue ? { reportIssue } : {}),
       ...(retryModels ? { retryModels } : {}),
       ...(panel ? { panel } : {}),
+      ...(judge ? { judge } : {}),
       ...(redesigner ? { redesigner } : {}),
       ...(maxSteps ? { maxSteps } : {}),
       ...(decider ? { decider } : {}),
@@ -2076,4 +2079,85 @@ describe('SPEC-phase4 §6C: when Meta’s models can’t be reached, the run pau
       expect(lost.answered, cut).toEqual(steady.answered);
     }
   }, 120_000);
+});
+
+describe('the surprise judge in a run (SPEC-phase4 §6B.5)', () => {
+  // Fifteen sheets pop up over the page, each from nothing (no input for > 1 s), on the first look.
+  const popups = Array.from({ length: 15 }, (_, i) => ({
+    type: 'added' as const,
+    at: 5000 + i * 10,
+    ref: `sheet-${i}`,
+    selector: 'div',
+    name: `Sheet ${i}`,
+    role: 'dialog',
+    fixed: true,
+    zIndex: 1000,
+    coverage: 0.6,
+  }));
+
+  it('at most 12 judged moments per run; unexpected ones become shown findings with the moment', async () => {
+    let looked = false;
+    const site = fakeSite({
+      surprise: () => {
+        const events = looked ? [] : popups;
+        looked = true;
+        return Promise.resolve({ events, inputs: [], clock: 1000 });
+      },
+      frames: (at) =>
+        Promise.resolve([
+          { at: at - 2000, jpegBase64: 'A', width: 10, height: 10 },
+          { at: at + 2000, jpegBase64: 'B', width: 10, height: 10 },
+        ]),
+    });
+    let calls = 0;
+    const { run, state } = setup({
+      site,
+      judge: () => {
+        calls += 1;
+        return Promise.resolve({
+          expected: false,
+          why: 'A sheet covers the page.',
+          severity: 3,
+          heuristic: 'H3',
+        });
+      },
+    });
+    run.start();
+    await skipLogin(state, run);
+    await finished(state, run, 8000);
+    expect(calls).toBe(12);
+    const judged = (state()?.findings ?? []).filter((f) => f.agreement.who.includes('Judge'));
+    expect(judged.length).toBeGreaterThan(0);
+    expect(judged[0]?.moment?.frames.map((x) => x.t)).toEqual([-2000, 2000]);
+    expect(judged[0]?.moment?.frames.every((x) => x.url.includes('moment-'))).toBe(true);
+    // The Noticed line links to the judge's finding.
+    expect(state()?.observations?.some((o) => o.kind === 'popped-up' && o.findingId)).toBe(true);
+    run.dispose();
+  }, 15_000);
+
+  it('an expected moment, or an unreadable answer, stays a note', async () => {
+    let looked = false;
+    const site = fakeSite({
+      surprise: () => {
+        const events = looked ? [] : popups.slice(0, 2);
+        looked = true;
+        return Promise.resolve({ events, inputs: [], clock: 1000 });
+      },
+      frames: (at) => Promise.resolve([{ at, jpegBase64: 'A', width: 10, height: 10 }]),
+    });
+    const answers = [
+      { expected: true, why: 'They asked for it.', severity: 0, heuristic: null },
+      null,
+    ];
+    const { run, state } = setup({
+      site,
+      judge: () => Promise.resolve(answers.shift() ?? null),
+    });
+    run.start();
+    await skipLogin(state, run);
+    await finished(state, run, 8000);
+    expect((state()?.findings ?? []).some((f) => f.agreement.who.includes('Judge'))).toBe(false);
+    expect(state()?.observations?.filter((o) => o.kind === 'popped-up')).toHaveLength(2);
+    run.dispose();
+  }, 15_000);
 });

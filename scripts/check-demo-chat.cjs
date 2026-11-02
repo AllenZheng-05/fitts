@@ -285,10 +285,10 @@ app.whenReady().then(async () => {
       `[...document.querySelectorAll('img.avatar')].filter((i) => !i.hasAttribute('alt')).length`,
     ).then((n) => n > 0 && `${n} images`),
   );
-  await check(29, '"Rate us" pops up 4 s in; the keyboard can’t close it', async () => {
+  await check(29, '"Rate us" pops up 1.5 s in; the keyboard can’t close it', async () => {
     await js("sessionStorage.removeItem('rated')");
     await go('/');
-    await sleep(4300);
+    await sleep(1800);
     const open = await js('!!document.querySelector(\'[role=dialog][aria-label="Rate us"]\')');
     const focusIn = await js(
       "document.querySelector('[role=dialog]')?.contains(document.activeElement) ?? false",

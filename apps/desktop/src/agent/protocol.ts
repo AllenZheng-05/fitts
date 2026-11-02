@@ -134,6 +134,11 @@ export type SiteOp =
   | { op: 'facts'; path?: string }
   /** The surprise detector's events since the last read, with the input times. */
   | { op: 'surprise' }
+  /**
+   * SPEC-phase4 §6B.5: the site window's frames 2 s each side of `at` (wall-clock ms), at most 8;
+   * it waits until the 2 s after have passed.
+   */
+  | { op: 'frames'; at: number }
   /** Load `route` with one of the site's own GETs rewritten (state_pass, local only). */
   | { op: 'fault'; route: string; endpoint: string; fault: FaultCase }
   /** Throttled phone measurements of some pages on a hidden window (perf_pass). */
@@ -366,7 +371,14 @@ export type SiteOpResult =
   | { op: 'keyboard'; stops: TabStop[]; facts: KeyboardFacts }
   | { op: 'dialog'; check: DialogCheck | null }
   | { op: 'facts'; facts: PageFacts }
-  | { op: 'surprise'; events: SurpriseEvent[]; inputs: number[] }
+  | {
+      op: 'surprise';
+      events: SurpriseEvent[];
+      inputs: number[];
+      /** Add to an event's `at` for wall-clock ms (the frames' clock). */
+      clock?: number;
+    }
+  | { op: 'frames'; frames: { at: number; jpegBase64: string; width: number; height: number }[] }
   | {
       op: 'fault';
       facts: PageFacts;

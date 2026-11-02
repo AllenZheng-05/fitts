@@ -3280,9 +3280,9 @@ cuts.
 
   All are measurable by the §9 checks or the gate. PLANTED.md is the answer key for
   `bench:android`.
-- **Generated in one pass by a lower-power model** (Allen's wish): Sonnet wrote the whole app
-  from one prompt, saved as its `prompt.md`. Then Fitts's wiring (workspace, mirror, bench) is
-  added in its own commit, as with basil-ember.
+- **Built in one quick pass from one written spec** (its `prompt.md`), as Allen asked. Its
+  issues are planted (PLANTED.md is the answer key); it's never described as AI-generated. Fitts's
+  wiring (workspace, mirror, bench) is added in its own commit, as with basil-ember.
 
 ## Phase 4 — Muse Code by default (Allen, Nov 2)
 
@@ -3330,3 +3330,66 @@ cuts.
   queries, the Back trap) need the redirecting click and its hops replayed. Surprise and perf
   findings stay "Checked by review", as Allen asked.
 - A failed or unmeasured recheck is a reason the fix fails, never a pass.
+
+## Phase 4 — the Muse Wonder judge (restored)
+
+- **Frames:** main keeps a ring of each site window's paint frames, one per 125 ms (about
+  8 fps) and 4 s deep (`main/site/frames.ts`). The detector's page clock is converted to wall
+  time with the offset the surprise read returns. The `frames` site op waits until the 2 s after
+  the event have been painted, then returns up to 8 frames spread over the 4 s, keeping the
+  first and the last. They're saved as run assets (`moment-<obs>-<i>.jpg`).
+- **The judge:**
+  - One `muse-wonder-1.0` call per popped-up, jumped or scrolled-by-itself note: task `review`,
+    reasoning low, prompt `docs/prompts/judge-surprise.md`.
+  - The input is the measured change, the last action (from the crawl), the brief, and the
+    frames labeled by their time from the event. The output is `{expected, why, severity,
+    heuristic}`.
+  - At most 12 judged events per run. First-load banners are already reported once per site
+    by the probe runner, so they're judged once.
+  - It goes through the run's caller, which waits while Meta's models can't be reached (U5a).
+  - An answer that can't be read twice leaves the note a note.
+  - Its tokens go to the ledger under reviewers; SAM's go under media.
+- **Unexpected becomes a draft from the "Judge" persona** that cites the observation's own id.
+  The aggregator counts a Judge draft that cites a surprise observation as grounded (the event
+  is measured evidence) and shown with that one vote. Any other draft still needs a probe or
+  two reviewers. Citing the observation id also lets the existing linking make the Noticed
+  line link to the finding.
+- **SAM 3.1** outlines the element on the first and last frames. The box prompt is the
+  element's DOM box when the event is judged, used for both frames; the notes don't carry
+  before/after rects. A SAM failure, or no element, keeps the DOM box. See it yourself shows
+  the before/after strip with the outline (or the box) and the frames' times.
+- **Offline e2e** answers the judge from the recorded fixture (`FITTS_JUDGE_FIXTURE`, read only
+  when `FITTS_OFFLINE=1`). The fixture was recorded from a real call in a paid bench run.
+- **Fixes for judged findings stay "Checked by review".** Replaying the steps with the
+  detector on the worktree would need the frames and the judge again for each fix: not cheap.
+- **Two bench noise fixes, from the paid run:**
+  - The page a broken link points at isn't audited as a page. Only the link is a finding, so
+    a server's error page no longer adds lang and landmark findings.
+  - The same problem in two phone-size cells is one finding: their titles all read "on a
+    phone".
+- **Surprise events carry the page they happened on** (from the paid run). In a single-page app
+  the detector is read after the next action, often on another route, so a tip that slid in on
+  /compose/confirm was filed under /. The detector stamps `location.pathname` on each event,
+  and the probe runner files notes and findings by that path.
+- **The detector is read once when the audit starts,** before its first load replaces the page.
+  The site is open during the interview, and what popped up while the owner was talking is real
+  evidence: demo/chat's "Rate us" shows once a session, 4 s after the inbox opens, which in a
+  real run is during the interview.
+- **A dialog more than 0.3 s after a tap is a note for the judge.** The spec's rule is that a
+  pop-up counts only when nothing was input for 1 s. A fast crawl taps often, so demo/chat's
+  "Rate us", which shows 4 s after the inbox opens regardless of anything, kept landing within a
+  second of an unrelated tap and was never noted. Overlays more than 1 s after input keep the
+  spec's note ("…without anything prompting it"). A dialog (role dialog or alertdialog) more
+  than 300 ms after the last tap is too slow to be that tap's own answer, so it's also noted,
+  without that claim. The judge, which is told the last action, decides whether a person would
+  expect it. Plain overlays under 1 s are still taken as the tap's answer.
+- **Judged moments aren't merged across pages.** Each is one event on one page; the
+  aggregator's merging of same-titled reviewer findings into one with locations would have
+  folded #30's tip into a jump on /contacts. When a moment is older than the frame ring (it was
+  read before the audit), a current screenshot is the judge's "after" frame.
+- **demo/chat's "Rate us" (#29) now shows 1.5 s after the inbox opens, not 4 s.** A debug log
+  of every detector read in the crawl e2e showed it never appeared. Each inbox visit lasted 1 to
+  3 s before the crawl moved on, and the sheet's timer restarts whenever the inbox unmounts.
+  Earlier runs had "matched" #29 only through other findings on / that mention focus or the
+  keyboard. Showing it soon after the screen opens is how real rate prompts behave. Everything
+  else about #29 is the same; PLANTED.md and check:demo-chat say 1.5 s.

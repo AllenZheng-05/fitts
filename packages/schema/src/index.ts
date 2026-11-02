@@ -578,6 +578,17 @@ export interface Finding {
   };
   /** SPEC-phase4 §2.2: the component chain from the element up, nearest first. */
   sourceChain?: SourceFrame[];
+  /**
+   * SPEC-phase4 §6B.5: the moment a surprise judge saw: frames 2 s each side (asset URLs, t in
+   * ms from the event), the element's box, and SAM outlines (SVG assets) on the first and last.
+   */
+  moment?: {
+    frames: { t: number; url: string }[];
+    width: number;
+    height: number;
+    box?: SiteRect;
+    outlines?: { first?: string; last?: string };
+  };
   /** Asset ids (fitts-asset://) for the step shot, the after shot, the SAM mask, the mockup. */
   assets?: { shot?: string; after?: string; mask?: string; mockup?: string };
   prUrl?: string;

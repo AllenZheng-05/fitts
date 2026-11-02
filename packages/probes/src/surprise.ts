@@ -4,7 +4,10 @@
 // target that moved just before the tap are findings; the rest are notes for the reviewers.
 import type { ProbeItem } from '@fitts/schema';
 
-export type SurpriseEvent =
+/** What the detector records; `path` is the page it happened on (an SPA reads it later). */
+export type SurpriseEvent = SurpriseEventBody & { path?: string };
+
+type SurpriseEventBody =
   | {
       type: 'added';
       at: number;
@@ -60,6 +63,8 @@ export interface SurpriseResult {
 
 /** An event this long after the last input had nothing to prompt it. */
 export const NO_INPUT_MS = 1000;
+/** A dialog later than this after a tap is slower than the tap's own answer: the judge decides. */
+export const SOON_AFTER_MS = 300;
 /** A jump smaller than this isn't worth a line. */
 const JUMP_PX = 50;
 const SCROLL_PX = 200;
@@ -96,12 +101,24 @@ export function surpriseProblems(
           e.role === 'alertdialog' ||
           (e.fixed && e.zIndex >= 100) ||
           e.coverage >= 0.25;
+        const isDialog = e.role === 'dialog' || e.role === 'alertdialog';
+        const what = `${isDialog ? 'a dialog' : 'an overlay'}${e.name ? ` ("${e.name}")` : ''}`;
         if (overlay && unprompted(e.at))
           notes.push({
             kind: 'popped-up',
             ref: e.ref,
             at: e.at,
-            measured: `${e.role === 'dialog' || e.role === 'alertdialog' ? 'a dialog' : 'an overlay'}${e.name ? ` ("${e.name}")` : ''} popped up ${after(e.at)} without anything prompting it`,
+            measured: `${what} popped up ${after(e.at)} without anything prompting it`,
+          });
+        // A dialog a beat after a tap, slower than the tap's own answer, may still have nothing to
+        // do with it (a fast crawl taps often): a note, and the judge, told the last action,
+        // decides whether a person would expect it (bench:chat, Nov 2).
+        else if (isDialog && sinceInput(e.at, inputs) > SOON_AFTER_MS)
+          notes.push({
+            kind: 'popped-up',
+            ref: e.ref,
+            at: e.at,
+            measured: `${what} popped up ${after(e.at)}`,
           });
         break;
       }

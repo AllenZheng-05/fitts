@@ -562,6 +562,7 @@ export class SiteWindow {
   async surpriseEvents(): Promise<{
     events: SurpriseEvent[];
     inputs: number[];
+    clock?: number;
   }> {
     const r = await this.evaluate<{
       events: SurpriseEvent[];
@@ -571,7 +572,11 @@ export class SiteWindow {
     ).catch(() => null);
     if (!r) return { events: [], inputs: [] };
     const wall = Date.now();
-    return { events: r.events, inputs: this.inputs.map((t) => Math.round(r.now - (wall - t))) };
+    return {
+      events: r.events,
+      inputs: this.inputs.map((t) => Math.round(r.now - (wall - t))),
+      clock: wall - r.now,
+    };
   }
 
   /** state_pass: load `route` with one GET rewritten; what it shows, and a shot. */

@@ -115,8 +115,4 @@ order.)
   unbundled dev server at Slow 4G is minutes per page and pessimistic. A later phase builds a
   detached production copy (`.fitts-worktrees/<runId>/perf`), serves it and measures every
   journey page, with INP and page-change timing.
-- **The Wonder judge and SAM frames for surprise events (§13 #4, cut in U5c, Nov 2).** Popped-up,
-  jumped and scrolled-by-itself events stay notes for the reviewers. A later phase keeps a
-  4-second frame buffer, asks Muse Wonder whether a person would expect what happened, and
-  shows a before/after strip.
 

@@ -11,6 +11,7 @@ import {
   perfProblems,
   surpriseProblems,
   type FaultCase,
+  type SurpriseEvent,
   type SurpriseNote,
   feedbackTiming,
   fittsId,
@@ -64,8 +65,15 @@ export class ProbeRunner {
     private readonly site: Site,
     private readonly runId: string,
     private readonly onResult: (r: ProbeResult) => void,
-    /** SPEC-phase4 §6B.5: things that happened with nothing to prompt them (notes, not findings). */
-    private readonly onSurprise: (route: string, notes: SurpriseNote[]) => void = () => undefined,
+    /**
+     * SPEC-phase4 §6B.5: things that happened with nothing to prompt them (notes, not findings).
+     * `clock`: add to a note's `at` for wall-clock ms (the frames' clock).
+     */
+    private readonly onSurprise: (
+      route: string,
+      notes: SurpriseNote[],
+      clock?: number,
+    ) => void = () => undefined,
   ) {}
 
   private add(
@@ -169,21 +177,37 @@ export class ProbeRunner {
   async surprise(route: string): Promise<void> {
     if (!this.site.surprise) return;
     try {
-      const { events, inputs } = await this.site.surprise();
+      const { events, inputs, clock } = await this.site.surprise();
       if (events.length === 0) return;
-      const r = surpriseProblems(events, inputs);
-      if (r.items.length) this.add('surprise', route, r.items);
-      const fresh = r.notes.filter((n) => {
-        // A banner on first load is reported once per site, not per page.
-        const key = `${n.kind}|${n.ref || n.measured.replace(/[\d.]+ s|\d+ px/g, '')}`;
-        if (this.surprised.has(key)) return false;
-        this.surprised.add(key);
-        return true;
-      });
-      if (fresh.length) this.onSurprise(route, fresh);
+      // Each event belongs to the page it happened on (a tip that slides in late is read after
+      // the next navigation in a single-page app).
+      const byRoute = new Map<string, typeof events>();
+      for (const e of events) {
+        const where = e.path ? routeOf(e.path) : route;
+        byRoute.set(where, [...(byRoute.get(where) ?? []), e]);
+      }
+      for (const [where, list] of byRoute) this.surpriseOn(where, list, inputs, clock);
     } catch {
       // Best effort.
     }
+  }
+
+  private surpriseOn(
+    route: string,
+    events: SurpriseEvent[],
+    inputs: number[],
+    clock: number | undefined,
+  ): void {
+    const r = surpriseProblems(events, inputs);
+    if (r.items.length) this.add('surprise', route, r.items);
+    const fresh = r.notes.filter((n) => {
+      // A banner on first load is reported once per site, not per page.
+      const key = `${n.kind}|${n.ref || n.measured.replace(/[\d.]+ s|\d+ px/g, '')}`;
+      if (this.surprised.has(key)) return false;
+      this.surprised.add(key);
+      return true;
+    });
+    if (fresh.length) this.onSurprise(route, fresh, clock);
   }
 
   /**

@@ -20,7 +20,8 @@ if (!w.__fittsSurprise) {
   const now = () => Math.round(performance.now() - startedAt);
   const MAX = 300;
   const push = (e: SurpriseEvent) => {
-    if (events.length < MAX) events.push(e);
+    // The page it happened on: in a single-page app the next read can come from another route.
+    if (events.length < MAX) events.push({ ...e, path: location.pathname });
   };
   const refOf = (el: Element) =>
     el.getAttribute('data-ref') ??

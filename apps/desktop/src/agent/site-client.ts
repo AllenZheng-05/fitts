@@ -59,7 +59,9 @@ export interface Site {
   keyboard?(): Promise<{ stops: TabStop[]; facts: KeyboardFacts }>;
   dialog?(): Promise<DialogCheck | null>;
   facts?(path?: string): Promise<PageFacts>;
-  surprise?(): Promise<{ events: SurpriseEvent[]; inputs: number[] }>;
+  surprise?(): Promise<{ events: SurpriseEvent[]; inputs: number[]; clock?: number }>;
+  /** SPEC-phase4 §6B.5: the frames around a moment (wall-clock ms). */
+  frames?(at: number): Promise<{ at: number; jpegBase64: string; width: number; height: number }[]>;
   fault?(
     route: string,
     endpoint: string,
@@ -168,8 +170,13 @@ export class SiteRpc {
         (await expect({ op: 'facts', ...(path ? { path } : {}) }, 'facts')).facts,
       surprise: async () => {
         const r = await expect({ op: 'surprise' }, 'surprise');
-        return { events: r.events, inputs: r.inputs };
+        return {
+          events: r.events,
+          inputs: r.inputs,
+          ...(r.clock !== undefined ? { clock: r.clock } : {}),
+        };
       },
+      frames: async (at) => (await expect({ op: 'frames', at }, 'frames')).frames,
       fault: (route, endpoint, fault) => expect({ op: 'fault', route, endpoint, fault }, 'fault'),
       perf: async (routes) => (await expect({ op: 'perf', routes }, 'perf')).pages,
       value: async (ref) => (await expect({ op: 'value', ref }, 'value')).value,
