@@ -9,6 +9,19 @@ stand-ins, device sizes, the test gate, the website) is committed locally and no
 
 # Phase 4 (do these first; they're in priority order)
 
+## P4-0. Publish the basil-ember mirror and clone it for the demo run (5 min)
+
+demo/basil-ember is the AI-generated restaurant site (Muse Code, one prompt, untouched; Nov 2).
+Fitts audits it as a standalone project, so the demo run uses a clone outside the monorepo.
+
+1. `gh repo create AllenZheng-05/fitts-demo-basil-ember --public`
+2. From the monorepo root: `pnpm demo:mirror --push` (it also pushes the chat and hartwell
+   mirrors; a local export is already committed under `.fitts-dev/mirror/`).
+3. Clone it somewhere outside the monorepo, e.g.
+   `git clone https://github.com/AllenZheng-05/fitts-demo-basil-ember C:UsersPlasmProjectsasil-ember-demo`,
+   then `npm install` there, and open that folder in Fitts for the demo run (its dev server
+   runs on port 5176).
+
 ## P4-1. Android SDK and emulator — DONE Nov 1 (Fitts_Pixel, API 37, emulator-5554; Expo SDK 58 dev build verified)
 
 **Why:** installing system software and a Windows feature. Without it the Android audit (U8)

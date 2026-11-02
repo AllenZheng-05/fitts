@@ -3182,3 +3182,29 @@ cuts.
 - **The demo/chat crawl e2e** takes longer (Tab sweeps, fresh loads, three data cases per
   endpoint, three throttled loads): its limits are 12 minutes and 10 for the poll. It asserts at
   least 6 of #26–#33 are found offline by the probes alone.
+
+## Phase 4 — demo/basil-ember (Allen, Nov 2)
+
+- **The AI-generated restaurant site is a demo target, as generated.** Muse Code built it from
+  one prompt (`prompt.md`) in C:UsersPlasmProjectsasil-ember-gen; it's copied into
+  demo/basil-ember byte for byte, without node_modules, its .git or dist (its own .gitignore
+  leaves dist out), and committed on its own. The monorepo's .gitignore leaves its
+  `tsconfig.tsbuildinfo` out and git stores `prompt.md` with LF line endings; nothing else
+  differs. No planted issues: its problems are the AI's own, and it isn't in the bench (it has
+  no answer key).
+- **Wiring, in its own commit:** the workspace picks it up through `demo/*` (lockfile updated);
+  its Vite config gains the Fitts source plugin and a fixed dev port, 5176 (demo/chat is 5173,
+  hartwell 3000, verification servers 5181 and up). It runs Vite 5, which can't load the
+  workspace plugin's TypeScript source (demo/chat uses Vite 8's `--configLoader runner`), so it
+  uses the one-file, dependency-free build Fitts already ships for PRs
+  (`resources/plugin/fitts.vite.mjs`), copied next to its config: 78 stamps on its home page.
+  Its jest-dom 6 imports `vitest` without declaring it, which pnpm resolved to the workspace's
+  hoisted Vitest 5 and broke 5 of its 15 tests; a `packageExtensions` entry in
+  pnpm-workspace.yaml declares the peer, and all 15 pass again, as in its own folder. Root lint
+  and Prettier skip it; its own `lint` script and config stay.
+- **The mirror** (`pnpm demo:mirror`) exports it as AllenZheng-05/fitts-demo-basil-ember. The
+  script now vendors the workspace plugin only into demos that depend on it, inlines the
+  monorepo's tsconfig only into demos that extend it, adds Fitts's lines to a demo's own
+  .gitignore instead of replacing it, and leaves `*.tsbuildinfo` behind, so basil-ember's mirror
+  is its own files plus the one-file plugin. The Android app (U8) joins the list the same way.
+  Publishing and cloning are Allen's (NEEDS-ALLEN P4-0).

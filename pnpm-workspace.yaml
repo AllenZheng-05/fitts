@@ -2,3 +2,10 @@ packages:
   - apps/*
   - packages/*
   - demo/*
+
+# demo/basil-ember's jest-dom 6 imports `vitest` without declaring it, so pnpm resolved it to the
+# workspace's hoisted Vitest 5; declaring the peer links each package's own Vitest.
+packageExtensions:
+  '@testing-library/jest-dom@6':
+    peerDependencies:
+      vitest: '*'
