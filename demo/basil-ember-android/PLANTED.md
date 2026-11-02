@@ -11,6 +11,7 @@
 | A7 | Two clickable elements with identical bounds: the row Pressable and a full-size overlay Pressable (favorite long-press) | Menu | `menu-row-<itemId>` and `menu-row-favorite-<itemId>` | android-duplicate-bounds probe |
 | A8 | Placeholder leak: "Ready around undefined" when pickup is "As soon as possible" | Order status | `order-pickup-line` | placeholder-leak on hierarchy text |
 | A9 | Brand drift: the in-app theme ignores the brand that the logo, splash and photos carry (stock Material 3 colors and the system font everywhere, while the wordmark, splash and menu stay Basil & Ember) | Every screen | `src/lib/theme.ts` (every color and font token); the header wordmark (`header-wordmark`) stays on brand | the theme check (check_theme on the phone screenshots) and the reviewers · severity 2 |
+| A10 | Content jumps after load: a "Tonight's special" banner appears about 1.2 s after Menu opens, above the list with no reserved space, so every row moves down about 96 dp and a tap meant for one pizza lands on another | Menu (every visit) | `menu-special-banner`; the rows below it (`menu-row-<itemId>`) jump | the Android surprise check (jumped) plus the Wonder judge · severity 2 |
 
 ## Where each lives
 
@@ -21,6 +22,7 @@
 - A5: `app/order/[id].tsx:77-82` (no confirmation), `src/state/store.tsx:111-116` (`cancelOrder`) and `src/lib/api.ts:5` (the DELETE fetch inside a try/catch that ignores failure)
 - A6: `app/item/[id].tsx:90,94` ("Add to cart"), `src/components/MenuRow.tsx:50,54` ("Add to order"), `app/(tabs)/cart.tsx:22` ("Start your bag")
 - A7: `src/components/MenuRow.tsx:16-24` (row Pressable) and `src/components/MenuRow.tsx:34-41` (absolute-fill overlay Pressable, same bounds)
+- A10: `app/(tabs)/index.tsx` (the `special` state set by a 1.2 s timer on each focus, and the banner in the list header with no space reserved).
 - A9: `src/lib/theme.ts` (all tokens set to the Material 3 baseline and `sans-serif`). The wordmark
   (`src/components/Wordmark.tsx`, used as the Menu tab's header title) and the splash
   (`app.json`) carry the brand's own colors and Fraunces, so the mismatch shows.
