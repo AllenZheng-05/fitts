@@ -7,11 +7,25 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "plugins": ["expo-router", "expo-font"],
-    "experiments": { "typedRoutes": true },
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
     "android": {
       "package": "com.basilandember.order",
-      "adaptiveIcon": { "backgroundColor": "#1c1611" }
+      "adaptiveIcon": {
+        "backgroundColor": "#1c1611"
+      },
+      "splash": {
+        "backgroundColor": "#1c1611"
+      }
+    },
+    "splash": {
+      "backgroundColor": "#1c1611",
+      "resizeMode": "contain"
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
 import { CartButton } from '../../src/components/CartButton'
+import { Wordmark } from '../../src/components/Wordmark'
 import { colors, fonts } from '../../src/lib/theme'
 
 export default function TabsLayout() {
@@ -22,6 +23,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Basil & Ember',
+          headerTitle: () => <Wordmark />,
           tabBarLabel: 'Menu',
           tabBarButtonTestID: 'tab-menu',
           tabBarIcon: ({ color, size }) => <Feather name="book-open" color={color as string} size={size} />,

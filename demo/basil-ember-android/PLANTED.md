@@ -10,6 +10,7 @@
 | A6 | One action, three labels: "Add to cart" (item detail), "Add to order" (menu quick-add), "Start your bag" (empty cart) | Item detail, Menu, Cart | `item-add`, `quick-add-<itemId>`, `cart-empty-cta` | label-consistency |
 | A7 | Two clickable elements with identical bounds: the row Pressable and a full-size overlay Pressable (favorite long-press) | Menu | `menu-row-<itemId>` and `menu-row-favorite-<itemId>` | android-duplicate-bounds probe |
 | A8 | Placeholder leak: "Ready around undefined" when pickup is "As soon as possible" | Order status | `order-pickup-line` | placeholder-leak on hierarchy text |
+| A9 | Brand drift: the in-app theme ignores the brand that the logo, splash and photos carry (stock Material 3 colors and the system font everywhere, while the wordmark, splash and menu stay Basil & Ember) | Every screen | `src/lib/theme.ts` (every color and font token); the header wordmark (`header-wordmark`) stays on brand | the theme check (check_theme on the phone screenshots) and the reviewers · severity 2 |
 
 ## Where each lives
 
@@ -20,4 +21,38 @@
 - A5: `app/order/[id].tsx:77-82` (no confirmation), `src/state/store.tsx:111-116` (`cancelOrder`) and `src/lib/api.ts:5` (the DELETE fetch inside a try/catch that ignores failure)
 - A6: `app/item/[id].tsx:90,94` ("Add to cart"), `src/components/MenuRow.tsx:50,54` ("Add to order"), `app/(tabs)/cart.tsx:22` ("Start your bag")
 - A7: `src/components/MenuRow.tsx:16-24` (row Pressable) and `src/components/MenuRow.tsx:34-41` (absolute-fill overlay Pressable, same bounds)
+- A9: `src/lib/theme.ts` (all tokens set to the Material 3 baseline and `sans-serif`). The wordmark
+  (`src/components/Wordmark.tsx`, used as the Menu tab's header title) and the splash
+  (`app.json`) carry the brand's own colors and Fraunces, so the mismatch shows.
 - A8: `app/order/[id].tsx:38` (the template line) with `src/state/store.tsx:93` (ASAP leaves `pickupTime` undefined)
+
+## A9's answer key: the brand tokens before the drift
+
+The fix restores these in `src/lib/theme.ts` (the bench checks the colors are close and the font
+families the same):
+
+| Token | Brand value | Planted (stock) value |
+|---|---|---|
+| ink | #1c1611 | #1D1B20 |
+| ink2 | #2a211a | #49454F |
+| ember | #bc4622 | #6750A4 |
+| emberDark | #9a3718 | #4F378B |
+| basil | #2f5233 | #625B71 |
+| gold | #b98d4f | #7D5260 |
+| stone | #f2ede3 | #FEF7FF |
+| line | #e3dacb | #CAC4D0 |
+| muted | #6f6355 | #79747E |
+| card | #fffcf6 | #F7F2FA |
+| cream | #f5efe4 | #F3EDF7 |
+| white | #ffffff | #ffffff |
+
+| Font token | Brand value | Planted (stock) value |
+|---|---|---|
+| display | Fraunces_600SemiBold | sans-serif |
+| displayBold | Fraunces_700Bold | sans-serif |
+| body | DMSans_400Regular | sans-serif |
+| bodyMedium | DMSans_500Medium | sans-serif |
+| bodyBold | DMSans_700Bold | sans-serif |
+
+A3 stays detectable either way: its hard-coded #B8AFA3 description text is 2.11:1 on the brand
+card (#fffcf6) and 1.96:1 on the stock card (#F7F2FA), under 3:1 both before and after the fix.
