@@ -67,6 +67,35 @@ test('Finding panel (Ask): open, change the fix, not a problem, Esc', async () =
   await expect(panel.getByRole('button', { name: 'Fix it' })).toBeVisible();
 });
 
+test('Finding panel: "See it yourself" has the steps, expected/actual, environment and copies the test', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Audit (Ask)');
+  await page.getByRole('button', { name: 'Pause' }).click();
+  await tray(page)
+    .getByRole('listitem')
+    .filter({ hasText: '"(null)" shown as a name' })
+    .getByRole('button')
+    .click();
+  const panel = page.getByRole('dialog', { name: '"(null)" shown as a name' });
+  // The first tab, selected by default (SPEC-phase4 §5.4).
+  await expect(panel.getByRole('tab', { name: 'See it yourself' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(panel).toContainText('Start:');
+  await expect(panel).toContainText('http://localhost:5173/compose');
+  await expect(panel).toContainText('Replayed and seen again');
+  await expect(panel.getByRole('listitem').filter({ hasText: 'Tap NEXT' })).toBeVisible();
+  await expect(panel).toContainText('The To line shows Grandma');
+  await expect(panel).toContainText('The To line shows "(null)"');
+  await expect(panel).toContainText('Chromium 140 · 1280×800 · mouse · light · 100%');
+  await expectNoSeriousA11yViolations(page);
+  await panel.getByRole('button', { name: 'Copy Playwright test' }).click();
+  await expect(page.getByText('Playwright test copied')).toBeVisible();
+  await panel.getByRole('button', { name: 'Copy steps' }).click();
+  await expect(page.getByText('Steps copied')).toBeVisible();
+});
+
 test('Finding panel: Fix it shows the fixing footer', async () => {
   const { page } = launched;
   await loadScenario(page, 'Audit (Ask)');

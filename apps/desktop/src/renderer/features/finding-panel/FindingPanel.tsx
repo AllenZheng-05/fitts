@@ -27,6 +27,7 @@ import { decide, finishReview, pendingBatchFor, type Batch } from './review';
 import { Replay } from './Replay';
 import { Evidence } from './Evidence';
 import { DismissMenu } from './DismissMenu';
+import { SeeIt } from './SeeIt';
 
 /**
  * Where the Finding panel opens (Allen's feedback, round 5): a layout puts this id on the large
@@ -67,7 +68,7 @@ export function FindingPanel({ run }: { run: RunState }) {
 
 function Panel({ run, finding, wide }: { run: RunState; finding: Finding; wide: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState('live');
+  const [tab, setTab] = useState(finding.repro ? 'seeit' : 'live');
   const close = () => useUi.getState().set({ openFindingId: null });
   useOverlay({ open: true, onClose: close, containerRef: ref, trapFocus: false });
   const titleId = `finding-title-${finding.id}`;
@@ -139,6 +140,15 @@ function Panel({ run, finding, wide }: { run: RunState; finding: Finding; wide: 
           selected={tab}
           onSelect={setTab}
           items={[
+            ...(finding.repro
+              ? [
+                  {
+                    id: 'seeit',
+                    label: copy.finding.seeItTab,
+                    content: <SeeIt run={run} finding={finding} />,
+                  },
+                ]
+              : []),
             {
               id: 'live',
               label: copy.finding.livePreview,

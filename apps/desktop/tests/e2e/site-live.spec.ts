@@ -226,6 +226,22 @@ test('the real crawl reaches every route and tries every primary control (covera
   await page.getByLabel('Message Fitts').press('Enter');
   await expect(proposal.first()).toContainText('You kept going');
   await expect(proposal).toHaveCount(2, { timeout: 60_000 });
+  // SPEC-phase4 §5.2: the repro job replays the "(null)" finding in at most three steps from
+  // /compose/recipient and sees it again; the Playwright test names the element.
+  await expect
+    .poll(
+      async () =>
+        (await runState(page)).findings.find((f) => /\bnull\b/.test(f.title))?.repro?.confirmed ??
+        null,
+      { timeout: 90_000, intervals: [2000] },
+    )
+    .toBe('replayed');
+  const nullRepro = (await runState(page)).findings.find((f) => /\bnull\b/.test(f.title))?.repro;
+  expect(nullRepro?.start.url).toBe(`http://localhost:${PORT}/compose/recipient`);
+  expect(nullRepro?.steps.length).toBeLessThanOrEqual(3);
+  expect(nullRepro?.actual).toMatch(/null/);
+  expect(nullRepro?.playwright).toContain('compose-to');
+  expect(nullRepro?.environment).toMatch(/^Chromium \d+ · /);
   await proposal.last().getByRole('button', { name: 'Finish' }).click();
   await expect.poll(async () => (await runState(page)).phase, { timeout: 60_000 }).toBe('done');
   const s = await runState(page);

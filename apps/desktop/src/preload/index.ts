@@ -104,6 +104,8 @@ const bridge: FittsBridge = {
     hostForget: (host) => ipcRenderer.send(IPC.hostForget, host),
   },
   openLink: (url) => ipcRenderer.send(IPC.openLink, url),
+  openInEditor: (projectId, file, line) =>
+    ipcRenderer.send(IPC.openInEditor, projectId, file, line),
   requestMic: () => ipcRenderer.invoke(IPC.micRequest) as Promise<MicAccess>,
   memory: {
     get: (projectId) => ipcRenderer.invoke(IPC.memoryGet, projectId) as Promise<ProjectMemory>,

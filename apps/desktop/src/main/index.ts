@@ -48,13 +48,13 @@ void app.whenReady().then(() => {
 
   // The window icon covers Windows and Linux; the macOS dock takes its own.
   app.dock?.setIcon(ICON_PATH);
-  registerBridge();
   // The real engine (SPEC-phase2 §1): the agent process, its run log and the project store.
   const userData = app.getPath('userData');
   handleAssets(userData);
   const secrets = new Secrets();
   const host = new RunHost(secrets);
   const projects = new ProjectStore(userData);
+  registerBridge((id) => projects.get(id)?.folder);
   const sites = new SiteManager(userData, (id) => projects.get(id));
   host.onStep = (projectId, runId, step) => void sites.shot(projectId, runId, step);
   const github = createGitHub(secrets);

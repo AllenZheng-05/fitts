@@ -3,6 +3,10 @@ import { copy } from '../copy';
 import { format, formatUsd } from './format';
 import { severityLabel } from './severity';
 
+// A fenced code block’s delimiters (a backtick in a template is awkward).
+const FENCE = '```';
+const FENCE_TS = '```ts';
+
 export interface RunStats {
   found: number;
   fixed: number;
@@ -109,6 +113,22 @@ export function buildReport(project: Project | undefined, run: RunState, now = n
           ...(f.fix ? [`**${copy.finding.fixPrefix}** ${f.fix}`, ''] : []),
           ...(f.evidence.length > 0
             ? [`${r.evidence}:`, '', ...f.evidence.map((e) => `- ${e}`), '']
+            : []),
+          ...(f.repro
+            ? [
+                `${r.repro}:`,
+                '',
+                `${copy.finding.seeIt.start}: ${f.repro.start.url} (${f.repro.start.device})`,
+                ...f.repro.steps.map((s) => `${s.n}. ${s.text.replace(/\*\*/g, '')}`),
+                `${copy.finding.seeIt.expected}: ${f.repro.expected}`,
+                `${copy.finding.seeIt.actual}: ${f.repro.actual}`,
+                `${copy.finding.seeIt.environment}: ${f.repro.environment}${f.repro.confirmed === 'replayed' ? ` · ${copy.finding.seeIt.replayed}` : ''}`,
+                ...(f.source
+                  ? [`${copy.finding.sourceLabel}: ${f.source.file}:${f.source.line}`]
+                  : []),
+                '',
+                ...(f.repro.playwright ? [FENCE_TS, f.repro.playwright.trimEnd(), FENCE, ''] : []),
+              ]
             : []),
         ];
       }),

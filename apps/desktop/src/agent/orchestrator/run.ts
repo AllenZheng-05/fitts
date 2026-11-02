@@ -18,7 +18,7 @@ import {
 } from '@fitts/schema';
 import type { BudgetGuard } from '../ledger/budget';
 import type { CostLedger } from '../ledger/ledger';
-import type { AxSnapshot, HeldRequest } from '../protocol';
+import type { AxSnapshot, HeldRequest, OpTrace } from '../protocol';
 import type { SiteRect } from '@fitts/schema';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
@@ -36,6 +36,10 @@ import { boardWords, solidPng } from './board-art';
 import type { Converse } from './decider';
 import { applyRules, memoryForReviewers, memoryLine, ruleFor } from '../memory/rules';
 import { ownerFinding, plainDraft, type ReportDraft, type ReportInput } from './report';
+import { buildRepro, oracleFor, pruneTrail, type TrailStep } from '../repro/repro';
+import { confirm as confirmRepro } from '../repro/replay';
+import { playwrightTest } from '../repro/playwright';
+import { titleOf } from '../review/aggregate';
 import {
   ScriptedDecider,
   type AbilityName,
@@ -167,7 +171,9 @@ export class RealRun {
   private abort = new AbortController();
   private readonly history: string[] = [];
   /** Every step taken, for each finding's replay (Allen's feedback, round 4). */
-  private readonly trail: { step: number; route: string; ref?: string; label: string }[] = [];
+  private readonly trail: TrailStep[] = [];
+  /** The page as last seen by the crawl (roles and test ids for the trail's targets). */
+  private lastSnap: AxSnapshot | undefined;
   private readonly handlers = new Map<string, (answer: string) => void>();
   private clock: ReturnType<typeof setInterval> | undefined;
   /** A failed action's control, so a stubborn element can't loop forever. */
@@ -744,7 +750,7 @@ export class RealRun {
     );
     finding = await this.withSource(finding);
     this.post([finding]);
-    void this.evidence([finding]);
+    void this.evidence([finding]).then(() => this.repro(finding));
     this.deps.memory?.add(
       ruleFor('is-a-problem', finding, undefined, text.slice(0, 200), this.state.runId),
     );
@@ -873,6 +879,7 @@ export class RealRun {
 
       const here = routeOf(snap.path);
       startedOn ??= here;
+      this.lastSnap = snap;
       const empty = this.probes.emptySubmit(snap, this.coverage.untried(here));
       let action: Action;
       try {
@@ -1866,6 +1873,7 @@ export class RealRun {
     this.post(withReplay);
     const shown = withReplay.filter((f) => (f.lane ?? 'shown') === 'shown');
     void this.evidence(shown).then(() => this.media(shown));
+    void this.reproJob(shown);
   }
 
   /**
@@ -2178,6 +2186,7 @@ export class RealRun {
       return;
     }
     this.acting = action.kind === 'click' ? { name: action.name, route: routeOf(from) } : undefined;
+    let outcome: { path: string; navigated: boolean; trace?: OpTrace } | undefined;
     try {
       if (action.kind === 'navigate') {
         if (this.coverage.routeDone(from)) this.coverage.setStatus(from, 'done');
@@ -2190,6 +2199,7 @@ export class RealRun {
           action.kind === 'click'
             ? await this.deps.site.click(action.ref, DESTRUCTIVE.test(action.name))
             : await this.deps.site.type(action.ref, action.text);
+        outcome = result;
         this.coverage.markTried(from, action.ref);
         this.acting = undefined;
         const errored = await this.probes.afterAction(action, from, result);
@@ -2225,14 +2235,108 @@ export class RealRun {
       if (this.failures >= 3) await this.siteTrouble();
     }
     const logged = this.stepsItem?.steps.at(-1)?.label;
-    this.trail.push({
-      step,
-      route: routeOf(from),
-      ...(action.kind !== 'navigate' ? { ref: action.ref } : {}),
-      label: logged ?? label,
-    });
+    this.trail.push(this.trailStep(step, action, from, logged ?? label, outcome));
     this.emit([{ type: 'step.finished', step }]);
     this.syncCoverage();
+  }
+
+  /** One trail entry (SPEC-phase4 §5.1): what was touched, by role and name, and where it led. */
+  private trailStep(
+    step: number,
+    action: Exclude<Action, { kind: 'done' }>,
+    from: string,
+    label: string,
+    outcome: { path: string; navigated: boolean; trace?: OpTrace } | undefined,
+  ): TrailStep {
+    if (action.kind === 'navigate')
+      return { step, route: routeOf(from), kind: 'navigate', to: action.path, label };
+    const node = this.lastSnap?.nodes.find((n) => n.ref === action.ref);
+    const testId = /^e\d+$/.test(action.ref) ? undefined : action.ref;
+    const ms = outcome?.trace?.feedback?.firstChangeMs ?? null;
+    return {
+      step,
+      route: routeOf(from),
+      ref: action.ref,
+      kind: action.kind,
+      label,
+      target: { role: node?.role ?? 'button', name: action.name, ...(testId ? { testId } : {}) },
+      ...(action.kind === 'type' ? { text: action.text } : {}),
+      ...(outcome?.navigated && routeOf(outcome.path) !== routeOf(from)
+        ? { to: outcome.path }
+        : {}),
+      ...(ms !== null ? { ms } : {}),
+    };
+  }
+
+  /**
+   * Repros (SPEC-phase4 §5.2), in the background after the review: for the top findings by
+   * severity, the pruned steps, expected/actual, the environment and the test; then the hidden
+   * replayer re-runs the steps and the oracle, and the finding says "replayed" when it saw
+   * the problem again.
+   */
+  private async reproJob(findings: Finding[], max = 20): Promise<void> {
+    const ranked = [...findings].sort((a, b) => b.severity - a.severity).slice(0, max);
+    for (const f of ranked) {
+      if (this.finished) return;
+      try {
+        await this.repro(f);
+      } catch {
+        // Best effort: the finding keeps "How I found it".
+      }
+    }
+  }
+
+  private async repro(f: Finding): Promise<void> {
+    const check = this.checks.get(f.id);
+    const item = check
+      ? (this.probes.results
+          .filter((r) => r.probe === check.probe && !r.pass)
+          .flatMap((r) => r.items)
+          .find(
+            (i) =>
+              titleOf(check.probe, i) === check.title && (!f.elementRef || i.ref === f.elementRef),
+          ) ??
+        this.probes.results
+          .filter((r) => r.probe === check.probe && !r.pass)
+          .flatMap((r) => r.items)
+          .find((i) => titleOf(check.probe, i) === check.title))
+      : undefined;
+    const device = f.seenOn ? DEVICES.find((d) => d.id === f.seenOn) : undefined;
+    const cell = device ? { ...device, touch: device.mobile } : undefined;
+    const page = this.pages.get(f.route);
+    const trail = this.trail.filter((t) => t.step <= (f.stepIndex || Number.MAX_SAFE_INTEGER));
+    const input = {
+      finding: f,
+      trail,
+      origin: this.deps.origin,
+      ...(cell ? { cell } : {}),
+      userAgent: `Chrome/${process.versions['chrome'] ?? ''}`,
+      ...(page?.size ? { size: page.size } : {}),
+      ...(item ? { item } : {}),
+      ...(check ? { probe: check.probe } : {}),
+      ...(f.reviewerRepro ? { draft: f.reviewerRepro } : {}),
+      ...(this.deps.appModel ? { model: this.deps.appModel } : {}),
+    };
+    let repro = buildRepro(input);
+    const pruned = pruneTrail(trail, f, this.deps.appModel);
+    const replayer = this.deps.site.replay?.bind(this.deps.site);
+    if (replayer && !f.owner) {
+      const start = { path: f.route, device: cell?.id ?? null };
+      const { confirmed, steps } = await confirmRepro(
+        (ask) => replayer(ask),
+        oracleFor(f, check),
+        f,
+        repro,
+        pruned,
+        trail,
+        start,
+      );
+      if (steps !== pruned) repro = buildRepro({ ...input, trail: steps });
+      repro = { ...repro, confirmed };
+      repro.playwright = playwrightTest(f, repro, { probe: check?.probe, item, cell });
+    }
+    const now = this.state.findings.find((x) => x.id === f.id);
+    if (now && !this.finished) this.emit([{ type: 'finding.updated', finding: { ...now, repro } }]);
   }
 
   /** A password field and a login-ish route (or title) is a login wall (§6.3). */

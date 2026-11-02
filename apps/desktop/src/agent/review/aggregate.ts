@@ -494,6 +494,15 @@ function toFinding(
     },
     evidence,
     ...(c.refs[0] ? { elementRef: c.refs[0] } : {}),
+    ...(lead && (lead.expected || lead.actual || lead.steps?.length)
+      ? {
+          reviewerRepro: {
+            ...(lead.expected ? { expected: lead.expected } : {}),
+            ...(lead.actual ? { actual: lead.actual } : {}),
+            ...(lead.steps?.length ? { steps: lead.steps } : {}),
+          },
+        }
+      : {}),
     ...seenOn(c),
     ...sourceOf(c.items),
     stepIndex: at.stepIndex,

@@ -112,6 +112,20 @@ export function cleanDrafts(raw: unknown, ev: RouteEvidence): FindingDraft[] {
       elementRef: d.elementRef && refs.has(d.elementRef) ? d.elementRef : null,
       evidenceIds,
       evidence: (d.evidence ?? []).map((e) => String(e).slice(0, 160)).slice(0, 3),
+      ...(typeof d.expected === 'string' && d.expected.trim()
+        ? { expected: d.expected.trim().slice(0, 200) }
+        : {}),
+      ...(typeof d.actual === 'string' && d.actual.trim()
+        ? { actual: d.actual.trim().slice(0, 200) }
+        : {}),
+      ...(Array.isArray(d.steps) && d.steps.length
+        ? {
+            steps: d.steps
+              .map((s) => String(s).trim().slice(0, 160))
+              .filter(Boolean)
+              .slice(0, 10),
+          }
+        : {}),
     });
   }
   return out;

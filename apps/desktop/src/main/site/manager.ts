@@ -21,6 +21,7 @@ import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import { DevServer, responds } from './dev-server';
 import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
+import { replay } from './replayer';
 import { mapDebugSrc } from './source-chain';
 import { hostOf, SITE_TAB, TabSet } from './tabs';
 
@@ -318,6 +319,17 @@ export class SiteManager {
       case 'reveal':
         await win.reveal(request.ref).catch(() => undefined);
         return { op: 'revealed' };
+      case 'replay': {
+        // A second hidden window on the same server and session (SPEC-phase4 §5.2).
+        const device = deviceById(request.ask.start.device ?? null);
+        const answer = await replay(
+          projectId,
+          live.server.url || win.wc.getURL(),
+          device,
+          request.ask,
+        );
+        return { op: 'replayed', answer };
+      }
       case 'source':
       case 'sources': {
         // Debug frames name dev-server URLs; main knows the origin and the project folder, so

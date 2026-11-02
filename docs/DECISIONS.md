@@ -2795,3 +2795,73 @@ understand the project's CI before coding; and one PR for the whole run.
 - **Tests that waited for Done** now wait for the proposal and answer it as the owner
   (`finished()` in run.test.ts), which is also how the demo/chat e2e ends: "Keep going", a
   second proposal, Finish, Done.
+
+## Phase 4 — U4: findings anyone can reproduce
+
+- **The repro is built from the trail, not from labels.** `run.ts`'s trail steps carry the
+  target's role, name and test id since U1's chain work; `agent/repro/repro.ts` turns the
+  steps up to the finding's step into imperative lines in the site's own words ("Tap **NEXT**",
+  "Type “fitts-test message” in **Message**", "Go back with the browser's Back button", "Open
+  /compose"). A step that took longer than 1.5 s says so ("then wait about 2 s").
+- **Pruning is navigation-aware and reads the App Model.** When the finding's route loads
+  directly (no gate in the model, not dynamic), the steps start after the last arrival at that
+  route: the start URL replaces the arrival, steps on other pages go, and on the page only the
+  steps that touched the finding's element, typed into a field, or were the finding's own click
+  stay. When the model says the page needs a login or data, the whole visit to the page it was
+  reached from is kept (what was picked there is what the page needs), then the arrival. A
+  finding on the page as a whole with nothing touched keeps no steps and says "Open the page:
+  the problem is there as it loads."
+- **ddmin is cut (SPEC §13 #6).** Instead of halving and single-step removal with up to eight
+  replays, `confirm()` replays the pruned steps once and, if they don't reproduce, the full
+  trail once. That is two replays at most per finding and keeps the two things that matter:
+  navigation-aware pruning and the replay confirmation. Recorded in ROADMAP's cut list.
+- **The oracle is the probe that found it, or the trace check.** `oracleFor()` maps a
+  finding's check (probe + title, from the review's `checks`) to a page probe run on the
+  replayer (contrast, target size, names, placeholder leak, fonts, spacing), a focus sweep, a
+  viewport sweep, or a trace oracle (feedback timing from the last step's trace, error text,
+  placeholder leak, and back-mid-flow by reading the field's value after the steps). "Seen
+  again" means the same `probe|title` key comes out of `problems()` on the replayer's
+  results, so a repro confirms exactly the finding it belongs to. Reviewer-only findings have
+  no oracle and say `observed`; the owner's own findings say `owner`.
+- **The replayer is a second hidden `SiteWindow`** (`main/site/replayer.ts`) on the same
+  dev server and session partition as the project's site, so logins carry, emulating the
+  finding's device cell, with no frames streamed and `setActive(false)`, destroyed when the
+  job ends. It finds each step's element by ref when the page still has it, else by test id,
+  else by role and name, else by name alone, and reports the steps it couldn't find. The agent
+  reaches it through one more `Site` op (`replay` → `replayed`), so the RPC boundary and
+  the gate stay where they are; the replayer never releases a held destructive write (it has
+  no gate to ask). The replay types live in `agent/protocol.ts`, which both processes already
+  share; the ask's field-value request is `fieldValueOf` because a property called
+  `valueOf` collides with `Object.prototype.valueOf` in TypeScript.
+- **The job runs after review, in the background, top 20 by severity**, and again for an owner
+  finding as soon as it's reported (after its evidence). A failing repro leaves the finding
+  with "How I found it" only; the panel's first tab says "I'm still writing up how to
+  reproduce this." until the job writes `finding.repro` (`finding.updated`).
+- **Expected and actual** come from the probe item (`expected`/`measured`, capitalized), else
+  from the reviewer's draft: every reviewer draft now has `expected`, `actual` and `steps`
+  (`finding.schema.json`, nullable so the strict schema still validates), and the lead's
+  values ride on the finding as `reviewerRepro`. The environment line is "Chromium NNN ·
+  W×H · touch|mouse · light · 100%" from the cell (U5 fills more cells) and Electron's Chrome
+  version.
+- **Standards are a static table** (`packages/probes/src/standards.ts`): each probe maps to
+  WCAG 2.2 criteria or to `null` when it's a usability check (a Nielsen heuristic, not a
+  standard), with W3C Understanding URLs; axe rules map through their tags (`wcag143` →
+  1.4.3) plus Deque's rule page. A test asserts every `ProbeName` is mapped or explicitly
+  null. The bridge's link allowlist gains `www.w3.org` and `dequeuniversity.com`.
+- **The Playwright test is text Fitts never runs.** `agent/repro/playwright.ts` writes a
+  self-contained `@playwright/test` file: `test.use` with the cell's viewport, touch and
+  mobile flags; locators by test id, then role and name, then exact text, then the probe's
+  selector; one assertion per oracle kind (computed-color contrast with the helper inlined,
+  bounding box ≥ 24×24, text not matching `/\(null\)|undefined|NaN/`, an accessible name,
+  a status within a second of submit, a link's response under 400), and `test.fixme` with
+  the expectation in a comment where there is none. Snapshot tests cover each kind.
+- **"See it yourself" is the panel's first tab** and the default, with "How I found it" kept
+  as the full trail. "Open in editor" goes through a new bridge call that builds
+  `vscode://file/<abs>:<line>` in main from the project's folder (never a renderer path; a
+  path outside the folder is refused) and opens it with `shell.openExternal`. The PR body's
+  Repro section and the report use the same steps, expected/actual, environment and the test
+  in a collapsed `<details>`.
+- **Chat.bench and the e2e**: the demo/chat crawl spec waits for the "(null)" finding's repro
+  to say `replayed` and checks it starts at `/compose/recipient` with at most three steps
+  and a test that names `compose-to`; the fixture finding on the mock engine carries a full
+  repro so the tab is tested offline.

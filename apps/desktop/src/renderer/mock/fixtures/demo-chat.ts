@@ -36,6 +36,31 @@ export const LIVE_FINDINGS: Record<
       'All five reviewers flagged it',
     ],
     elementRef: 'compose-to',
+    repro: {
+      start: { url: 'http://localhost:5173/compose', device: 'desktop' },
+      steps: [
+        {
+          n: 1,
+          text: 'Tap **Grandma**',
+          route: '/compose',
+          target: { role: 'button', name: 'Grandma', testId: 'compose-contact-grandma' },
+          shot: 18,
+        },
+        {
+          n: 2,
+          text: 'Tap **NEXT**',
+          route: '/compose',
+          target: { role: 'button', name: 'NEXT', testId: 'compose-next-1' },
+          shot: 19,
+        },
+      ],
+      expected: 'The To line shows Grandma',
+      actual: 'The To line shows "(null)"',
+      environment: 'Chromium 140 · 1280×800 · mouse · light · 100%',
+      confirmed: 'replayed',
+      playwright:
+        "import { expect, test } from '@playwright/test';\n\ntest('\"(null)\" shown as a name', async ({ page }) => {\n  await page.goto('http://localhost:5173/compose');\n  await page.getByTestId('compose-contact-grandma').click();\n  await page.getByTestId('compose-next-1').click();\n  await expect(page.getByTestId('compose-to')).not.toHaveText(/\\(null\\)/);\n});\n",
+    },
     stepIndex: 19,
     atMs: 14000,
     diff: {

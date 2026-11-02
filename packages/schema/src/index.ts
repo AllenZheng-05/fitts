@@ -51,6 +51,8 @@ export interface FittsBridge {
   openMicSettings?: () => void;
   /** SPEC-phase4 §4.3: Settings › Projects › "What Fitts remembers". */
   memory?: MemoryBridge;
+  /** SPEC-phase4 §5.4: "Open in editor": the file at its line, through vscode://file/…. */
+  openInEditor?: (projectId: string, file: string, line: number) => void;
   /** What's installed on this computer, for Welcome's chips (each null when missing). */
   tools?: () => Promise<ToolsStatus>;
   /** Sign in with GitHub (the Fitts GitHub App, device flow): PRs, pushes, Pages. */
@@ -419,6 +421,7 @@ export const IPC = {
   memoryGet: 'fitts:memory-get',
   memoryDelete: 'fitts:memory-delete',
   memoryClear: 'fitts:memory-clear',
+  openInEditor: 'fitts:open-in-editor',
   runFinish: 'fitts:run-finish',
   siteOpenInBrowser: 'fitts:site-open-in-browser',
   engineCall: 'fitts:engine-call',
@@ -592,6 +595,10 @@ export interface Finding {
    * shot at runs/<runId>/shots/<step>.jpg, the last one where it found the problem.
    */
   replay?: { step: number; label: string }[];
+  /** SPEC-phase4 §5: the repro anyone can follow, once the background job has written it. */
+  repro?: Repro;
+  /** A reviewer's own expected/actual/steps (SPEC-phase4 §5.1), for the repro. */
+  reviewerRepro?: { expected?: string; actual?: string; steps?: string[] };
 }
 
 export interface Change {
@@ -946,6 +953,31 @@ export interface RunState {
   cells?: DeviceCell[];
 }
 
+/** SPEC-phase4 §5.1: a finding anyone can reproduce. */
+export interface Repro {
+  start: { url: string; device: string; auth?: 'logged-in'; data?: string };
+  steps: {
+    n: number;
+    text: string;
+    route: string;
+    target?: { role: string; name: string; testId?: string };
+    /** The run's shot of that step (runs/<runId>/shots/<n>.jpg). */
+    shot?: number;
+  }[];
+  expected: string;
+  actual: string;
+  /** "Chromium 140 · 390×844 · touch · light · 100%" */
+  environment: string;
+  /** `replayed`: the steps were re-run and the problem seen again. */
+  confirmed: 'replayed' | 'observed' | 'owner';
+  wcag?: { sc: string; name: string; url: string }[];
+  /** The axe rule, when an axe probe found it. */
+  rule?: { id: string; url: string };
+  /** A runnable @playwright/test file (web), or a Maestro flow (Android). */
+  playwright?: string;
+  maestro?: string;
+}
+
 /** SPEC-phase4 §6.3: a screen to check a page at, with what else it emulates. */
 export interface DeviceCell {
   id: string;
@@ -1085,6 +1117,10 @@ export interface FindingDraft {
   elementRef: string | null;
   evidenceIds: string[];
   evidence: string[];
+  /** SPEC-phase4 §5.1: what should happen, what does, and how to get there. */
+  expected?: string;
+  actual?: string;
+  steps?: string[];
 }
 
 export { default as FINDING_DRAFTS_FORMAT } from './finding.schema.json';

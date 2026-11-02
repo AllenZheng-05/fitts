@@ -13,9 +13,9 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 | U0  | Housekeeping (§10)                       | done        | `2c1837c` |
 | U1  | Source plugin v2 (§2)                    | done        | `ba8d406` |
 | U2  | Understand + the understanding card (§3) | done        | `ba8d406` |
-| U3  | Owner first + memory (§4)                | in progress |           |
-| U4  | Repro (§5)                               | todo        |           |
-| U5  | Journeys, coverage, device matrix (§6)   | todo        |           |
+| U3  | Owner first + memory (§4)                | done        | `bad28a3` |
+| U4  | Repro (§5)                               | done        | see git   |
+| U5  | Journeys, coverage, device matrix (§6)   | in progress |           |
 | U5b | The action log (§6A)                     | todo        |           |
 | U5c | Detect more (§6B)                        | todo        |           |
 | U6  | Code-aware fixer (§7)                    | todo        |           |
@@ -26,66 +26,44 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
 
 ## Current milestone and next step
 
-**Paused at a checkpoint (Sun Nov 1, 18:07 CST) for Allen's reboot (Windows Hypervisor
-Platform).** The working tree holds U3 in progress, uncommitted (31 changed files); the last
-green commit is `ba8d406` (U1+U2). On the tree as it stands: typecheck green, lint green except
-one react-refresh warning in `DismissMenu.tsx` (the `DISMISS_REASONS` export; move it or ignore
-it), and `pnpm test` red exactly where expected: the run tests that waited for `nothing-found`
-or `finish` now wait on the `finish-proposal` card (step 1 below).
+**U5 (journeys, coverage, device matrix; §6) in progress.** U4 is committed (all four suites
+green: 144 e2e, 370 unit). Done for U5 so far, as new files only: `agent/devices/matrix.ts`
+(+ `tests/agent/matrix.test.ts`, 9 tests), `agent/crawler/journey.ts` (+
+`tests/agent/journey.test.ts`, 12 tests), `docs/prompts/journey.md`. Next: the shared
+edits per the U5 plan below (schema/events, site ops for cells and breakpoints, `device_pass`
+replacing `phone_pass`, coverage seeding from the App Model, the `journey` ability, the
+three new probes, planted #26), then the suites and the commit.
 
-**U3 done so far (all uncommitted):**
+## U5 plan (journeys, coverage, device matrix; §6)
 
-- Schema: `Finding.lane` adds `owner-ok`, `Finding.ownerReason`, `Finding.owner`; `MemoryRule`,
-  `ProjectMemory`, `MemoryBridge` (+ IPC `memoryGet/Delete/Clear`); chat item
-  `finish-proposal`; `RunEngine.dismissFinding(…, reason?)`; `RunState.journeys?`,
-  `RunState.cells?`, `DeviceCell` (for U5; the proposal card reads them).
-- Agent: `abilities.ts` (`propose_finish` replaces `finish`, `report_issue`, `Decision.text/why`,
-  `Situation.memory`); `decider.ts` tools (+ `why` on every tool); `memory/rules.ts` (rules,
-  matching, `applyRules` → owner-ok lane, decider line, reviewer calibration);
-  `orchestrator/report.ts` (the owner's words → a finding draft; `docs/prompts/report-issue.md`);
-  `run.ts`: `propose()` + `answerProposal()` (finish / fix-rest / continue), `fixesSettled` and
-  `crawlComplete` propose instead of finishing (the real run no longer posts `nothing-found`),
-  `report_issue`, `dismissFinding(id, reason)` → memory rule, `reopenFinding` forgets the rule,
-  `weigh()` for "more/less" via `answerQuestion(findingId, 'more'|'less')`, `applyRules` in
-  `review()`, reviewer calibration, tastes from picks/rounds/brief.avoid, the "I remember …" line;
-  `agent/index.ts`: `memories` map, `memory` message in, `memoryRule/Forget/Taste` out,
-  `reportIssue` dep, dismiss reason passthrough.
-- Main: `store/memory.ts` (`MemoryStore`, IPC for Settings), `run-host.ts` (`memory()` out,
-  `onMemory` in), `index.ts` wiring, `manager.ts` `onOpen` for every project kind.
-- Renderer: `items.tsx` `FinishProposal` card; `FindingPanel` uses `DismissMenu` (a reasons
-  menu) + `Weigh` buttons + the reason in the dismissed footer + a "Yours" chip; `review.ts`
-  carries reasons through a batch; `ui.ts` `review.reasons`; `DoneLayout` "You said this is
-  fine" list; `Settings` › Projects › `Remembers`; `useBackgroundNotifications` notifies on a
-  proposal; the mock engine takes a dismiss reason and `more/less`; copy for all of it; prompts
-  (`decide.md`, `reviewers/_shared.md`, `converse.md`).
+Order of work, each step a new file where possible, shared edits applied together:
 
-**Also in the tree, uncommitted (Allen's ask, Nov 1):** the GitHub App Client ID
-`Iv23liD21TTmPmSLjqPW` and slug `fitts-by-allen` are in `src/main/github/auth.ts`; NEEDS-ALLEN
-P4-4 and 4b are marked done. Commit them with U3 (note it in the message).
-
-**U3 still to do (in this order):**
-
-1. `tests/agent/run.test.ts` is already rewritten (a `finished(state, run)` helper answers the
-   proposal; `always('propose_finish')`) but NOT yet run. Still to update: `abilities.test.ts`
-   (the scripted order ends `propose_finish, propose_finish`; the live-site case too) and
-   `decider.test.ts` (tools now carry `why`; `parseDecision` expectations). Then run the three.
-2. New unit tests: a hostile decider that only ever returns `propose_finish` or unknown tools
-   can't reach `done` without `answerQuestion(…, 'finish')`; `fixesSettled` proposes instead of
-   finishing; `report_issue` makes an owner finding (shown, `owner: true`, `who: ['You']`);
-   `dismissFinding` with a reason writes a rule and `reopenFinding` forgets it; the owner-ok
-   lane is never posted, pinned or offered for fixing (`tests/agent/memory.test.ts` has the
-   rule tests already).
-3. E2E updates: `site-live.spec.ts` coverage test (poll for `waitingFor === 'finish-proposal'`
-   instead of `nothing-found`/"All done", click **Finish**, expect Done; "Keep going" returns
-   to acting and a new proposal follows); `finding-gate.spec.ts` ("Not a problem" opens the
-   menu: click "Intentional", expect "Noted: intentional…", then "It is a problem" reopens; the
-   batch test picks a reason too); `chat.bench.ts` poll adds `waitingFor === 'finish-proposal'`;
-   a Settings "What Fitts remembers" check if cheap.
-4. Fix the react-refresh warning (move `DISMISS_REASONS` out of the component file or inline).
-5. DECISIONS "Phase 4 — U3" section; commit "Phase 4 U3: owner first and memory".
-
-Then U4 (repro). Rule learned on U1/U2: while a milestone's full e2e runs, write only new
-files; shared-file edits wait for the commit.
+1. **Schema/events**: `RunState.coverage?` (§6.2 shape), `Journey` statuses already in
+   `RunState.journeys`; events `journey.updated` and `coverage.changed` (or `run.patch`).
+   `ProbeName` + `text-spacing`, `resize-text`, `orientation`; templates in aggregate;
+   standards rows (1.4.12, 1.4.4, 1.3.4) already in the table.
+2. **Matrix** (`agent/devices/matrix.ts`, pure): cells from detected breakpoints + model
+   breakpoints/media; the seven rules, cap 10, dedupe within 8px. Unit tests.
+3. **Site ops**: `cell` op (width/height/mobile/touch + zoom via `setZoomFactor`, text-spacing
+   via `insertCSS`/`removeInsertedCSS`, `Emulation.setEmulatedMedia` for scheme/motion) and
+   `breakpoints` op (same-origin `document.styleSheets` media widths + scheme/motion rules) in
+   site-window/manager/protocol/site-client. Replayer takes a cell too.
+4. **device_pass** replaces `phone_pass` in abilities (keep `phone_pass` name as alias? No:
+   rename; update scripted order, decider tools, tests). Per cell: every reached page gets
+   overflow/clipped/target-size/contrast; shots only for journey finals, finding pages, phone.
+   `Finding.seenOn` = cell id; device menu lists the run's cells.
+5. **Coverage from code**: seed `Coverage` with the model's static routes
+   (`discover(route, 'code')`), dynamic → "needs data", `unreached` reasons, `unlinked`
+   as a reviewer note. `RunState.coverage` synced in `syncCoverage()`.
+6. **Journeys** (`agent/crawler/journey.ts`): one Spark call per step with the screenshot
+   (`task: 'journey'`, reasoning low), tools click/type/navigate/back/goal_met/blocked, max 15;
+   form rules from the model (valid once, invalid once per form); reuses `perform`. Ability
+   `journey` with the decider running P1 → P2 → explore → P3. Fixture-recorded for e2e
+   (demo/chat), FakeLlm in unit tests. Failed journeys → reviewer evidence.
+7. **Saved test login** (§6.2) is cut #10 if time is short (the card keeps "coming").
+8. **Planted #26**: a 320px overflow on demo/chat (a fixed-width element, e.g. the settings
+   list or inbox header at `min-width: 360px`), PLANTED.md row, check script; e2e finds it in
+   the reflow cell.
 
 ## Spend
 
@@ -97,7 +75,7 @@ Total so far: **$0.03** of $15.
 
 ## Cuts applied
 
-(none yet; each goes here and in docs/ROADMAP.md's last section with its reason)
+- U4: ddmin (§13 #6). Pruned steps once, full trail once; no halving. In ROADMAP.
 
 ## Notes for the next context
 

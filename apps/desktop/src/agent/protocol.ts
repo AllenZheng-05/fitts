@@ -14,6 +14,42 @@ import type {
   SourceFrame,
 } from '@fitts/schema';
 
+/** SPEC-phase4 §5.2: one step the replayer re-runs: by ref when the page still has it, else by role and name. */
+export interface ReplayStep {
+  kind: 'click' | 'type' | 'back' | 'key' | 'navigate';
+  ref?: string;
+  target?: { role: string; name: string; testId?: string };
+  text?: string;
+  path?: string;
+}
+
+/** What the replayer runs, and which oracle inputs to read at the end. */
+export interface ReplayAsk {
+  start: { path: string; device?: string | null };
+  steps: ReplayStep[];
+  /** Which page probes to run at the end (all when absent), and the sweeps. */
+  probes?: PageProbeName[];
+  focus?: boolean;
+  viewport?: boolean;
+  /** The ref of a field whose value to read after the steps (back-mid-flow's oracle). */
+  fieldValueOf?: string;
+}
+
+export interface ReplayAnswer {
+  ok: boolean;
+  error?: string;
+  path: string;
+  results: PageProbeResult[];
+  focus: ProbeItem[];
+  viewport: ProbeItem[];
+  /** One trace per step that acted (navigate and back have none). */
+  traces: (OpTrace | null)[];
+  /** Steps whose element couldn't be found (by index). */
+  missing: number[];
+  snapshot?: AxSnapshot;
+  value?: string | null;
+}
+
 /** One interactive element, as the crawler sees it (an accessibility-style snapshot). */
 export interface AxNode {
   ref: string;
@@ -75,6 +111,8 @@ export type SiteOp =
   | { op: 'source'; ref: string }
   /** The chains of many elements at once (a page's first visit), one evaluation. */
   | { op: 'sources'; refs: string[] }
+  /** SPEC-phase4 §5.2: re-run a finding's steps on the hidden replayer and run its oracle. */
+  | { op: 'replay'; ask: ReplayAsk }
   | { op: 'png'; jpegBase64: string }
   | { op: 'saveAsset'; runId: string; name: string; base64: string }
   /** A style board (SPEC-phase3 §2): main embeds its fonts and saves it as an asset. */
@@ -232,6 +270,7 @@ export type SiteOpResult =
   | { op: 'revealed' }
   | { op: 'source'; frames: SourceFrame[] }
   | { op: 'sources'; chains: Record<string, SourceFrame[]> }
+  | { op: 'replayed'; answer: ReplayAnswer }
   | { op: 'png'; pngBase64: string }
   | { op: 'saved'; url: string }
   | { op: 'reference'; ok: boolean; url: string; shots: string[]; style: string; error?: string }

@@ -37,7 +37,17 @@
             },
             "elementRef": { "type": ["string", "null"] },
             "evidenceIds": { "type": "array", "items": { "type": "string" } },
-            "evidence": { "type": "array", "items": { "type": "string" } }
+            "evidence": { "type": "array", "items": { "type": "string" } },
+            "expected": {
+              "type": ["string", "null"],
+              "description": "What should happen, in one line."
+            },
+            "actual": { "type": ["string", "null"], "description": "What happens instead." },
+            "steps": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "How a person gets there, as imperative steps."
+            }
           },
           "required": [
             "title",
@@ -48,7 +58,10 @@
             "severity",
             "elementRef",
             "evidenceIds",
-            "evidence"
+            "evidence",
+            "expected",
+            "actual",
+            "steps"
           ],
           "additionalProperties": false
         }

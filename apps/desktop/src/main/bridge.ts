@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, Notification, shell, systemPreferences } from 'electron';
 import { writeFile } from 'node:fs/promises';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { IPC, type MicAccess } from '@fitts/schema';
 
 // E2E runs answer native dialogs through env vars, since tests can't click OS dialogs.
@@ -12,7 +13,15 @@ const sentNotifications: { id: string; title: string; body: string }[] = [];
   sentNotifications;
 
 /** Sites Fitts opens in the user's browser: pull requests and the hosts it works with. */
-const LINK_HOSTS = ['github.com', 'vercel.com', 'app.netlify.com', 'dash.cloudflare.com'];
+const LINK_HOSTS = [
+  'github.com',
+  'vercel.com',
+  'app.netlify.com',
+  'dash.cloudflare.com',
+  // The standards a repro names (SPEC-phase4 §5.1).
+  'www.w3.org',
+  'dequeuniversity.com',
+];
 
 /** A link the renderer may open: https, on a host Fitts works with. */
 export function openableLink(url: unknown): url is string {
@@ -56,8 +65,26 @@ export async function requestMicAccess(
   }
 }
 
+/**
+ * "Open in editor" (SPEC-phase4 §5.4): a project file at a line, as a vscode://file/ URL. Only a
+ * path inside the project's folder; the folder comes from main's store, never the renderer.
+ */
+export function editorUrl(folder: string, file: string, line: number): string | null {
+  const full = resolve(folder, file);
+  const rel = relative(resolve(folder), full);
+  if (!rel || rel.startsWith('..') || isAbsolute(rel)) return null;
+  const n = Number.isFinite(line) && line > 0 ? Math.floor(line) : 1;
+  return `vscode://file/${full.split(sep).join('/')}:${n}`;
+}
+
 /** The small set of native features the renderer may use (SPEC §2, §3). */
-export function registerBridge(): void {
+export function registerBridge(projectFolder?: (projectId: string) => string | undefined): void {
+  ipcMain.on(IPC.openInEditor, (_e, projectId: unknown, file: unknown, line: unknown) => {
+    if (typeof projectId !== 'string' || typeof file !== 'string') return;
+    const folder = projectFolder?.(projectId);
+    const url = folder ? editorUrl(folder, file, typeof line === 'number' ? line : 1) : null;
+    if (url) void shell.openExternal(url);
+  });
   ipcMain.on(IPC.openLink, (_e, url: unknown) => {
     if (openableLink(url)) void shell.openExternal(url);
   });

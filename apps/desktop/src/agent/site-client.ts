@@ -3,6 +3,7 @@
 import type { PageProbeName, PageProbeResult, RequestRecord } from '@fitts/probes';
 import type { ProbeItem, SiteRect, SourceFrame } from '@fitts/schema';
 import type { AgentMessage, AxSnapshot, FixCall, OpTrace, SiteOp, SiteOpResult } from './protocol';
+import type { ReplayAnswer, ReplayAsk } from './repro/replay';
 
 export interface ActionResult {
   path: string;
@@ -41,6 +42,8 @@ export interface Site {
   sourceOf?(ref: string): Promise<SourceFrame[]>;
   /** The chains of every element on the page at once, by ref (a page's first visit). */
   sourcesOf?(refs: string[]): Promise<Record<string, SourceFrame[]>>;
+  /** SPEC-phase4 §5.2: replay steps on the hidden replayer and read the oracle's inputs. */
+  replay?(ask: ReplayAsk): Promise<ReplayAnswer>;
   png(jpegBase64: string): Promise<string>;
   saveAsset(runId: string, name: string, base64: string): Promise<string>;
   /** A style board (SPEC-phase3 §2): fonts embedded by main, saved as an asset; its URL. */
@@ -130,6 +133,7 @@ export class SiteRpc {
       },
       sourceOf: async (ref) => (await expect({ op: 'source', ref }, 'source')).frames,
       sourcesOf: async (refs) => (await expect({ op: 'sources', refs }, 'sources')).chains,
+      replay: async (ask) => (await expect({ op: 'replay', ask }, 'replayed')).answer,
       png: async (jpegBase64) => (await expect({ op: 'png', jpegBase64 }, 'png')).pngBase64,
       saveAsset: async (runId, name, base64) =>
         (await expect({ op: 'saveAsset', runId, name, base64 }, 'saved')).url,

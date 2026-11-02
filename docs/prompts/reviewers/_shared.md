@@ -17,6 +17,11 @@ Report only real problems a person would hit on this page. For each one:
 - **elementRef**: the `ref` of the element it's about (from the snapshot or a probe), or null.
 - **evidenceIds**: the evidence ids you relied on. At least one, copied exactly.
 - **evidence**: one or two short lines quoting what you saw ("Recipient shows '(null)'").
+- **expected**: what should happen, in one line a tester can check ("The recipient's name
+  shows"); **actual**: what happens instead ("It shows '(null)'"). Null when the problem is a
+  matter of taste with nothing to check.
+- **steps**: how a person gets there from the page's URL, as imperative lines ("Tap NEXT",
+  "Type anything in Message"), two to six of them; empty when it's there as the page loads.
 
 Rules:
 

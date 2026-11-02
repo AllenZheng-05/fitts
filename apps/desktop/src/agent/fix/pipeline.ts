@@ -35,6 +35,10 @@ import {
   type WordingChange,
 } from './redesign';
 
+// A fenced code block’s delimiters (a backtick in a template is awkward).
+const FENCE = '```';
+const FENCE_TS = '```ts';
+
 /** Before any change: the project's tests and its CI checks, to compare a fix against. */
 interface Baseline {
   tests: TestRun;
@@ -208,8 +212,38 @@ export function fixSection(f: Finding, check: Check | undefined, summary: string
       : 'Re-checked by the reviewer panel.',
     '',
     `### Repro`,
-    `Open ${f.route}${f.elementRef ? ` and find the element \`${f.elementRef}\`` : ''}.`,
+    ...reproLines(f),
   ].join('\n');
+}
+
+/** The repro in Markdown (SPEC-phase4 §5.4): steps, expected/actual, environment, the test. */
+export function reproLines(f: Finding): string[] {
+  const r = f.repro;
+  if (!r)
+    return [`Open ${f.route}${f.elementRef ? ` and find the element \`${f.elementRef}\`` : ''}.`];
+  return [
+    `Start at ${r.start.url} (${r.start.device}).`,
+    ...r.steps.map((s) => `${s.n}. ${s.text}`),
+    '',
+    `**Expected:** ${r.expected || f.fix}`,
+    `**Actual:** ${r.actual || f.finding}`,
+    `**Environment:** ${r.environment}${r.confirmed === 'replayed' ? ' · replayed and seen again' : ''}`,
+    ...(r.wcag?.length
+      ? [`**WCAG:** ${r.wcag.map((c) => `[${c.sc} ${c.name}](${c.url})`).join(', ')}`]
+      : []),
+    ...(r.playwright
+      ? [
+          '',
+          '<details><summary>Playwright test</summary>',
+          '',
+          FENCE_TS,
+          r.playwright.trimEnd(),
+          FENCE,
+          '',
+          '</details>',
+        ]
+      : []),
+  ];
 }
 
 /** The run's PR title: "Fitts: 3 fixes", "Redesign: Quiet stone and 2 fixes". */
