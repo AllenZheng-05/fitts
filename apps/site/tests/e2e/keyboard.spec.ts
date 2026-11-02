@@ -1,0 +1,53 @@
+// Full keyboard use: the skip link first, the menu, the loop's steps and the catalog's filters.
+import { expect, test } from '@playwright/test';
+
+test.use({ viewport: { width: 1440, height: 900 } });
+
+test('Tab reaches the skip link first, and it moves to the content', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('Tab');
+  const skip = page.getByRole('link', { name: 'Skip to content' });
+  await expect(skip).toBeFocused();
+  await expect(skip).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#main$/);
+});
+
+test('the checks filters are toggle buttons and the count is announced', async ({ page }) => {
+  await page.goto('/checks/');
+  const status = page.getByRole('status');
+  await expect(status).toHaveText(/^Showing all \d+ checks$/);
+  const keyboard = page.getByRole('button', { name: 'Keyboard', exact: true });
+  await keyboard.focus();
+  await page.keyboard.press('Enter');
+  await expect(keyboard).toHaveAttribute('aria-pressed', 'true');
+  await expect(status).toHaveText(/^Showing \d+ of \d+ checks$/);
+  await expect(page.getByRole('heading', { name: 'Navigation', level: 3 })).toHaveCount(0);
+  await page.getByRole('button', { name: 'All', exact: true }).press('Enter');
+  await expect(status).toHaveText(/^Showing all/);
+});
+
+test('the loop opens each step from the keyboard', async ({ page }) => {
+  await page.goto('/how-it-works/');
+  const fix = page.getByRole('button', { name: /Fix/ }).first();
+  await fix.focus();
+  await page.keyboard.press('Space');
+  await expect(fix).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('region', { name: 'Fix' })).toContainText('Muse Code');
+});
+
+test.describe('phone menu', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test('opens with the keyboard and Esc closes it, returning focus', async ({ page }) => {
+    await page.goto('/');
+    const menu = page.getByRole('button', { name: 'Menu' });
+    await menu.focus();
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveAttribute('aria-expanded', 'true');
+    const panel = page.locator(`[id="${await menu.getAttribute('aria-controls')}"]`);
+    await expect(panel.getByRole('link', { name: 'What Fitts checks' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await expect(menu).toBeFocused();
+  });
+});
