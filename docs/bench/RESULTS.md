@@ -28,10 +28,10 @@ ledger; wall time is the run's own.
 Blind runs, recorded before the key was revealed. Scored after the reveal, against the key whose
 SHA-256 is in the app's README.
 
-| Run id | Date (UTC) | Arm | Commit | Findings | Scored after reveal | Cost | Wall |
-|---|---|---|---|---|---|---|---|
-| heldout-fitts-1 | 2026-11-03 11:59 | Fitts Economy (blind) | 9729478 | 20 shown (sev 4: 6, 3: 8, 2: 1, 1: 5) + 4 suggestions, 16 pages | 6/16 (S1 4/8, S2 2/8); precision 30% (6/20), 33% at sev ≥ 2 (5/15); traps tripped 1/3 (T1, at sev 1) | $1.55 | 12.1 min |
-| heldout-axe-1 | 2026-11-03 12:01 | axe alone (blind) | 9729478 | 2 (sev 4: 1, 3: 1), on the 15 routes Fitts reached | 2/16 (S1 2/8, S2 0/8); precision 100% (2/2); traps tripped 0/3 | $0 | 123 s |
+| Run id | Date (UTC) | Arm | Commit | Findings | Scored after reveal | Unplanted but real | Cost | Wall |
+|---|---|---|---|---|---|---|---|---|
+| heldout-fitts-1 | 2026-11-03 11:59 | Fitts Economy (blind) | 9729478 | 20 shown (sev 4: 6, 3: 8, 2: 1, 1: 5) + 4 suggestions, 16 pages | 6/16 (S1 4/8, S2 2/8); precision 30% (6/20), 33% at sev ≥ 2 (5/15); traps tripped 1/3 (T1, at sev 1) | 2 of the 14 unmatched (1 a side effect of P12); 3 unsure; 9 false | $1.55 | 12.1 min |
+| heldout-axe-1 | 2026-11-03 12:01 | axe alone (blind) | 9729478 | 2 (sev 4: 1, 3: 1), on the 15 routes Fitts reached | 2/16 (S1 2/8, S2 0/8); precision 100% (2/2); traps tripped 0/3 | none unmatched | $0 | 123 s |
 
 ### Scoring the held-out runs (after the reveal, Nov 3)
 
@@ -71,6 +71,34 @@ judged: the crawl didn't complete a booking. Precision was low. 14 shown finding
 planted, including four at sev 4 on things the key says work as intended ("Keyboard focus gets stuck" on
 Settings, "A link goes to the wrong page", "Rent button opens wrong bike", "Renting has no total
 or confirmation"). They're kept as they came out in `docs/bench/heldout/`.
+
+### The 14 unmatched findings, checked against the running app (Nov 3)
+
+Each one reproduced in a browser against `npm run dev` (desktop 1280×800 and phone 390×844, a
+fresh profile, plus a saved bike where the finding needs one). The strict precision above (6/20)
+is the pre-registered number and stays as it is; this column only says which of the rest are real.
+
+| Fitts's finding (sev) | Verdict | What the app does |
+|---|---|---|
+| Rent button opens wrong bike (4) | false | Rent asks for a frame size; with one picked it opens `/book/dates` for Harbor Cruiser. |
+| Renting has no total or confirmation (4) | false | Rent starts a three-step checkout; its summary has a Total line and nothing is charged before Review & pay. |
+| Keyboard focus gets stuck (4), /settings | false | Tab moves from Name through every field, Save, Delete and on to the header. |
+| A link goes to the wrong page (4), /settings | false | "Email me a reminder…" is a checkbox label; clicking it toggles the box. The form has no links. |
+| No back or cancel in this flow (3), /rentals | false | /rentals is a list page, not a flow, with the full header nav. |
+| “Type” does nothing visible (1) | false | Type filters the grid (Kids → 1 bike) and the count line updates. |
+| “Sort by” does nothing visible (1) | false | Sort reorders the grid. |
+| Main action is hard to reach (1) | false | 4.3 bits is an ordinary reach, not a problem a person would notice. |
+| “Skip to main content” does nothing visible (1) | false (trap T1) | The skip link shows on focus and moves focus to `main`. |
+| Going back loses what you typed (3) | **real** | Pick Type: Electric, open a bike, press Back: the filter is "All" again and all 8 bikes show. Unplanted; sev 2 would fit better than 3. |
+| The focused control is hidden (2) | **real, from P12** | At 1280×800 a focused heart button at the bottom of the view is pushed below it when the promo banner lands. The planted layout shift (P12), seen through the keyboard. |
+| Too many text sizes (3) | unsure | Measured right: 7 sizes on /. Whether 7 is too many is a style call. |
+| Spacing is inconsistent and off-grid (3) | unsure | Measured right: the heart button's padding is 1px 6px. Nothing a person would notice. |
+| Tap target is too small (3), /rentals | unsure | Measured right: a saved bike's name link is 114×21. A link alone in a list likely passes WCAG 2.5.8 on spacing. |
+
+All four sev-4 false alarms are Fitts's errors. Two look like the crawl crediting a control with
+something it didn't do (a Rent tap "opening a different bike", a checkbox "going" to a link from
+another page); one is the keyboard sweep reporting focus stuck where Tab moves on; one is a
+reviewer judging the Rent button without following it into checkout.
 
 ## Basil & Ember web (no answer key)
 
