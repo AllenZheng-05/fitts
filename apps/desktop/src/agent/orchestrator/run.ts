@@ -1797,6 +1797,20 @@ export class RealRun {
     }
     const gateId = `gate-${held.id}`;
     this.heldReq = { held, gateId };
+    // The hold is evidence: the tap sent it straight away, with nothing asking first. Without
+    // this the reviewers saw only what followed a "Don't do it" (bench:chat, Nov 2: "Delete
+    // conversation does nothing" instead of #16, "deletes instantly").
+    if (held.method !== 'TAP')
+      this.notice([
+        {
+          id: this.nextObsId(),
+          step: this.state.step,
+          route: this.acting?.route ?? routeOf(this.lastSnap?.path ?? '/'),
+          kind: 'no-confirm',
+          text: format(copy.noticed.noConfirm, { name: action, request: `${held.method} ${path}` }),
+          severityHint: 3,
+        },
+      ]);
     this.emit([
       {
         type: 'gate.requested',

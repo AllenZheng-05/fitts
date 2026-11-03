@@ -41,23 +41,24 @@ export function Compose() {
     <>
       <StepTitle step={1} />
       <span className="muted">Who is it for?</span>
-      {state === 'loading' && (
-        <p role="status" className="muted">
-          Loading your contacts…
-        </p>
-      )}
-      {state === 'failed' && (
-        <p role="alert" className="muted">
-          Your contacts didn’t load. Check your connection, then reload the page.
-        </p>
-      )}
-      {state === 'ready' && contacts.length === 0 && (
-        <p className="muted">
-          You don’t have any contacts yet. Add someone on the <a href="/contacts">Contacts</a> page
-          first.
-        </p>
-      )}
-      <div className="chips">
+      {/* The status lines sit in the chips' own room, so nothing moves when they go. */}
+      <div className="chips" style={{ minHeight: 44 }}>
+        {state === 'loading' && (
+          <span role="status" className="muted">
+            Loading your contacts…
+          </span>
+        )}
+        {state === 'failed' && (
+          <span role="alert" className="muted">
+            Your contacts didn’t load. Check your connection, then reload the page.
+          </span>
+        )}
+        {state === 'ready' && contacts.length === 0 && (
+          <span className="muted">
+            You don’t have any contacts yet. Add someone on the <a href="/contacts">Contacts</a>{' '}
+            page first.
+          </span>
+        )}
         {contacts.map((c) => (
           <button
             key={c.id}

@@ -1059,6 +1059,8 @@ export interface ActionRecord {
 }
 
 export type ObservationKind =
+  /** A tap sent a destructive request at once, with no confirmation step (held at the gate). */
+  | 'no-confirm'
   | 'slow'
   | 'no-feedback'
   | 'silent-save'

@@ -735,6 +735,27 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
       if (!twin.drafts.some((x) => x.persona === d.persona)) twin.drafts.push(d);
   }
 
+  // 3b. The same missing loading sign, seen twice on a page: the state pass's forced slow response
+  //     and the feedback probe's own wait. The page's feedback finding keeps it (bench:chat,
+  //     Nov 2: /search's #13 came out as two findings).
+  const loading = (c: Cluster) => /loading/i.test(c.template?.title ?? '');
+  const waited = merged.find((c) => c.probe === 'feedback-timing' && loading(c));
+  if (waited)
+    for (const c of [...merged]) {
+      if (c.probe !== 'state' || !loading(c)) continue;
+      for (const r of waited.routes) {
+        if (!c.routes.has(r)) continue;
+        c.routes.delete(r);
+        c.items = c.items.filter((i) => !i.measured.includes(` ${r} `));
+      }
+      if (c.routes.size === 0) {
+        for (const id of c.evidenceIds) waited.evidenceIds.add(id);
+        for (const d of c.drafts)
+          if (!waited.drafts.some((x) => x.persona === d.persona)) waited.drafts.push(d);
+        merged.splice(merged.indexOf(c), 1);
+      } else if (!c.routes.has(c.route)) c.route = [...c.routes][0] ?? c.route;
+    }
+
   // 4. Findings: severity rubric, then the evidence check.
   const findings = merged.map((c, n) => toFinding(c, n, runId, stepOf));
   const checks = new Map<string, Check>();

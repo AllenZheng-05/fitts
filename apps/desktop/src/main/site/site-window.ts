@@ -465,15 +465,20 @@ export class SiteWindow {
     }>('return P.keyboardFacts(F);');
     const stops: TabStop[] = [];
     const firstRef = new Set<string>();
+    // Three empty Tabs in a row: back at the address bar, the loop is done. One alone (a probe
+    // that couldn't read the focused element) isn't the end (bench:chat, Nov 2: a sweep that
+    // ended early read demo/chat's contacts filter and rows as unreachable).
+    let empty = 0;
     for (let i = 0; i < 200; i++) {
       this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
       this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
       await new Promise((r) => setTimeout(r, 30));
       const stop = await this.probes<TabStop | null>('return P.tabStop(F);').catch(() => null);
       if (!stop) {
-        if (stops.length > 0) break; // Back to the address bar: the loop is done.
+        if (stops.length > 0 && ++empty >= 3) break;
         continue;
       }
+      empty = 0;
       // Around once: the sweep is complete.
       if (firstRef.has(stop.ref) && stops.length > 3 && stops.at(-1)?.ref !== stop.ref) break;
       firstRef.add(stop.ref);

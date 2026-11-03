@@ -73,7 +73,7 @@ export function Thread({ conversationId }: { conversationId: number }) {
           </button>
         </div>
       </div>
-      <ul className="bubbles">
+      <ul className="bubbles" style={{ minHeight: 4 * 60 }}>
         {!loaded && !failed && (
           <li role="status" className="muted">
             Loading the conversation…

@@ -6,10 +6,18 @@ import { navigate } from '../router';
 export function Search() {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<SearchItem[]>([]);
+  // A failed search says so (not planted; #13, no loading indicator, still stands).
+  const [failed, setFailed] = useState(false);
 
   const onChange = (q: string) => {
     setQuery(q);
-    void api.search(q).then((res) => setItems(res.items));
+    api
+      .search(q)
+      .then((res) => {
+        setFailed(!Array.isArray(res.items));
+        setItems(Array.isArray(res.items) ? res.items : []);
+      })
+      .catch(() => setFailed(true));
   };
   const q = query.trim().toLowerCase();
   const results = q
@@ -27,6 +35,11 @@ export function Search() {
         onChange={(e) => onChange(e.target.value)}
         className="input"
       />
+      {failed && (
+        <p role="alert" className="muted">
+          Search didn’t work. Try again in a moment.
+        </p>
+      )}
       <ul className="results">
         {results.slice(0, 50).map((r) => (
           <li key={r.id}>

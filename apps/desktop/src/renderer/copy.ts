@@ -1165,6 +1165,8 @@ export const copy = {
    * verdicts: "noticed", not "problem", until the review makes a finding.
    */
   noticed: {
+    noConfirm:
+      'Noticed **{name}** sends {request} the moment it’s tapped, with no confirmation (I held it at the gate)',
     slow: '{verb} **{name}** · took {s} s to respond',
     slowLoad: 'Opened {path} · the page took {s} s to load',
     waited:

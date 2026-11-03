@@ -158,7 +158,7 @@ export const PLANTED: Planted[] = [
     issue: 'Settings has 14 ungrouped toggles',
     routes: ['/settings'],
     refs: ['settings-list'],
-    words: /toggle|group|too many|long list|switches/,
+    words: /toggle|group|too many|long list|flat list|one list|ungrouped|switches/,
   },
   {
     n: 22,

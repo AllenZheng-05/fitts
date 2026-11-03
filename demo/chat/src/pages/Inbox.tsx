@@ -71,17 +71,17 @@ export function Inbox() {
           </button>
         </nav>
       </div>
-      {state === 'loading' && (
-        <p role="status" className="muted">
-          Loading your messages…
-        </p>
-      )}
-      {state === 'failed' && (
-        <p role="alert" className="muted">
-          Your messages didn’t load. Reload the page to try again.
-        </p>
-      )}
-      <ul className="threads" style={{ minHeight: state === 'failed' ? undefined : 3 * 50 }}>
+      <ul className="threads" style={{ minHeight: 3 * 50 }}>
+        {state === 'loading' && (
+          <li role="status" className="muted">
+            Loading your messages…
+          </li>
+        )}
+        {state === 'failed' && (
+          <li role="alert" className="muted">
+            Your messages didn’t load. Reload the page to try again.
+          </li>
+        )}
         {conversations.map((c, i) => {
           const last = c.messages[c.messages.length - 1];
           return (

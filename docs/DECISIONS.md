@@ -3736,3 +3736,16 @@ What the bench runs taught:
   blank from a forced failure) no longer reports every control as unreachable; and landscape
   "hides its content" now needs content in the page that doesn't show, not just a short page
   (demo/chat's search is a heading and a field).
+- **Round 2 (bench:chat, Nov 2, 21:30).** My first status lines moved what was below them when
+  they went, and the judge saw jumps; each status line now sits inside its list's reserved room.
+  Search says when it failed (planted #13, no loading indicator, still stands), and Privacy has a
+  way back. All 33 planted issues still reproduce.
+- **The gate's hold is evidence.** When a tap sends a destructive request at once, Fitts records a
+  Noticed line ("sends DELETE … the moment it's tapped, with no confirmation"), so after a "Don't do
+  it" the reviewers don't see only that nothing happened ("Delete conversation does nothing" instead
+  of #16).
+- **One missing loading sign, one finding:** the state pass's "No sign the page is loading" on a
+  page folds into that page's own "No loading indicator while waiting".
+- **The keyboard sweep** ends after three empty Tabs in a row, not one (a probe that couldn't read
+  the focused element ended it early).
+- The scorer's #21 words take "flat list", "one list" and "ungrouped".
