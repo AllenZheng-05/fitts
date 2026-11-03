@@ -203,12 +203,14 @@ describe('runJourney', () => {
       id: 'book',
       name: 'Book a bike',
       start: '/checkout',
-      steps: ['Tap Checkout', 'Tap Continue', 'Tap Pay $24'],
+      steps: ['Open the cart and check out', 'Tap Continue', 'Tap Pay $24'],
       needs: ['payment'],
     };
     const s = site(
       {
-        '/checkout': page('/checkout', [{ ref: 'go->/details', role: 'button', name: 'Checkout' }]),
+        '/checkout': page('/checkout', [
+          { ref: 'go->/details', role: 'button', name: 'View cart & checkout' },
+        ]),
         '/details': page('/details', [{ ref: 'next->/pay', role: 'button', name: 'Continue' }]),
         '/pay': page('/pay', [{ ref: 'pay', role: 'button', name: 'Pay $24' }]),
       },
@@ -217,7 +219,12 @@ describe('runJourney', () => {
     const r = await runJourney(
       s.deps(
         scripted([
-          { kind: 'click', ref: 'go->/details', name: 'Checkout', why: 'Opening checkout' },
+          {
+            kind: 'click',
+            ref: 'go->/details',
+            name: 'View cart & checkout',
+            why: 'Opening checkout',
+          },
           { kind: 'click', ref: 'next->/pay', name: 'Continue', why: 'Next step' },
           { kind: 'click', ref: 'pay', name: 'Pay $24', why: 'Paying' },
         ]),

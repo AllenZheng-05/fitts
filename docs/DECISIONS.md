@@ -3804,3 +3804,9 @@ What the bench runs taught:
      the guarantee is in `runJourney`, not the plan. `PAYS` is narrower than DESTRUCTIVE so a
      "Checkout" button that opens the form is still tapped. Login and email journeys still don't
      run.
+  Validated on Basil & Ember (Nov 3, $0.62): "Reserve a table" (a date with min=today, time and
+  party selects) finished in 6 steps, but "Order pizza for pickup" stopped at "View cart &
+  checkout": DESTRUCTIVE matches "checkout", and the plan's words ("check out") didn't match the
+  button's. On a journey that needs a payment, "checkout" alone no longer counts as destructive
+  (it opens the form); deletes and cancels still do, and the control that pays still stops it.
+  bench:audit waits 45 minutes now (the payment journeys add steps).
