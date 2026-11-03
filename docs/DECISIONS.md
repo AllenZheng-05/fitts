@@ -3779,3 +3779,11 @@ What the bench runs taught:
   unresponsive control, a wrong Noticed line on camera. Now a control that isn't there yet is tried
   again after 2 s, and a step with no outcome gets no Noticed lines; if it still can't be used, it's
   skipped as before.
+- **No Muse fix starts at the cap (Nov 3).** The bench:android rerun ended at $8.02 against a $6
+  cap. A Muse Code run bills the ledger only when it ends (Fitts reads its usage then), and
+  a fix started a new Muse run, its repairs included, without checking the cap: the brand fix's
+  three tries went on after the 80% warning. Now a Muse run starts only while the budget allows; at
+  the cap the in-process fixer takes over, and its model calls are refused there, so the fix stops
+  with the budget card up. What's left: a Muse run already going when the cap is reached finishes
+  and bills, so a run can still pass its cap by about the cost of the fixes in flight. Stopping
+  those mid-run would mean billing Muse's usage while it runs; Fitts reads it once, at the end.

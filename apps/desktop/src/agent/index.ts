@@ -532,8 +532,9 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
                 });
               // SPEC-phase4 §7.4, Muse Code by default (Allen, Nov 2): the in-process fixer runs
               // whenever it can't (not installed, couldn't sign in, changed nothing), or always
-              // with FITTS_FIXER=inprocess.
-              if (process.env['FITTS_FIXER'] !== 'inprocess' && tools.muse)
+              // with FITTS_FIXER=inprocess. A Muse run bills only when it ends, so none starts at
+              // the cap; the in-process fixer's calls are refused there.
+              if (process.env['FITTS_FIXER'] !== 'inprocess' && tools.muse && callCtx().allowed())
                 return museFix(task, tools, opts);
               return runFixer(
                 runCaller,
