@@ -1118,7 +1118,7 @@ All additions are optional, so the Phase 1 UI and its tests still compile:
   - ⌘ shortcut labels
 
   Borrow a Mac for one manual pass before recording.
-- **Release:** publish to GitHub Releases on tag `v0.9.0-beta`. The README has install
+- **Release:** publish to GitHub Releases on tag `v0.1.0`. The README has install
   steps (Gatekeeper: "Open Anyway"; SmartScreen: "More info → Run anyway").
 - **Dependencies:** no bundled Playwright browsers; verification uses hidden Electron
   windows. External tools are detected at Welcome: git, gh, Node, muse.

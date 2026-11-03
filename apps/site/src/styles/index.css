@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/*
+ * The site uses the app's own tokens (tokens.css is a copy of
+ * apps/desktop/src/renderer/styles/tokens.css; tests/unit/drift.test.ts fails when they differ).
+ * Tailwind's palette, radii, shadows and fonts are removed so only tokens exist, as in the app.
+ * The 3D field reads the bare names (--coral, --cobalt, …) from :root.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-surface-2: var(--surface-2);
+  --color-cobalt: var(--cobalt);
+  --color-cobalt-ink: var(--cobalt-ink);
+  --color-cobalt-deep: var(--cobalt-deep);
+  --color-cobalt-tint: var(--cobalt-tint);
+  --color-coral: var(--coral);
+  --color-coral-tint: var(--coral-tint);
+  --color-coral-ink: var(--coral-ink);
+  --color-sun: var(--sun);
+  --color-sun-tint: var(--sun-tint);
+  --color-sun-ink: var(--sun-ink);
+  --color-mint: var(--mint);
+  --color-mint-tint: var(--mint-tint);
+  --color-mint-ink: var(--mint-ink);
+  --color-lilac: var(--lilac);
+  --color-lilac-tint: var(--lilac-tint);
+  --color-lilac-ink: var(--lilac-ink);
+  --color-wine: var(--wine);
+  --color-neutral-tint: var(--neutral-tint);
+  --color-neutral-ink: var(--neutral-ink);
+  --color-ink-faint: var(--ink-faint);
+  --color-track: var(--track);
+  --color-code-caption: var(--code-caption);
+  --color-diff-del: var(--diff-del);
+  --color-diff-add: var(--diff-add);
+
+  --radius-*: initial;
+  --radius-tag: var(--radius-tag);
+  --radius-label: var(--radius-label);
+  --radius-row: var(--radius-row);
+  --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
+  --radius-sheet: var(--radius-sheet);
+  --radius-panel: var(--radius-panel);
+  --radius-hero: var(--radius-hero);
+  --radius-emblem: var(--radius-emblem);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-*: initial;
+  --shadow-button: var(--shadow-button);
+  --shadow-panel: var(--shadow-panel);
+  --shadow-hero: var(--shadow-hero);
+
+  --font-*: initial;
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --ease-out: var(--ease-out);
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@geist-fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@geist-fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2')
+    format('woff2-variations');
+}
+
+@layer base {
+  /* No smooth scrolling: focus moves instantly, so a focused control is never out of view. */
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-wrap: break-word;
+  }
+  :focus-visible {
+    outline: 3px solid var(--cobalt);
+    outline-offset: 2px;
+  }
+  /* Text that sits on the paper (not in a card) keeps a paper halo, so a shape floating
+     behind it never lowers its contrast. Inside cards the halo matches the card. */
+  main {
+    text-shadow:
+      0 0 2px var(--paper),
+      0 0 6px var(--paper),
+      0 0 12px var(--paper);
+  }
+  /* Anchored sections clear the sticky nav. */
+  [id] {
+    scroll-margin-top: 5rem;
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "demo-chat-nov-2",
+  "project": "demo-chat",
+  "runId": "run-7",
+  "startedAt": "2026-11-02T11:29:27.614Z",
+  "minutes": 9,
+  "shown": 48,
+  "suggestions": 8,
+  "verified": 0,
+  "review": 0,
+  "rolledBack": 0,
+  "spentUsd": 0.192869,
+  "calls": 60,
+  "label": "Our test app, planted issues"
+}

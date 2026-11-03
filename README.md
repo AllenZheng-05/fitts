@@ -11,9 +11,9 @@ works. Built from scratch during the Meta Global AI Developer Hackathon, Oct 28 
 ## Try it without keys
 
 Open the recorded runs at [fitts.allenzheng.com/runs/](https://fitts.allenzheng.com/runs/) in
-any browser. Each is a real run's report: what Fitts understood, every step it took with its
-Noticed lines, the findings with their evidence and repro steps, the verified fixes, and the App
-Map. No install and no keys needed.
+any browser. Each is a real run's report: what Fitts understood, the findings with their
+evidence and repro steps, the verified fixes, and the App Map. Each report shows the Noticed
+lines behind every finding. No install and no keys needed.
 
 ## Quickstart
 
