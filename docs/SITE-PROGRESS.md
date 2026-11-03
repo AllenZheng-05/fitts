@@ -144,8 +144,29 @@ Three jobs, in order: a shareable run report, real open-source apps, the README 
 | #   | Job                                                          | Status                            |
 | --- | ------------------------------------------------------------ | --------------------------------- |
 | E1  | Run report: packages/run-report, the CLI, /runs/ on the site | done                              |
-| E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | on hold until Allen is back       |
+| E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | done (Nov 3)                      |
 | E3  | README for judges                                            | Wednesday, once the numbers exist |
+
+**Status, Nov 3, afternoon. E2 is done.** Both paid runs ran one at a time, taking turns with the
+Phase 4 session's runs (agreed over messages):
+
+| App | Cost | Shown | Confirmed | False positive | Unsure | Write-up |
+| --- | --- | --- | --- | --- | --- | --- |
+| TodoMVC React (`ff43b02`) | $3.48 | 10 | 3 | 7 | 0 | [oss-todomvc-react.md](evidence/oss-todomvc-react.md) |
+| Bootstrap examples (`v5.3.8`) | $1.39 | 30 | 9 | 15 | 6 | [oss-bootstrap.md](evidence/oss-bootstrap.md) |
+
+- One issue text for Allen, TodoMVC's placeholder contrast:
+  [issue-drafts.md](evidence/issue-drafts.md). Nothing was filed or pushed. Bootstrap got none:
+  its confirmed findings are best practice, third-party (DocSearch) or already fixed in v6.
+- The temporary harness (`apps/desktop/tests/bench/oss.bench.ts`) is deleted. It was never
+  committed. The runs' raw folders are in `.fitts-dev/runs/` (git-ignored).
+- **For the app**, the main follow-ups the runs found (details in each write-up):
+  - Fix verification can't start a non-Vite dev server on its port: TodoMVC's one correct fix
+    failed twice and cost $2.90.
+  - The crawler looped on Bootstrap's skip link: 991 of 1,000 clicks, with 2 of 59 listed pages
+    visited.
+  - TodoMVC's crawl took one step.
+  - Dev-only overlays, smooth scrolling and `target="_blank"` links cause false positives.
 
 **Status, Nov 3, ~00:30.**
 - **E2 is on hold** (Allen): the open-source runs wait until he's back and the other session's

@@ -222,3 +222,26 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
   content module the e2e tests share with the pages.
 - **A git-ignored fixture** (`apps/desktop/tests/fixtures/repos/next-app/.env.local`, a
   placeholder the understand test expects) doesn't come with a worktree; it was copied in locally, not committed.
+
+## Branch `evidence` — E2, open-source apps
+
+- **Each app runs as its own repo with a local `origin`.** Fitts fixes only a project at its git
+  root, and even its dry run pushes. TodoMVC's `examples/react` was split out with `git subtree
+  split`; Bootstrap was cloned at `v5.3.8`. Both point `origin` at a bare repo on this machine.
+- **One local commit on Bootstrap** adds `"fitts": {"startPath": "/docs/5.3/examples/"}` (a field
+  Fitts reads) so the run starts on the examples. The write-up names it beside the upstream sha.
+- **Bootstrap ran audit only.** TodoMVC showed that a non-Vite fix server can't be moved to its
+  port, so every fix fails to verify and the retries spend the cap. Astro's script has a fixed
+  port too. An audit-only run was cheaper and showed the same findings.
+- **The harness stops at the budget question.** TodoMVC's first harness waited 25 minutes on it.
+  The copy now ends there. It never says yes to more spend.
+- **Verdicts are by measurement, not by Fitts's evidence.** Each finding was reproduced (or not)
+  in a separate browser, against the dev server and, where the project has one, its production
+  build. "Unsure" means not reproduced, or not measured in that device cell. Where a WCAG rule
+  has an exception (inline targets, spacing), the exception counts.
+- **Third-party and dev-only problems are called that.** DocSearch is Algolia's widget, and the
+  Astro toolbar exists only in development. They're confirmed or false by what users would
+  meet, and they aren't drafted as Bootstrap issues.
+- **One issue text, not two.** Only TodoMVC's placeholder contrast is confirmed, unreported and
+  owned by the project. The keyboard gap is already tastejs/todomvc#1017, and Bootstrap's dark
+  secondary color is twbs/bootstrap#39484 (fixed in v6).
