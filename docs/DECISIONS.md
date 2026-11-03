@@ -3773,3 +3773,9 @@ What the bench runs taught:
 - **"Don't do it" sticks for the run.** A control the owner refused at the gate, on that page, is
   never tapped again (p9.bench, Nov 2: a journey whose plan said "Delete conversation" tapped it
   272 times, one gate per tap, and the run never moved on).
+- **A tap that never happened isn't "nothing changed on screen".** Fitts tapped controls from a
+  list that hadn't loaded yet (demo/chat's contacts and search results): the site couldn't find
+  them, the step was recorded with no outcome, and the "nothing happened" rule read that as an
+  unresponsive control, a wrong Noticed line on camera. Now a control that isn't there yet is tried
+  again after 2 s, and a step with no outcome gets no Noticed lines; if it still can't be used, it's
+  skipped as before.
