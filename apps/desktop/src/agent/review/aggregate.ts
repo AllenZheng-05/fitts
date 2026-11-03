@@ -142,6 +142,16 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
         severity: 3,
       };
     case 'font-inventory':
+      // A count of sizes is its own problem, not "families" (found auditing apps/site, Nov 2).
+      if (/^\d+ font sizes:/.test(m))
+        return {
+          title: 'Too many text sizes',
+          finding: `The site uses ${m.split(':')[0]}; more than about 6 makes the hierarchy hard to read.`,
+          fix: 'Settle on a type scale of about 6 sizes and use them throughout.',
+          heuristic: 'H4',
+          lens: 'look-and-feel',
+          severity: 2,
+        };
       return {
         title: 'Too many font families',
         finding: `The site mixes ${m.split(' (')[0]} with other families; inconsistent type makes pages feel unrelated.`,

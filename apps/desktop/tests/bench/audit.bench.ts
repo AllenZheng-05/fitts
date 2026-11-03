@@ -61,8 +61,8 @@ test('bench:audit', async () => {
   if (AUTONOMOUS) await page.getByLabel('How much should I ask you?').selectOption('autonomous');
   await page.getByRole('button', { name: 'Browse' }).click();
   // Main's real detection (its framework line) before opening, never a Phase 1 fixture.
-  const pkg = JSON.parse(readFileSync(join(FOLDER, 'package.json'), 'utf8')) as { name?: string };
-  await expect(page.getByText(pkg.name ?? basename(FOLDER)).first()).toBeVisible();
+  // Welcome no longer shows the package name; the project is ready to open once detected.
+  await expect(page.getByRole('button', { name: 'Open my project' })).toBeEnabled();
   await page.getByRole('button', { name: 'Open my project' }).click();
   await expect(page.getByLabel('Address')).toHaveValue(new RegExp(`localhost:${PORT}`), {
     timeout: 120_000,
@@ -110,6 +110,9 @@ test('bench:audit', async () => {
         return (
           s.phase === 'done' ||
           (!AUTONOMOUS && s.waitingFor === 'approval') ||
+          // "I think I'm done": only the owner ends a run, so the audit is over here too (the
+          // site session found runs that ended at this card never reported).
+          s.waitingFor === 'finish-proposal' ||
           s.chat.some((c) => c.type === 'state' && c.stateKind === 'nothing-found')
         );
       },

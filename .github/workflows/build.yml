@@ -35,6 +35,20 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # The site's own Playwright tests (fitts.allenzheng.com), in Chromium; skipped until the site
+      # has them (it does once site-redesign is merged).
+      - name: Site e2e
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          if node -e "process.exit(require('./apps/site/package.json').scripts?.['test:e2e'] ? 0 : 1)"; then
+            pnpm --filter @fitts/site exec playwright install --with-deps chromium
+            pnpm --filter @fitts/site run test:e2e
+          else
+            echo "apps/site has no test:e2e yet"
+          fi
+        env:
+          PW_CHANNEL: chromium
       # Only launch.spec.ts: through `test:e2e -- <file>` Playwright took the `--` literally and
       # ran every spec on macOS (Nov 2), so the build and the one spec run directly.
       - name: First-launch e2e on macOS (the macOS-only UI)

@@ -456,8 +456,11 @@ export class SiteWindow {
     };
   }> {
     this.focus();
+    // Start from the top of the page: after a blur, Chromium resumes Tab from the last focused
+    // spot, and a sweep that began partway down called everything above it unreachable (found
+    // auditing apps/site, Nov 2). Focusing a throwaway first element moves the starting point.
     await this.evaluate(
-      'document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); return true;',
+      "document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); const t = document.createElement('span'); t.tabIndex = -1; document.body.prepend(t); t.focus({ preventScroll: true }); t.remove(); return true;",
     );
     const facts = await this.probes<{
       interactive: { ref: string; selector: string; name: string }[];

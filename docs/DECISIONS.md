@@ -3756,3 +3756,17 @@ What the bench runs taught:
   match" once an answer has come back (not before, so #13's missing loading sign stands). All 33
   planted issues still reproduce. Still unexplained: two taps reported as "nothing changed on
   screen" (Grandma on /contacts, a search result) that navigate correctly in a browser.
+
+## Phase 4 — housekeeping from the site session (Nov 2)
+
+- The root `pnpm test` runs the site's tests too, and CI runs its Playwright tests in Chromium on
+  Linux. Both are skipped until `site-redesign` (which has them) is merged, so main stays green.
+- From auditing apps/site, fixed in the app:
+  - bench:audit reports a run that ends at "I think I'm done", and no longer looks for the package
+    name on Welcome.
+  - A link off the site or to a file (a download) isn't a wrong destination.
+  - The Tab sweep starts from the top of the page.
+  - A count of sizes is titled "Too many text sizes", not "font families".
+- Not changed: a multi-page Vite site without `appType: 'mpa'` serves the home page for unknown
+  addresses in dev, so its "refresh breaks it" findings can be the dev server's. The site fixed its
+  own dev server; Fitts doesn't change a project's config.
