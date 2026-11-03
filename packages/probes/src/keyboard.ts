@@ -28,28 +28,30 @@ export interface KeyboardResult {
   orderJumps: number;
 }
 
-/** The same element this many Tabs in a row: focus is stuck. */
-const STUCK_AFTER = 3;
+/**
+ * Focus on one element for the rest of the sweep, this many Tabs or more: focus is stuck. A date
+ * or time input takes a Tab per part (month, day, year: up to 6 for datetime-local) and then moves
+ * on, which isn't a trap (Basil & Ember's /reserve, checked by hand, Nov 3). A trap holds focus
+ * until the sweep's 200 presses run out.
+ */
+const STUCK_AFTER = 10;
 /** A jump back up the page of more than this many px is out of reading order. */
 const ROW_PX = 40;
 
 export function keyboardProblems(input: KeyboardInput): KeyboardResult {
   const items: ProbeItem[] = [];
   const { stops } = input;
-  // Stuck: the same element after 3 Tabs.
-  for (let i = STUCK_AFTER - 1; i < stops.length; i++) {
-    const run = stops.slice(i - STUCK_AFTER + 1, i + 1);
-    const first = run[0];
-    if (first && run.every((s) => s.ref === first.ref)) {
-      items.push({
-        ref: first.ref,
-        selector: first.selector,
-        measured: `focus stuck on "${first.name || first.selector}" after ${STUCK_AFTER} Tabs`,
-        expected: 'Tab moves on to the next control',
-      });
-      break;
-    }
-  }
+  // Stuck: the sweep ends on one element it never left, after STUCK_AFTER Tabs or more.
+  const last = stops.at(-1);
+  let held = 0;
+  while (last && held < stops.length && stops[stops.length - 1 - held]?.ref === last.ref) held++;
+  if (last && held >= STUCK_AFTER)
+    items.push({
+      ref: last.ref,
+      selector: last.selector,
+      measured: `focus stuck on "${last.name || last.selector}" after ${held} Tabs`,
+      expected: 'Tab moves on to the next control',
+    });
   // Never reached by Tab (only when the sweep wasn't stuck: a stuck sweep reaches nothing). A
   // sweep that stopped nowhere says nothing about reachability: the page wasn't in its normal
   // state (bench:chat, Nov 2: a forced failure had blanked /contacts, and every control read as

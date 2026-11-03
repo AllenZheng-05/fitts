@@ -56,19 +56,31 @@ describe('keyboardProblems', () => {
 
   it('focus stuck on one element is a trap, reported once, and hides the unreached list', () => {
     const r = keyboardProblems({
-      stops: [
-        stop('a', 10),
-        stop('trap', 60),
-        stop('trap', 60),
-        stop('trap', 60),
-        stop('trap', 60),
-      ],
+      stops: [stop('a', 10), ...Array.from({ length: 12 }, () => stop('trap', 60))],
       interactive: [el('a'), el('trap'), el('b'), el('c')],
       navLinks: 0,
       skipLink: false,
     });
     expect(r.items).toHaveLength(1);
     expect(keyboardKind(r.items[0]?.measured ?? '')).toBe('stuck');
+    expect(r.items[0]?.measured).toBe('focus stuck on "trap" after 12 Tabs');
+  });
+
+  it('a date input taking a Tab per part, then moving on, is not stuck', () => {
+    // Basil & Ember's /reserve: month, day and year, then Time (Chromium, checked by hand).
+    const date = Array.from({ length: 3 }, () => stop('rv-date', 60));
+    for (const stops of [
+      [stop('a', 10), ...date, stop('rv-time', 60), stop('b', 110)],
+      [stop('a', 10), ...date],
+    ])
+      expect(
+        keyboardProblems({
+          stops,
+          interactive: [el('a'), el('rv-date')],
+          navLinks: 0,
+          skipLink: false,
+        }).items.filter((i) => keyboardKind(i.measured) === 'stuck'),
+      ).toEqual([]);
   });
 
   it('a focused control under a sticky header (under half visible) is hidden', () => {
