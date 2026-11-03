@@ -3726,3 +3726,13 @@ What the bench runs taught:
      8081 ("intent has been delivered to currently running top-most instance"), or the app
      still reloading from that. Next step, if it's picked up again: force-stop the app
      (`am force-stop`) before the reopen, and log the dev client's own state.
+- **More of demo/chat's unplanted defects removed** (bench:chat, Nov 2, 21:00): the inbox crashed
+  when its request failed and showed no loading sign; the thread page showed none either; every
+  contact opened Grandma's chat (the demo has one conversation: the others now start a new
+  message); and late lists pushed the inbox's compose card and the contacts form down (the
+  judge saw both as jumps). Each now has a loading and failure line and reserves its list's room.
+  `scripts/check-demo-chat.cjs` still reproduces all 33 planted issues.
+- **Two Fitts false alarms fixed in the probes:** a Tab sweep that stopped nowhere (the page was
+  blank from a forced failure) no longer reports every control as unreachable; and landscape
+  "hides its content" now needs content in the page that doesn't show, not just a short page
+  (demo/chat's search is a heading and a field).

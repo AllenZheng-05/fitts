@@ -32,6 +32,16 @@ describe('keyboardProblems', () => {
     expect(r.items).toEqual([]);
   });
 
+  it('a sweep that stopped nowhere reports nothing unreachable (the page wasn’t itself)', () => {
+    const r = keyboardProblems({
+      stops: [],
+      interactive: [el('filter'), el('grandma')],
+      navLinks: 0,
+      skipLink: false,
+    });
+    expect(r.items).toEqual([]);
+  });
+
   it('flags a control Tab never reaches', () => {
     const r = keyboardProblems({
       stops: [stop('a', 10), stop('b', 60)],

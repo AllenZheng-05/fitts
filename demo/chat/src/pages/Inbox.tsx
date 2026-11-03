@@ -11,9 +11,18 @@ function avatarOf(name: string): string {
 
 export function Inbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [state, setState] = useState<'loading' | 'failed' | 'ready'>('loading');
   const [rate, setRate] = useState(false);
+  // Loading and failure say so, and the list keeps its room (not planted issues).
   useEffect(() => {
-    void api.conversations().then(setConversations);
+    api
+      .conversations()
+      .then((list) => {
+        if (!Array.isArray(list)) return setState('failed');
+        setConversations(list);
+        setState('ready');
+      })
+      .catch(() => setState('failed'));
   }, []);
   // Planted #29: "Rate us" pops up 1.5 s after opening the inbox (once a session), focus stays
   // behind it, Tab walks out of it, Esc does nothing, and its close is a mouse-only span. It
@@ -62,7 +71,17 @@ export function Inbox() {
           </button>
         </nav>
       </div>
-      <ul className="threads">
+      {state === 'loading' && (
+        <p role="status" className="muted">
+          Loading your messages…
+        </p>
+      )}
+      {state === 'failed' && (
+        <p role="alert" className="muted">
+          Your messages didn’t load. Reload the page to try again.
+        </p>
+      )}
+      <ul className="threads" style={{ minHeight: state === 'failed' ? undefined : 3 * 50 }}>
         {conversations.map((c, i) => {
           const last = c.messages[c.messages.length - 1];
           return (
