@@ -3749,3 +3749,10 @@ What the bench runs taught:
 - **The keyboard sweep** ends after three empty Tabs in a row, not one (a probe that couldn't read
   the focused element ended it early).
 - The scorer's #21 words take "flat list", "one list" and "ungrouped".
+- **Round 3 (bench:chat, Nov 2, 22:15).** The state pass skips a case when the page never made the
+  faulted request (a search asks only when you type): the page showed its normal state, which said
+  nothing ("/search goes blank" was the empty search page). A pop-up and a keyboard trap on the same
+  element are one finding (#29's "Rate us" came out twice). demo/chat's search says "No messages
+  match" once an answer has come back (not before, so #13's missing loading sign stands). All 33
+  planted issues still reproduce. Still unexplained: two taps reported as "nothing changed on
+  screen" (Grandma on /contacts, a search result) that navigate correctly in a browser.

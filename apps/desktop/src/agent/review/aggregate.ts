@@ -756,6 +756,23 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
       } else if (!c.routes.has(c.route)) c.route = [...c.routes][0] ?? c.route;
     }
 
+  // 3c. A dialog that pops up and traps the keyboard is one problem with two measurements: the
+  //     surprise probe's pop-up joins the keyboard finding on the same element (bench:chat, Nov 2:
+  //     #29's "Rate us" came out twice).
+  for (const c of [...merged]) {
+    if (c.probe !== 'surprise' || c.refs.length === 0) continue;
+    const kb = merged.find(
+      (x) => x !== c && x.probe === 'keyboard' && x.refs.some((r) => c.refs.includes(r)),
+    );
+    if (!kb) continue;
+    for (const r of c.routes) kb.routes.add(r);
+    for (const id of c.evidenceIds) kb.evidenceIds.add(id);
+    kb.items.push(...c.items);
+    for (const d of c.drafts)
+      if (!kb.drafts.some((x) => x.persona === d.persona)) kb.drafts.push(d);
+    merged.splice(merged.indexOf(c), 1);
+  }
+
   // 4. Findings: severity rubric, then the evidence check.
   const findings = merged.map((c, n) => toFinding(c, n, runId, stepOf));
   const checks = new Map<string, Check>();

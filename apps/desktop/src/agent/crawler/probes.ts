@@ -511,6 +511,9 @@ export class ProbeRunner {
       for (const fault of ['error', 'empty', 'slow'] as FaultCase[]) {
         try {
           const r = await this.site.fault(route, endpoint, fault);
+          // The page never asked (a search asks only when you type): it showed its normal state,
+          // which says nothing about this case (bench:chat, Nov 2: "/search goes blank").
+          if (r.hit === false) continue;
           const label = faultLabel(fault, endpoint);
           onState({ route, label, ...(r.jpegBase64 ? { jpegBase64: r.jpegBase64 } : {}) });
           const items: ProbeItem[] = [];

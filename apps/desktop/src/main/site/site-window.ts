@@ -164,7 +164,7 @@ export class SiteWindow {
     if (this.inputs.length > 400) this.inputs.shift();
   }
   /** SPEC-phase4 §6B.6: the GET being rewritten while state_pass loads a page. */
-  private fault: { endpoint: string; fault: FaultCase } | undefined;
+  private fault: { endpoint: string; fault: FaultCase; hits: number } | undefined;
   /** SPEC-phase4 §6A: per-action console errors, redirect hops and the last load time. */
   private consoleErrors: string[] = [];
   private redirects: string[] = [];
@@ -339,6 +339,7 @@ export class SiteWindow {
     // SPEC-phase4 §6B.6: state_pass rewrites one of the site's own GETs, only on localhost.
     const f = this.fault;
     if (f && faultable(req, this.origin) && new URL(req.url).pathname.startsWith(f.endpoint)) {
+      f.hits += 1;
       void this.applyFault(id, f.fault, params).catch(() => undefined);
       return;
     }
@@ -600,10 +601,13 @@ export class SiteWindow {
     };
     uncaught: number;
     busyWithin1s: boolean;
+    /** The page made the request at all (a search only asks when you type). */
+    hit: boolean;
     jpegBase64?: string;
     results: PageProbeResult[];
   }> {
-    this.fault = { endpoint, fault };
+    const state = { endpoint, fault, hits: 0 };
+    this.fault = state;
     this.consoleErrors = [];
     try {
       void this.load(route).catch(() => undefined);
@@ -619,6 +623,7 @@ export class SiteWindow {
         facts,
         uncaught: this.consoleErrors.length,
         busyWithin1s,
+        hit: state.hits > 0,
         ...(jpeg ? { jpegBase64: jpeg.toString('base64') } : {}),
         results,
       };
