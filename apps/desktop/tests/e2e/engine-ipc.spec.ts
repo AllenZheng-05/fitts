@@ -57,7 +57,11 @@ test('projects persist in the file store across a relaunch', async () => {
   await launched.close({ keepUserData: true });
   expect(existsSync(join(userData, 'projects', 'index.json'))).toBe(true);
   launched = await launchApp({ userData });
+  // Launch opens on Welcome back, which lists the saved project.
+  const { page } = launched;
+  await expect(page.getByRole('heading', { name: /^Welcome back/, level: 2 })).toBeVisible();
+  await page.getByRole('button', { name: /demo\/chat/ }).click();
   await expect(
-    launched.page.getByRole('button', { name: /^Switch project, current: demo\/chat/ }),
+    page.getByRole('button', { name: /^Switch project, current: demo\/chat/ }),
   ).toBeVisible();
 });

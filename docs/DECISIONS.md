@@ -2592,6 +2592,22 @@ understand the project's CI before coding; and one PR for the whole run.
 
 # Phase 4
 
+## Phase 3 — the taskbar icon and the launch screen (Allen, Nov 3)
+
+- **The Windows taskbar shows Fitts's icon in the installed app.** The relaunch details pointed
+  at resources/icon.ico, which in a packaged app is inside app.asar; Explorer can't read files
+  there, so the Windows 11 taskbar fell back to Electron's icon (the exe, window and thumbnail
+  were right). Packaged, the icon now comes from Fitts.exe itself (appIconPath: the exe,
+  appIconIndex 0); dev keeps the .ico, a real file. Dev also runs under its own AppUserModelID,
+  app.fitts.desktop.dev, in both setAppUserModelId and the window's details, so a dev run never
+  caches electron.exe's icon under the installed app's id. The choice lives in
+  src/main/app-details.ts (no Electron imports) so both branches are unit-tested.
+- **Fitts always opens on Welcome.** Launch used to open the last project's workspace, which
+  dropped you straight into its interview or run. Now it's the setup card the first time and
+  "Welcome back" when there are projects; lastOpenId is kept. Opening a project from Welcome back
+  is the same as before: a run still in memory reopens as it was; otherwise the project opens on
+  its interview, which waits for you. Nothing starts a crawl or spends anything on its own.
+
 ## Phase 4 — U0: housekeeping
 
 - **"Allow microphone" asks for real.** The chip used to set a flag. Now `requestMic()` goes to
