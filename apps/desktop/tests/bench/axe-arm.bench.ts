@@ -69,7 +69,9 @@ test('baseline arm (a): axe alone', async () => {
     );
     const byKey = new Map<string, Finding>();
     for (const vp of VIEWPORTS) {
-      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+      const context = await browser.newContext({
+        viewport: { width: vp.width, height: vp.height },
+      });
       const page = await context.newPage();
       for (const route of ROUTES) {
         await page.goto(`${base}${route}`);

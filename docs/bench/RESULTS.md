@@ -11,6 +11,8 @@ ledger; wall time is the run's own.
 | Run id | Date (UTC) | Arm | Commit | Recall | S1 | S2 | Precision (strict) | Precision (sev ≥ 2) | Unplanted at sev ≥ 2 | Cost | Wall |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | axe-1 | 2026-11-03 09:09 | (a) axe alone | 596f9b2 | 4/33 | 4/19 | 0/14 | 50% (4/8) | 50% (4/8) | 4 | $0 | 66 s |
+| — | — | (b) Lighthouse | — | skipped: not installed, and PLAN.md allows no new install | | | | | | | |
+| probes-1 | 2026-11-03 09:17 | (c) Fitts, probes only | 596f9b2 | 25/33 | 18/19 | 7/14 | 69% (25/36) | 93% | 2 | $0 | 399 s |
 
 ## The held-out app (sealed answer key)
 
@@ -30,3 +32,6 @@ Qualitative: what each arm found.
   refuses; fixed (a context per viewport) before the only scored run. Same matcher as Fitts:
   "Buttons must have discernible text" on `#thread-call` counts as unplanted because planted #17 is
   the icon buttons on the conversation header, and the matcher wants that element.
+- **probes-1.** Missed #6, #15, #16, #18, #21, #22, #25 and #33: the ones that need reading the
+  page's meaning (jargon, grouping, a missing empty state, dates) or a fault the crawl didn't
+  inject. Its two unplanted sev ≥ 2 findings are the 200% text and text-spacing checks.
