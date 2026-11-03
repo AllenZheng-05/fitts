@@ -870,9 +870,13 @@ function orientation(F: Refs): ProbeItem[] {
       );
   }
   const text = (document.body.innerText ?? '').trim();
+  // Hidden, not just short: the page has content that doesn't show (bench:chat, Nov 2: a search
+  // page that's only "Search" and a field read as broken in landscape).
+  const inPage = (document.body.textContent ?? '').trim().length;
   if (
     items.length === 0 &&
     text.length < 20 &&
+    inPage >= 200 &&
     document.body.querySelectorAll('button, a, input').length > 0
   )
     items.push(

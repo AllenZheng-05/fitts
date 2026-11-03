@@ -37,12 +37,17 @@ function VideoIcon() {
 export function Thread({ conversationId }: { conversationId: number }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
 
+  // Loading and failure say so (not planted issues).
   useEffect(() => {
-    void api.conversation(conversationId).then((c) => {
-      setConversation(c.messages ? c : null);
-      setLoaded(true);
-    });
+    api
+      .conversation(conversationId)
+      .then((c) => {
+        setConversation(c.messages ? c : null);
+        setLoaded(true);
+      })
+      .catch(() => setFailed(true));
   }, [conversationId]);
 
   return (
@@ -68,7 +73,17 @@ export function Thread({ conversationId }: { conversationId: number }) {
           </button>
         </div>
       </div>
-      <ul className="bubbles">
+      <ul className="bubbles" style={{ minHeight: 4 * 60 }}>
+        {!loaded && !failed && (
+          <li role="status" className="muted">
+            Loading the conversation…
+          </li>
+        )}
+        {failed && (
+          <li role="alert" className="muted">
+            This conversation didn’t load. Reload the page to try again.
+          </li>
+        )}
         {loaded && !conversation && <li className="muted">No messages.</li>}
         {conversation?.messages.map((m, i) => (
           <li key={i} className={m.from === 'You' ? 'bubble mine' : 'bubble'}>

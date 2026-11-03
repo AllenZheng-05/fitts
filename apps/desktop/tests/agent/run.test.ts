@@ -691,6 +691,24 @@ describe('the permission gate and modes (§13)', () => {
     run.dispose();
   });
 
+  it('after Don’t do it, that control on that page is never tapped again', async () => {
+    const { run, site, state } = setup();
+    let asked = 0;
+    site.onHeld = () => {
+      asked += 1;
+      run.held({ id: `h${asked}`, method: 'DELETE', url: 'http://x/api/items/1' });
+    };
+    run.start();
+    await until(() => Boolean(state()?.gate));
+    run.respondGate(state()?.gate?.id ?? '', 'deny');
+    const step = state()?.step ?? 0;
+    await until(() => (state()?.step ?? 0) > step);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(asked).toBe(1);
+    expect(state()?.gate).toBeUndefined();
+    run.dispose();
+  });
+
   it('Allow once sends it; Dangerous mode on localhost sends it without asking', async () => {
     const allow = setup();
     withGate(allow.run, allow.site);
@@ -889,6 +907,26 @@ describe('Done: replays and the step cap (Allen’s feedback, round 4)', () => {
     await until(() => proposal(state()) !== undefined);
     run.answer(proposal(state())?.id ?? '', 'finish');
     await until(() => state()?.phase === 'done');
+    run.dispose();
+  });
+});
+
+describe('a control that isn’t on the page yet', () => {
+  it('is tried again after a moment, and never noticed as a tap that did nothing', async () => {
+    let tries = 0;
+    const site = fakeSite({
+      click: (ref) => {
+        tries += 1;
+        return Promise.reject(new Error(`No element ${ref} on /`));
+      },
+    });
+    const { run, state } = setup({ site });
+    run.start();
+    // The first try fails, and the same tap is tried again after a moment.
+    await until(() => tries >= 2, 6000);
+    await new Promise((r) => setTimeout(r, 200));
+    const noticed = state()?.chat.flatMap((c) => (c.type === 'steps' ? c.steps : [])) ?? [];
+    expect(JSON.stringify(noticed)).not.toContain('nothing changed on screen');
     run.dispose();
   });
 });

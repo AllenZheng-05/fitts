@@ -207,6 +207,13 @@ export interface SiteStatus {
    * all when the app has no web build ('missing').
    */
   androidWeb?: 'imitation' | 'missing';
+  /** The emulator is showing the run branch's fixed version, not the live app (Allen, Nov 2). */
+  fixedBranch?: string;
+  /**
+   * Why the fixed version can't be on the emulator, so the web imitation stands in: no emulator,
+   * the dev client didn't reopen (or its Metro didn't start), or the agent is using the phone.
+   */
+  phoneFallback?: 'no-emulator' | 'dev-client' | 'metro' | 'busy';
   /**
    * SPEC-phase3 §3: the mirror's tabs, the site's first (always open), and the one showing.
    * Absent until a page opens a second tab.
@@ -297,6 +304,11 @@ export interface SiteBridge {
   close(projectId: string): void;
   /** Serves a version of the site under `siteId` (see versionSiteId); close it with close(). */
   openVersion(siteId: string, projectId: string, runId: string, version: SiteVersion): void;
+  /**
+   * An Android app on the emulator (Allen, Nov 2): the live app, or the run branch's fixed
+   * version. The answer comes back on the project's SiteStatus (fixedBranch, phoneFallback).
+   */
+  phone(projectId: string, runId: string, branch: string | null): void;
   resize(projectId: string, width: number, height: number): void;
   /** Opens the page a site (or version) is on in the user's own browser (localhost only). */
   openInBrowser(siteId: string): void;
@@ -449,6 +461,7 @@ export const IPC = {
   siteOpen: 'fitts:site-open',
   siteClose: 'fitts:site-close',
   siteOpenVersion: 'fitts:site-open-version',
+  sitePhone: 'fitts:site-phone',
   siteResize: 'fitts:site-resize',
   siteDevice: 'fitts:site-device',
   siteInput: 'fitts:site-input',
@@ -1046,6 +1059,8 @@ export interface ActionRecord {
 }
 
 export type ObservationKind =
+  /** A tap sent a destructive request at once, with no confirmation step (held at the gate). */
+  | 'no-confirm'
   | 'slow'
   | 'no-feedback'
   | 'silent-save'

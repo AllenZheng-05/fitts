@@ -384,6 +384,8 @@ export type SiteOpResult =
       facts: PageFacts;
       uncaught: number;
       busyWithin1s: boolean;
+      /** The page made the faulted request at all; false: its normal state, nothing to judge. */
+      hit?: boolean;
       jpegBase64?: string;
       results: PageProbeResult[];
     }

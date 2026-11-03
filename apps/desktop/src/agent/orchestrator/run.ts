@@ -334,6 +334,11 @@ export class RealRun {
   /** The request the gate modal is holding, and the action that sent it (§13). */
   private heldReq: { held: HeldRequest; gateId: string } | undefined;
   private acting: { name: string; route: string } | undefined;
+  /**
+   * Controls the owner said "Don't do it" to, by page and name: never tapped again this run
+   * (p9.bench, Nov 2: a journey whose plan said "Delete conversation" tapped it 272 times).
+   */
+  private readonly refused = new Set<string>();
   private planSaid = false;
   private directions: Direction[] = [];
   /** Theme-fit's reason, the direction picked (§8.3), and the mockups as PNG for the redesigner. */
@@ -1797,6 +1802,20 @@ export class RealRun {
     }
     const gateId = `gate-${held.id}`;
     this.heldReq = { held, gateId };
+    // The hold is evidence: the tap sent it straight away, with nothing asking first. Without
+    // this the reviewers saw only what followed a "Don't do it" (bench:chat, Nov 2: "Delete
+    // conversation does nothing" instead of #16, "deletes instantly").
+    if (held.method !== 'TAP')
+      this.notice([
+        {
+          id: this.nextObsId(),
+          step: this.state.step,
+          route: this.acting?.route ?? routeOf(this.lastSnap?.path ?? '/'),
+          kind: 'no-confirm',
+          text: format(copy.noticed.noConfirm, { name: action, request: `${held.method} ${path}` }),
+          severityHint: 3,
+        },
+      ]);
     this.emit([
       {
         type: 'gate.requested',
@@ -1821,6 +1840,8 @@ export class RealRun {
     const h = this.heldReq;
     if (!h || h.gateId !== gateId) return;
     this.heldReq = undefined;
+    const asked = this.state.gate;
+    if (decision !== 'allow' && asked) this.refused.add(`${asked.route}|${asked.action}`);
     void this.deps.site.release(h.held.id, decision === 'allow');
     this.emit([{ type: 'gate.decided', gateId, decision }]);
     this.say(
@@ -2978,6 +2999,11 @@ export class RealRun {
       this.emit([{ type: 'step.finished', step }]);
       return;
     }
+    // The owner already said no to this control on this page: not again.
+    if (action.kind === 'click' && this.refused.has(`${routeOf(from)}|${action.name}`)) {
+      this.emit([{ type: 'step.finished', step }]);
+      return;
+    }
     // The mode, read at each action (§13): Plan only looks; Ask every action asks first.
     if (action.kind !== 'navigate' && !(await this.mayAct(action, from))) {
       this.emit([{ type: 'step.finished', step }]);
@@ -2997,10 +3023,17 @@ export class RealRun {
         this.history.push(`opened ${action.path}`);
         this.pages.get(routeOf(from))?.evidence.trace.push(`opened ${action.path}`);
       } else {
-        const result =
+        const use = () =>
           action.kind === 'click'
-            ? await this.deps.site.click(action.ref, DESTRUCTIVE.test(action.name))
-            : await this.deps.site.type(action.ref, action.text);
+            ? this.deps.site.click(action.ref, DESTRUCTIVE.test(action.name))
+            : this.deps.site.type(action.ref, action.text);
+        // A list that loads late: the control isn't there yet. One more try after a moment,
+        // then it counts as unusable (below), never as a tap that did nothing.
+        const result = await use().catch(async (e: unknown) => {
+          if (!/No (element|field)/.test(e instanceof Error ? e.message : String(e))) throw e;
+          await new Promise((r) => setTimeout(r, 2000));
+          return use();
+        });
         outcome = result;
         this.coverage.markTried(from, action.ref);
         this.acting = undefined;
@@ -3075,7 +3108,13 @@ export class RealRun {
       trace: outcome?.trace,
       ...(this.journeyNow ? { journeyId: this.journeyNow } : {}),
     });
-    const notes = noticeAction(record, outcome?.trace, this.nextObsId, this.cellNow);
+    // A tap or typing that never happened (the control wasn't on the page yet, so the site
+    // couldn't use it) says nothing about the page: no "nothing changed on screen" for a list
+    // that hadn't loaded (bench:chat, Nov 2: Grandma on /contacts, the search results).
+    const performed = action.kind === 'navigate' || outcome !== undefined;
+    const notes = performed
+      ? noticeAction(record, outcome?.trace, this.nextObsId, this.cellNow)
+      : [];
     record.observations = notes.map((n) => n.id);
     this.emit([{ type: 'action.recorded', record }]);
     this.notice(notes);

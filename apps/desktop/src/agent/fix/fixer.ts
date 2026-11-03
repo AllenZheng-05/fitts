@@ -56,6 +56,8 @@ export interface MuseRun {
   refused: string[];
   /** Its tokens, for the ledger (Muse Code bills the same Meta key). */
   usage?: { input: number; output: number; cached: number; reasoning: number };
+  /** What Muse Code says it ran (else the --model Fitts asked for, muse-wonder-1.0). */
+  model?: string;
 }
 
 const INSTRUCTIONS = `You are Fitts's code fixer. You fix ONE usability problem in a web project with the

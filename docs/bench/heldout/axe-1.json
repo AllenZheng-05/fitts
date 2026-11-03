@@ -1,0 +1,68 @@
+{
+  "at": "2026-11-03T12:01:57.274Z",
+  "routes": [
+    "/",
+    "/bikes/foldaway-mini",
+    "/bikes/gravel-roamer",
+    "/bikes/harbor-cruiser",
+    "/bikes/packmule-cargo",
+    "/bikes/ridgeback-trail",
+    "/bikes/sprout-20",
+    "/bikes/velo-sprint",
+    "/bikes/volt-commuter",
+    "/book/dates",
+    "/book/review",
+    "/book/rider",
+    "/does-not-exist-fitts-test",
+    "/rentals",
+    "/settings"
+  ],
+  "findings": [
+    {
+      "id": "axe-1",
+      "runId": "axe",
+      "severity": 4,
+      "heuristic": "H4",
+      "lens": "accessibility",
+      "title": "Buttons must have discernible text",
+      "finding": "Ensure buttons have discernible text",
+      "fix": "",
+      "route": "/",
+      "elementRef": null,
+      "evidence": [],
+      "agreement": {
+        "agreeing": 0,
+        "total": 0,
+        "who": [
+          "axe"
+        ]
+      },
+      "status": "open",
+      "stepIndex": 0,
+      "lane": "shown"
+    },
+    {
+      "id": "axe-2",
+      "runId": "axe",
+      "severity": 3,
+      "heuristic": "H4",
+      "lens": "accessibility",
+      "title": "Elements must meet minimum color contrast ratio thresholds",
+      "finding": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+      "fix": "",
+      "route": "/settings",
+      "elementRef": null,
+      "evidence": [],
+      "agreement": {
+        "agreeing": 0,
+        "total": 0,
+        "who": [
+          "axe"
+        ]
+      },
+      "status": "open",
+      "stepIndex": 0,
+      "lane": "shown"
+    }
+  ]
+}

@@ -44,11 +44,76 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
     - The $2 cap.
   - Allen's change (Nov 2): an Android app's fixed version shows as its web build at phone width, marked as an imitation. The emulator stays on the live app. demo/basil-ember-android got a web build for it (`bd9f313`).
 
-**Next:** U10, release polish. Then the after-U10 items (a) and (c) if time allows.
+**U10 step 1 (Nov 2, 20:30 CST):** bench:android with `BENCH_ANDROID_FIX=1`, the answer keys
+hidden and journeys on the model:
+- **8/10** planted issues found (A5 and A6 missed), with 6 unplanted findings at severity ≥ 2.
+- 3 of 3 fixes verified. The brand fix scored 12/12 colors close to the key without seeing it.
+- Cost: $2.10 for the audit, $4.23 in all.
+- The order journey placed an order and reached the order status screen, so A8 was found.
+- A5 was missed because "Cancel order" wasn't treated as destructive. That's fixed in `5248cb8`
+  but not re-run yet (one paid run at a time).
+- The emulator "after" switch fell back ("dev-client") and is off. The web imitation is the
+  "after".
+
+**U10 step 2, bench:chat (not green).** The number for the README, the site and the video is
+one run: **run 4, Nov 2 22:00 CST** (`2026-11-03T04:00:19Z`, commit `fa98f3c`, Economy,
+contributor pricing, answer key hidden, $0.14):
+- **Recall 27/33 (82%):** S1 18/19, S2 9/14.
+- **Precision 66% strict (27/41), 84% at severity ≥ 2 (27/32).**
+- **5 unplanted findings at severity ≥ 2,** over the bar of 2. The bench fails on that line.
+
+The four runs that night (one per round of fixes), each its own result:
+
+| Run | Recall | Unplanted at sev ≥ 2 | Cost |
+|---|---|---|---|
+| 1 (`5248cb8`) | 27/33 | 9 | $0.27 |
+| 2 (`6cd00fe`) | 27/33 | 11 | $0.25 |
+| 3 (`34da49b`) | 28/33 | 7 | $0.14 |
+| 4 (`fa98f3c`) | 27/33 | 5 | $0.14 |
+
+What's left in run 4's five:
+- 200% text cutting off the Send button: planted #7's fixed size.
+- A text-spacing overlap on /compose that isn't traced yet.
+- A reviewer's "empty inbox" opinion.
+- Two taps logged "nothing changed on screen" (Grandma on /contacts, a search result) that
+  navigate correctly in a browser. That's a Fitts measurement bug, not found yet.
+
+**The earlier numbers below were scored by a matcher that was too generous.** It read the
+finding's evidence, which paired findings with the wrong issues. Re-scoring the 06:55 run with
+the strict matcher gives 26/33, not 29/33. Read them as history, not results.
+
+**Next:** U10 steps 3–8 (p9.bench, README, spend, release, Muse label), then Allen's
+added work below.
+
+**Status across sessions (Allen, Nov 2 evening):**
+- **Pushed:** `main` through `fb5873a` (the CI fixture fix). fitts.allenzheng.com is live on
+  Cloudflare Pages from `main`. Both Basil & Ember repos are on GitHub with their wiring.
+- **The site session** (worktree `C:/Users/Plasm/Projects/fitts-site`): the redesign is done on
+  `site-redesign` (7 commits). `evidence` (off it) adds packages/run-report and /runs/ (the run
+  report viewable in the browser; written, not yet committed), then the open-source runs
+  (Allen picked Bootstrap's examples and TodoMVC's React app) and the README for judges on
+  Wednesday. Allen merges after U10.
+- **The held-out app:** https://github.com/AllenZheng-05/heldout-app (Loopline Bikes,
+  `8c193cf`, port 5180), built by a separate session that never saw Fitts. 16 planted (8 S1,
+  8 S2) and 3 traps. The key is sealed outside the repo
+  (SHA-256 `61376c3a5dc6ec4dd8c6b097d35dac7231e425affbda8c8bb4d39f510ab33469`). Run Fitts
+  Economy and the axe-only arm blind; never open `../heldout-key` until Allen says.
+- **Baseline comparison:** pre-registered in `docs/bench/PLAN.md` (uncommitted); budget $25;
+  results go in `docs/bench/RESULTS.md`, one run per row.
+- **Replay:** the keyless replay was removed earlier and isn't coming back; the site's /runs/
+  replaces it for judges.
+- **The emulator "after" switch:** one more paid run, then stop if it still fails and keep the
+  web imitation; the video switches branches by hand.
+- **One paid Fitts run at a time:** the machine is short on memory (background shells were
+  killed twice on Nov 2).
 
   Still owed: p9.bench (U6, on purpose).
+  **p9.bench, Nov 3 (build of 4566b16, in-process fixer):** failed by its 55-minute wait. 16 fixes queued: 13 fixed and verified on the run branch (each with Undo), the redesign rolled back ("I got stuck going over the same code"), and 3 still in progress at the deadline (one being checked: "Page scrolls sideways on small screens"). One gate, no repeat taps after "Don't do it". The retry, undo and revert-PR steps were not reached. $0.30. Bench timing, not a fix failure: each fix is verified by a recrawl, about 3 minutes apiece.
+  **Baseline comparison (docs/bench/RESULTS.md), demo/chat:** axe alone: 4/33 (S1 4, S2 0) · Fitts probes only: 25/33 (S1 18, S2 7) · Fitts Economy: 28/33 (S1 19, S2 9), $0.16 · Quality 28/33, $1.8 · Open 26–27/33, $1.5 · Economy without the judge 28/33. $8.41 spent.
+  **Held-out app, scored after the reveal (Nov 3, key SHA-256 matched):** Fitts Economy 6/16 (S1 4/8, S2 2/8), precision 30%, tripped 1 of 3 traps (the skip link, sev 1); axe alone 2/16 (S1 2/8, S2 0/8), precision 100%, no traps. Next, bench-only: rerun p9.bench with a longer wait, after the site session's open-source runs and tonight's recording.
+  **bench:android rerun for A5, Nov 3 (9488582):** **9/10**, A5 found (only A6 missed: the three names for one action); 3 unplanted at sev ≥ 2 (a text field read by its description, two cart steppers with the same name, quantity taps that look like they do nothing). Audit $2.49. The fix phase stopped at the run's $6 cap and waited for the owner, which the bench doesn't answer, so the test failed at its wait: the brand fix failed to open on the fixed branch three times and was rolled back, as was the icon-button fix. The ledger ended at $8.02, over the $6 cap (see DECISIONS).
 
-**Spend (Allen, Nov 2):** Allen has $129 of free Meta credits, so paid runs and paid tests are fine when they give real evidence (the original $15 cap is superseded). About $0.11 spent so far in Phase 4. Plan: the judge, then the bench noise fixes, one paid bench for both, then p9.bench.
+**Spend (Allen, Nov 2):** Allen has $129 of free Meta credits, so paid runs and paid tests are fine when they give real evidence (the original $15 cap is superseded). **Phase 4 spend, corrected (U10 step 6):** **$28.86 recorded** in `.fitts-dev/agent-spend.ndjson` from U0 (Nov 1, 16:59 CST) through Nov 2, 22:02 CST: muse-wonder-1.0 $17.47, muse-spark-1.3 $11.09 (contributor $0.51 of it), SAM $0.30. That's a floor: **Muse Code's own runs before 12:37 CST Nov 2 weren't recorded.** Fitts didn't read Muse's usage until then (fixed in U9). Those runs include U6–U9's fixes, four bench:android fix phases and every Understand second pass. Meta's billing page has the exact figure. p9.bench, the baseline comparison and the held-out runs come after this. Plan: the judge, then the bench noise fixes, one paid bench for both, then p9.bench.
 
 **bench:chat, Nov 2 03:57 (paid, alone, Economy, contributor pricing, $2 cap): spent $0.076.** Recall **30/33 (91%)**, missing #15 (a validation error clears the whole form), #18 (three date formats) and #33 (Contacts goes blank when its request fails). Shown 57, plus 5 suggestions. Precision: 30 of 57 shown are planted (**53%** strict). Counting only severity ≥ 2, 30 of 44 (**68%**): 14 unplanted findings at severity ≥ 2, over the bench's bar of 2, so the test fails on that line. The 14:
   - 4 on /help, the planted broken link's 404 page: no lang, landmarks, and sideways scroll counted twice. That page shouldn't be audited as a page.

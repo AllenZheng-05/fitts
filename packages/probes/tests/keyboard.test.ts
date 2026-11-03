@@ -22,6 +22,26 @@ describe('keyboardProblems', () => {
     expect(r).toEqual({ items: [], orderJumps: 0 });
   });
 
+  it('a control reached under a re-issued ref still counts as reached (by its selector)', () => {
+    const r = keyboardProblems({
+      stops: [stop('a', 10), { ...stop('e7', 60), selector: '#filter' }],
+      interactive: [el('a'), { ref: 'filter', selector: '#filter', name: 'Filter' }],
+      navLinks: 0,
+      skipLink: false,
+    });
+    expect(r.items).toEqual([]);
+  });
+
+  it('a sweep that stopped nowhere reports nothing unreachable (the page wasn’t itself)', () => {
+    const r = keyboardProblems({
+      stops: [],
+      interactive: [el('filter'), el('grandma')],
+      navLinks: 0,
+      skipLink: false,
+    });
+    expect(r.items).toEqual([]);
+  });
+
   it('flags a control Tab never reaches', () => {
     const r = keyboardProblems({
       stops: [stop('a', 10), stop('b', 60)],

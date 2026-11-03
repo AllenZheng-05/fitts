@@ -142,6 +142,16 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
         severity: 3,
       };
     case 'font-inventory':
+      // A count of sizes is its own problem, not "families" (found auditing apps/site, Nov 2).
+      if (/^\d+ font sizes:/.test(m))
+        return {
+          title: 'Too many text sizes',
+          finding: `The site uses ${m.split(':')[0]}; more than about 6 makes the hierarchy hard to read.`,
+          fix: 'Settle on a type scale of about 6 sizes and use them throughout.',
+          heuristic: 'H4',
+          lens: 'look-and-feel',
+          severity: 2,
+        };
       return {
         title: 'Too many font families',
         finding: `The site mixes ${m.split(' (')[0]} with other families; inconsistent type makes pages feel unrelated.`,
@@ -733,6 +743,53 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
     for (const id of c.evidenceIds) twin.evidenceIds.add(id);
     for (const d of c.drafts)
       if (!twin.drafts.some((x) => x.persona === d.persona)) twin.drafts.push(d);
+  }
+
+  // 3b. The same missing loading sign, seen twice on a page: the state pass's forced slow response
+  //     and the feedback probe's own wait. The page's feedback finding keeps it (bench:chat,
+  //     Nov 2: /search's #13 came out as two findings).
+  const loading = (c: Cluster) => /loading/i.test(c.template?.title ?? '');
+  const waited = merged.find((c) => c.probe === 'feedback-timing' && loading(c));
+  if (waited)
+    for (const c of [...merged]) {
+      if (c.probe !== 'state' || !loading(c)) continue;
+      for (const r of waited.routes) {
+        if (!c.routes.has(r)) continue;
+        c.routes.delete(r);
+        c.items = c.items.filter((i) => !i.measured.includes(` ${r} `));
+      }
+      if (c.routes.size === 0) {
+        for (const id of c.evidenceIds) waited.evidenceIds.add(id);
+        for (const d of c.drafts)
+          if (!waited.drafts.some((x) => x.persona === d.persona)) waited.drafts.push(d);
+        merged.splice(merged.indexOf(c), 1);
+      } else if (!c.routes.has(c.route)) c.route = [...c.routes][0] ?? c.route;
+    }
+
+  // 3c. A dialog that pops up and traps the keyboard is one problem: the judge's "pops up" finding
+  //     (judge-only, no probe) joins the keyboard *dialog* finding on the same element (bench:chat,
+  //     Nov 2: #29's "Rate us" came out twice). Only those two: a keyboard finding across pages
+  //     collects many refs, and a broader rule merged #30's moved button into "focus gets stuck".
+  for (const c of [...merged]) {
+    const judgedPopUp =
+      !c.probe &&
+      c.drafts.length > 0 &&
+      c.drafts.every((d) => d.persona === JUDGE_PERSONA) &&
+      c.drafts.some((d) => /pops up/i.test(d.draft.title));
+    if (!judgedPopUp || c.refs.length === 0) continue;
+    const kb = merged.find(
+      (x) =>
+        x !== c &&
+        x.probe === 'keyboard' &&
+        x.items.some((i) => keyboardKind(i.measured) === 'dialog' && c.refs.includes(i.ref)),
+    );
+    if (!kb) continue;
+    for (const r of c.routes) kb.routes.add(r);
+    for (const id of c.evidenceIds) kb.evidenceIds.add(id);
+    kb.items.push(...c.items);
+    for (const d of c.drafts)
+      if (!kb.drafts.some((x) => x.persona === d.persona)) kb.drafts.push(d);
+    merged.splice(merged.indexOf(c), 1);
   }
 
   // 4. Findings: severity rubric, then the evidence check.

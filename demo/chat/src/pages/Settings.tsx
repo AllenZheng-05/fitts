@@ -64,6 +64,9 @@ export function Privacy() {
     <>
       <h1 className="title">Privacy</h1>
       <p className="muted">Your messages stay on this device.</p>
+      <a href="/settings" className="link">
+        Back to Settings
+      </a>
     </>
   );
 }

@@ -692,6 +692,13 @@ export class MockRunEngine implements RunEngine {
     this.withRun(projectId, (s, ctx) => this.postEdgeState(s, ctx, kind));
   }
 
+  /** Puts the run's verified changes on one branch (the Android Done scenario). */
+  onBranch(projectId: string, branch: string): void {
+    this.withRun(projectId, (s) => {
+      for (const c of s.changes) if (c.status === 'verified') c.branch = branch;
+    });
+  }
+
   /** Posts a question on a run; used for the background-project scenario. */
   askOn(projectId: string, text: string, options: string[], blocking: boolean): void {
     this.withRun(projectId, (_s, ctx) => {

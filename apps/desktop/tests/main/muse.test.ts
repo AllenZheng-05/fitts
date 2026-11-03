@@ -142,3 +142,24 @@ describe('readMuseEvent', () => {
     expect(t.usage.input).toBe(0);
   });
 });
+
+describe('the ledger’s label for Muse Code', () => {
+  it('takes the model Muse Code reports in run.usage', () => {
+    const t = { usage: { input: 0, output: 0, cached: 0, reasoning: 0 }, summary: '', final: '' };
+    readMuseEvent(t, {
+      payload_type: 'run.usage',
+      payload: { models: [{ model: 'muse-wonder-1.0', input_tokens: 10, output_tokens: 2 }] },
+    });
+    expect(t).toMatchObject({ model: 'muse-wonder-1.0', usage: { input: 10, output: 2 } });
+  });
+
+  it('leaves it unset when Muse Code names none (the echo provider)', () => {
+    const t: { model?: string } & Parameters<typeof readMuseEvent>[0] = {
+      usage: { input: 0, output: 0, cached: 0, reasoning: 0 },
+      summary: '',
+      final: '',
+    };
+    readMuseEvent(t, { payload_type: 'run.usage', payload: { models: [{ model: null }] } });
+    expect(t.model).toBeUndefined();
+  });
+});

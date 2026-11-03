@@ -52,6 +52,8 @@ export class ProbeRunner {
   private lastClick: { x: number; y: number } | null = null;
   /** SPEC-phase4 §6B: each control's link target; each route's headings when first seen. */
   private readonly hrefOf = new Map<string, string>();
+  /** The origin of the pages the crawl is on (links elsewhere are off the site). */
+  private pageOrigin: string | undefined;
   private readonly headingsOf = new Map<string, string[]>();
   private readonly dialogsChecked = new Set<string>();
   /** Surprise notes already made (first-load banners are reported once per site). */
@@ -116,11 +118,23 @@ export class ProbeRunner {
   /** Every page the crawl sees: remember its labels and links; probe it on the first visit. */
   async onPage(snap: AxSnapshot): Promise<void> {
     const route = routeOf(snap.path);
+    try {
+      this.pageOrigin = new URL(snap.url).origin;
+    } catch {
+      // A snapshot without a URL (tests): links are compared by path.
+    }
     for (const n of snap.nodes) {
       if ((n.role === 'button' || n.role === 'link') && n.name && !this.labels.has(n.ref))
         this.labels.set(n.ref, { route, ref: n.ref, name: n.name });
       if (n.href && !this.hrefs.has(n.href)) this.hrefs.set(n.href, { route, ref: n.ref });
-      if (n.href) this.hrefOf.set(n.ref, n.href);
+      if (n.href) {
+        // Kept whole, against the page it's on: an off-site or download link isn't a page here.
+        try {
+          this.hrefOf.set(n.ref, new URL(n.href, snap.url).toString());
+        } catch {
+          this.hrefOf.set(n.ref, n.href);
+        }
+      }
     }
     if (!this.headingsOf.has(route)) this.headingsOf.set(route, snap.headings);
     // A dialog open on the page: its keyboard rules, once per route (§6B.2).
@@ -219,14 +233,21 @@ export class ProbeRunner {
    */
   async onCell(route: string, cell: DeviceCell): Promise<void> {
     if (!this.site.cellProbes) return;
+    // Matched on what was measured, or on the element itself (its selector or source): refs are
+    // re-issued when the page reloads, and a cell measures the same control differently (a 28 px
+    // target is 31 px at wider text spacing), which isn't a new problem (Nov 2, bench:chat).
+    const keys = (probe: ProbeName, i: ProbeItem) => [
+      `${probe}|${i.measured}`,
+      ...(i.selector ? [`${probe}|sel:${i.selector}`] : []),
+      ...(i.src ? [`${probe}|src:${i.src}`] : []),
+    ];
     const seen = new Set(
       this.results
         .filter((r) => r.route === route)
-        .flatMap((r) => r.items.map((i) => `${r.probe}|${i.measured}`)),
+        .flatMap((r) => r.items.flatMap((i) => keys(r.probe, i))),
     );
-    // Matched on what was measured: element refs are re-issued when the page reloads.
     const fresh = (probe: ProbeName, items: ProbeItem[]) =>
-      items.filter((i) => !seen.has(`${probe}|${i.measured}`));
+      items.filter((i) => !keys(probe, i).some((k) => seen.has(k)));
     try {
       for (const r of await this.site.cellProbes(cell)) {
         const items = fresh(r.probe, r.items);
@@ -293,7 +314,22 @@ export class ProbeRunner {
     }
     // SPEC-phase4 §6B.4: where it went vs where its link says, and the redirects on the way.
     if (action.kind === 'click') {
-      const expected = this.hrefOf.get(action.ref);
+      const href = this.hrefOf.get(action.ref);
+      // A link off the site, or to a file to download, doesn't open a page here: where the
+      // window stayed isn't a wrong destination (found auditing apps/site, Nov 2).
+      const offSite = (() => {
+        if (!href) return false;
+        try {
+          const u = new URL(href);
+          return (
+            (this.pageOrigin !== undefined && u.origin !== this.pageOrigin) ||
+            /\.(exe|dmg|appimage|zip|pdf|msi|deb|rpm|tar|gz|apk)$/i.test(u.pathname)
+          );
+        } catch {
+          return false;
+        }
+      })();
+      const expected = offSite ? undefined : href;
       const arrived = routeOf(result.path);
       const hops = result.trace?.redirects ?? [];
       const w = wrongPlace({
@@ -504,6 +540,9 @@ export class ProbeRunner {
       for (const fault of ['error', 'empty', 'slow'] as FaultCase[]) {
         try {
           const r = await this.site.fault(route, endpoint, fault);
+          // The page never asked (a search asks only when you type): it showed its normal state,
+          // which says nothing about this case (bench:chat, Nov 2: "/search goes blank").
+          if (r.hit === false) continue;
           const label = faultLabel(fault, endpoint);
           onState({ route, label, ...(r.jpegBase64 ? { jpegBase64: r.jpegBase64 } : {}) });
           const items: ProbeItem[] = [];

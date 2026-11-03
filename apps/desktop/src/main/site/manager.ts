@@ -19,11 +19,12 @@ import { join } from 'node:path';
 import { detectProject, devCommandOnPort, hasWebBuild } from '../projects/detect';
 import { runDir, SAFE_ID } from '../store/run-log';
 import type { HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
-import { DevServer, responds } from './dev-server';
+import { DevServer, METRO_HEALTH, responds } from './dev-server';
 import { captureReference } from './reference';
 import { SiteWindow } from './site-window';
 import { EVENT_SIDE_MS, FrameRing } from './frames';
 import { Adb, adbRunner, bootEmulator, findTool, readAppJson } from '../android/adb';
+import { PhoneSwitch } from '../android/phone-switch';
 import { AndroidWindow } from '../android/window';
 import { extract } from '../understand/extract';
 import { replay } from './replayer';
@@ -36,6 +37,8 @@ interface Live {
   window?: SiteWindow;
   /** SPEC-phase4 §9.2: an Android project's device, in place of the window. */
   android?: AndroidWindow;
+  /** The emulator between the live app and the run's fixed version (Allen, Nov 2). */
+  phone?: PhoneSwitch;
   status: SiteStatus;
   health?: ReturnType<typeof setInterval>;
   /** A version (not the project's own site): frees its port when it closes. */
@@ -89,6 +92,8 @@ export class SiteManager {
   private deviceFor(projectId: string, id: string | null): SiteDevice | DeviceCell | null {
     return deviceById(id) ?? (id ? (this.cells.get(projectId)?.get(id) ?? null) : null);
   }
+  /** Whether the agent is using a project's emulator (mid-run): the fixed version waits. */
+  phoneBusy: ((projectId: string) => boolean) | undefined;
   /** Status changes also go to the agent (site-down, live projects). */
   onStatus: ((status: SiteStatus) => void) | undefined;
   /** The ownership re-check before a live site opens (§4.2), set by main. */
@@ -187,6 +192,7 @@ export class SiteManager {
         ? `npx expo start --web --port ${port}`
         : devCommandOnPort(dir, port, this.pluginFile),
       port,
+      android ? METRO_HEALTH : undefined,
     );
     this.status(siteId, { url: live.server.url });
     const ok = await live.server.start(90_000);
@@ -282,7 +288,12 @@ export class SiteManager {
     const adb = new Adb(adbRunner(adbPath, serial));
     const app = readAppJson(folder);
     const port = Number(process.env['FITTS_SITE_PORT'] ?? '') || 8081;
-    const server = new DevServer(folder, `npx expo start --dev-client --port ${port}`, port);
+    const server = new DevServer(
+      folder,
+      `npx expo start --dev-client --port ${port}`,
+      port,
+      METRO_HEALTH,
+    );
     const live: Live = { server, status: { projectId, status: 'starting' } };
     this.live.set(projectId, live);
     this.status(projectId, { status: 'starting', url: `android:${serial}` });
@@ -309,6 +320,34 @@ export class SiteManager {
       },
     );
     live.android = win;
+    const versions = this.versions;
+    live.phone = new PhoneSwitch(
+      {
+        adb: () => Promise.resolve(adb),
+        slug: app.slug,
+        livePort: port,
+        metro: (dir, p) => {
+          const server = new DevServer(
+            dir,
+            `npx expo start --dev-client --port ${p}`,
+            p,
+            METRO_HEALTH,
+            false,
+          );
+          return {
+            start: (ms) => server.start(ms),
+            stop: () => server.stop(),
+            served: () => server.printed(/Bundled/),
+          };
+        },
+        freePort: () => versions?.reservePort() ?? Promise.reject(new Error('no ports')),
+        releasePort: (p) => versions?.releasePort(p),
+      },
+      (showing) =>
+        this.status(projectId, {
+          fixedBranch: showing.kind === 'fixed' ? showing.branch : undefined,
+        }),
+    );
     await win.start();
     await win.ready();
     this.status(projectId, { status: 'running' });
@@ -320,7 +359,7 @@ export class SiteManager {
     let misses = 0;
     live.health = setInterval(() => {
       // 4s, not 1.5: under load a dev server answers slowly without being down.
-      void responds(live.server.url, 4000).then((up) => {
+      void responds(live.server.healthUrl, 4000).then((up) => {
         if (this.live.get(projectId) !== live) return;
         misses = up ? 0 : misses + 1;
         if (misses === 3) this.status(projectId, { status: 'failed', log: live.server.log });
@@ -356,13 +395,17 @@ export class SiteManager {
         ? false
         : this.projectFor(projectId)?.kind === 'live'
           ? ((await live.window?.responsive()) ?? false)
-          : await responds(live.server.url);
+          : await responds(live.server.healthUrl);
       return { op: 'health', up, log: live?.server.log ?? [] };
     }
     if (request.op === 'png' || request.op === 'saveAsset') return this.media(projectId, request);
     if (request.op === 'reference')
       return { op: 'reference', ...(await captureReference(request.url)) };
-    if (live?.android && request.op !== 'board') return live.android.run(request);
+    if (live?.android && request.op !== 'board') {
+      // The agent works on the live app: a fixed version on the phone goes first.
+      if (live.phone?.state().kind === 'fixed') await live.phone.showLive();
+      return live.android.run(request);
+    }
     // Boards need the font store: main/index answers them before they get here.
     if (request.op === 'board') throw new Error('boards are saved by main');
     const win = live?.window;
@@ -556,9 +599,52 @@ export class SiteManager {
     this.status(projectId, { status: 'running' });
   }
 
+  /**
+   * The run branch's fixed version on the emulator (Allen, Nov 2), when the agent isn't using
+   * it. When it can't be, the status says why and the site view shows the web imitation.
+   */
+  async showFixed(projectId: string, runId: string, branch: string): Promise<void> {
+    const live = this.live.get(projectId);
+    const fallback = (why: NonNullable<SiteStatus['phoneFallback']>) =>
+      this.status(projectId, { phoneFallback: why });
+    // Only an Android project has a phone; one whose emulator never came up gets the imitation.
+    if (!live?.status.url?.startsWith('android:')) return;
+    if (!live.android || !live.phone) return fallback('no-emulator');
+    if (this.phoneBusy?.(projectId)) return fallback('busy');
+    if (!this.versions || !SAFE_ID.test(runId) || !BRANCH.test(branch)) return;
+    this.status(projectId, { phoneFallback: undefined });
+    let dir: string;
+    try {
+      dir = await this.versions.viewDir(projectId, runId, { kind: 'branch', branch });
+    } catch {
+      return fallback('metro');
+    }
+    const r = await live.phone.showFixed(dir, branch);
+    if (!r.ok) fallback(r.reason);
+  }
+
+  /** Back to the live app on the emulator (a no-op when it's showing). */
+  async showLive(projectId: string): Promise<void> {
+    const live = this.live.get(projectId);
+    await live?.phone?.showLive();
+    if (live?.status.phoneFallback) this.status(projectId, { phoneFallback: undefined });
+  }
+
+  /** Every emulator back on its live app (quitting Fitts). */
+  async restorePhones(): Promise<void> {
+    await Promise.all([...this.live.values()].map((l) => l.phone?.showLive() ?? Promise.resolve()));
+  }
+
+  /** Whether a phone is showing a fixed version (quitting waits for it to go back). */
+  phoneShowingFixed(): boolean {
+    return [...this.live.values()].some((l) => l.phone?.state().kind === 'fixed');
+  }
+
   close(projectId: string): void {
     const live = this.live.get(projectId);
     if (!live) return;
+    // Back to the live app on the phone; it finishes on its own.
+    void live.phone?.showLive();
     if (live.health) clearInterval(live.health);
     live.tabs?.destroy();
     live.window?.destroy();
@@ -731,6 +817,11 @@ export class SiteManager {
       const live = typeof id === 'string' ? this.live.get(id) : undefined;
       const url = live?.status.url ?? live?.server.url;
       if (url && /^http:\/\/localhost:\d+(\/|$)/.test(url)) void shell.openExternal(url);
+    });
+    ipcMain.on(IPC.sitePhone, (_e, projectId: unknown, runId: unknown, branch: unknown) => {
+      if (typeof projectId !== 'string' || typeof runId !== 'string') return;
+      if (typeof branch === 'string') void this.showFixed(projectId, runId, branch);
+      else if (branch === null) void this.showLive(projectId);
     });
     ipcMain.on(
       IPC.siteOpenVersion,

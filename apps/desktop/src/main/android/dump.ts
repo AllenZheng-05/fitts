@@ -60,6 +60,7 @@ export function parseDump(xml: string): AndroidNode {
       focusable: a['focusable'] === 'true',
       enabled: a['enabled'] !== 'false',
       ...(a['checkable'] === 'true' ? { checked: a['checked'] === 'true' } : {}),
+      ...(a['scrollable'] === 'true' ? { scrollable: true } : {}),
       children: [],
     };
     (stack[stack.length - 1] as AndroidNode).children.push(node);

@@ -13,6 +13,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -31,7 +32,7 @@ import type {
 } from '../../agent/protocol';
 import { fontFaceCss, type FontFiles, type FontStore } from '../fonts/fonts';
 import { devCommandOnPort } from '../projects/detect';
-import { DevServer, responds } from '../site/dev-server';
+import { DevServer, METRO_HEALTH, responds } from '../site/dev-server';
 import { SiteWindow } from '../site/site-window';
 import { run } from '../spawn';
 import { ciChecks, FORMATTABLE, LINTABLE, type PackageManager } from './ci';
@@ -56,6 +57,37 @@ function unlinkDeps(dir: string): void {
   } catch {
     // Not there: nothing to unlink.
   }
+}
+
+/**
+ * Benchmarks only (FITTS_HIDE_FILES, comma-separated paths from the project root): a demo's answer
+ * keys (PLANTED.md, the prompt that planted its issues), which the fixer must never see, or a
+ * benchmark would score Fitts copying the answer (Nov 2: a brand fix read PLANTED.md's tokens).
+ */
+export function hiddenFiles(): string[] {
+  return (process.env['FITTS_HIDE_FILES'] ?? '')
+    .split(',')
+    .map((p) => p.trim().replace(/\\/g, '/').replace(/^\.\//, ''))
+    .filter(Boolean);
+}
+
+const isHidden = (rel: string) => hiddenFiles().includes(rel.split(sep).join('/'));
+
+/**
+ * The hidden files moved out of a worktree while Muse Code works in it (it reads files itself),
+ * next to the worktree, never inside the user's repo. The returned function puts them back.
+ */
+export function hideWhile(dir: string): () => void {
+  const moved = hiddenFiles()
+    .map((rel) => ({
+      from: join(dir, rel),
+      to: join(dirname(dir), `.hidden-${rel.replace(/[\\/]/g, '_')}`),
+    }))
+    .filter(({ from }) => existsSync(from));
+  for (const m of moved) renameSync(m.from, m.to);
+  return () => {
+    for (const m of moved) if (existsSync(m.to)) renameSync(m.to, m.from);
+  };
 }
 
 /**
@@ -132,12 +164,18 @@ const TEXT = /\.(tsx?|jsx?|css|scss|html|json|md|vue|svelte)$/;
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.fitts-worktrees', '.vite']);
 /** Verification and version servers: 5181 and up (§9.2). */
 const FIRST_PORT = 5181;
+/** How long a port given back waits before it is handed out again. */
+const PORT_COOL_MS = 15_000;
 /** A redesign's after shots when the before shots' size isn't known. */
 const SHOT_SIZE = { width: 1280, height: 800 };
 
 export class FixHost {
   private readonly jobs = new Map<string, Job>();
   private readonly ports = new Set<number>();
+  /** Ports given back, and when (see freeLater). */
+  private readonly cooling = new Map<number, number>();
+  /** Before a check uses the emulator: a fixed version showing on it goes back to live. */
+  beforeDevice: ((projectId: string) => Promise<void>) | undefined;
   /** One verification at a time: worktree dev servers share the project's dependency cache. */
   private verifying: Promise<unknown> = Promise.resolve();
 
@@ -373,6 +411,7 @@ export class FixHost {
     const taskName = `${job.dir.split(sep).pop() ?? 'job'}.task.md`;
     writeFileSync(join(dirname(job.dir), taskName), task);
     const restoreLink = keepGitLink(job.dir);
+    const unhide = hideWhile(job.dir);
     const res = await museExec({
       via: status.via,
       cwd: job.dir,
@@ -382,6 +421,7 @@ export class FixHost {
       ...(maxSteps ? { maxSteps } : {}),
     });
     restoreLink();
+    unhide();
     rmSync(join(dirname(job.dir), taskName), { force: true });
     const changed = (await git(job.dir, 'status', '--porcelain')).stdout
       .split('\n')
@@ -401,6 +441,7 @@ export class FixHost {
       ...(res.error ? { error: res.error } : {}),
       summary: res.summary,
       usage: res.usage,
+      ...(res.model ? { model: res.model } : {}),
       patched: changed.length - refused.length,
       files: changed.filter((f) => !refused.includes(f)),
       refused,
@@ -430,6 +471,7 @@ export class FixHost {
     writeFileSync(join(base, `${name}.prompt.md`), prompt);
     writeFileSync(join(base, `${name}.schema.json`), JSON.stringify(schema));
     const restoreLink = keepGitLink(dir);
+    const unhide = hideWhile(dir);
     try {
       const res = await museExec({
         via: status.via,
@@ -444,11 +486,13 @@ export class FixHost {
         ok: res.code === 0 && res.final.trim().startsWith('{'),
         text: res.final,
         usage: res.usage,
+        ...(res.model ? { model: res.model } : {}),
         authFailed: res.authFailed,
         ...(res.error ? { error: res.error } : {}),
       };
     } finally {
       restoreLink();
+      unhide();
       await git(root, 'worktree', 'remove', '--force', dir);
       rmSync(join(base, `${name}.prompt.md`), { force: true });
       rmSync(join(base, `${name}.schema.json`), { force: true });
@@ -467,8 +511,10 @@ export class FixHost {
   }
 
   read(id: string, path: string): string {
-    const full = this.inside(this.job(id), path);
-    if (!existsSync(full)) throw new Error(`${path} doesn't exist`);
+    const job = this.job(id);
+    const full = this.inside(job, path);
+    if (!existsSync(full) || isHidden(relative(job.dir, full)))
+      throw new Error(`${path} doesn't exist`);
     return readFileSync(full, 'utf8').slice(0, 60_000);
   }
 
@@ -479,7 +525,7 @@ export class FixHost {
     if (!existsSync(full) || !statSync(full).isDirectory())
       throw new Error(`${dir} isn't a folder`);
     return readdirSync(full)
-      .filter((name) => !SKIP.has(name))
+      .filter((name) => !SKIP.has(name) && !isHidden(relative(job.dir, join(full, name))))
       .map((name) => (statSync(join(full, name)).isDirectory() ? `${name}/` : name))
       .slice(0, 200);
   }
@@ -504,7 +550,7 @@ export class FixHost {
 
   /** Lines containing `text` (case-insensitive) in source files, at most 30. */
   search(id: string, text: string): { path: string; line: number; text: string }[] {
-    return searchIn(this.job(id).dir, text);
+    return searchIn(this.job(id).dir, text).filter((r) => !isHidden(r.path));
   }
 
   /** Replaces exactly one occurrence of `find` (an exact excerpt) with `replace`. */
@@ -554,6 +600,7 @@ export class FixHost {
       info: ReturnType<typeof readAppJson>;
     }) => Promise<T>,
   ): Promise<T | { error: string }> {
+    await this.beforeDevice?.(job.projectId).catch(() => undefined);
     const adbPath = findTool('adb');
     if (!adbPath) return { error: 'the Android SDK isn’t installed here' };
     const serial = (await new Adb(adbRunner(adbPath)).devices())[0];
@@ -571,18 +618,29 @@ export class FixHost {
       );
     const before = await changedNow();
     const port = await this.freePort();
-    const server = new DevServer(job.dir, `npx expo start --dev-client --port ${port}`, port);
+    const server = new DevServer(
+      job.dir,
+      `npx expo start --dev-client --port ${port}`,
+      port,
+      METRO_HEALTH,
+      false,
+    );
     const openOn = (p: number) =>
       adb.open(
         `exp+${info.slug}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${p}`)}`,
       );
     const controls = async () => /clickable="true"/.test(await adb.dump());
     const ready = async (timeoutMs: number, reload = false) => {
-      // After a reopen the old app's controls stay up until the reload clears them; a check on
-      // them would measure the app before the fix.
-      if (reload)
+      // After a reopen the old app stays up until this Metro has served its bundle (a minute or
+      // more the first time) and the reload clears it; a check before that would measure the
+      // app before the fix.
+      if (reload) {
+        for (const end = Date.now() + timeoutMs; Date.now() < end && !server.printed(/Bundled/);)
+          await new Promise((r) => setTimeout(r, 1000));
+        if (!server.printed(/Bundled/)) return false;
         for (const end = Date.now() + 8000; Date.now() < end && (await controls());)
           await new Promise((r) => setTimeout(r, 500));
+      }
       for (const end = Date.now() + timeoutMs; Date.now() < end;) {
         if (await controls()) return true;
         await new Promise((r) => setTimeout(r, 1000));
@@ -607,8 +665,9 @@ export class FixHost {
       return await fn({ adb, go, info });
     } finally {
       await openOn(8081).catch(() => false);
+      await adb.unreverse(port).catch(() => false);
       server.stop();
-      this.ports.delete(port);
+      this.freeLater(port);
       for (const file of await changedNow()) {
         if (before.has(file)) continue;
         const tracked = (await git(job.dir, 'ls-files', '--error-unmatch', file)).code === 0;
@@ -689,7 +748,7 @@ export class FixHost {
       return await replay(job.projectId, server.url, device, ask);
     } finally {
       server.stop();
-      this.ports.delete(port);
+      this.freeLater(port);
     }
   }
 
@@ -746,7 +805,7 @@ export class FixHost {
     } finally {
       win?.destroy();
       server.stop();
-      this.ports.delete(port);
+      this.freeLater(port);
     }
   }
 
@@ -807,7 +866,7 @@ export class FixHost {
     } finally {
       win?.destroy();
       server.stop();
-      this.ports.delete(port);
+      this.freeLater(port);
     }
   }
 
@@ -890,7 +949,7 @@ export class FixHost {
   }
 
   releasePort(port: number): void {
-    this.ports.delete(port);
+    this.freeLater(port);
   }
 
   /**
@@ -918,8 +977,19 @@ export class FixHost {
     return dir;
   }
 
+  /**
+   * A port given back: free again after a cool-down. A dev server just stopped can still hold
+   * it or answer on it for a few seconds, and the next server there failed or was mistaken for a
+   * fresh one (Nov 2: the fixed version opened on the last check's dying Metro).
+   */
+  private freeLater(port: number): void {
+    this.ports.delete(port);
+    this.cooling.set(port, Date.now());
+  }
+
   private async freePort(): Promise<number> {
     for (let p = FIRST_PORT; p < FIRST_PORT + 40; p++) {
+      if (Date.now() - (this.cooling.get(p) ?? 0) < PORT_COOL_MS) continue;
       if (this.ports.has(p) || (await responds(`http://localhost:${p}`, 300))) continue;
       this.ports.add(p);
       return p;

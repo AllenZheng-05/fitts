@@ -31,6 +31,7 @@ const MOBILE_UA =
 import type { AxSnapshot, HeldRequest, OpTrace } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 import { cleanFrames, selectorFor, SOURCE_CHAIN_FN } from './source-chain';
+import { REFS } from './refs';
 
 /** What "Point at something" picks when the pointer is inside one: a control, as a whole. */
 const CONTROLS =
@@ -41,25 +42,6 @@ const WORLD = 1001;
 /** WCAG 1.4.12's text spacing, as a sheet the page gets in the text-spacing cell. */
 const TEXT_SPACING_CSS =
   '* { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; } p { margin-bottom: 2em !important; }';
-
-/** Assigns `e<n>` to elements without a data-ref/data-testid, stable for the page load. */
-const REFS = `(() => {
-  const w = window;
-  w.__fitts = w.__fitts || { n: 0 };
-  const own = (el) => el.getAttribute('data-ref') || el.getAttribute('data-testid') || el.getAttribute('data-fitts-ref');
-  const refOf = (el) => {
-    const r = own(el);
-    if (r) return r;
-    const id = 'e' + (++w.__fitts.n);
-    el.setAttribute('data-fitts-ref', id);
-    return id;
-  };
-  const find = (ref) => {
-    const q = CSS.escape(ref);
-    return document.querySelector('[data-ref="' + q + '"],[data-testid="' + q + '"],[data-fitts-ref="' + q + '"]');
-  };
-  return { own, refOf, find };
-})()`;
 
 export class SiteWindow {
   readonly win: BrowserWindow;
@@ -164,7 +146,7 @@ export class SiteWindow {
     if (this.inputs.length > 400) this.inputs.shift();
   }
   /** SPEC-phase4 §6B.6: the GET being rewritten while state_pass loads a page. */
-  private fault: { endpoint: string; fault: FaultCase } | undefined;
+  private fault: { endpoint: string; fault: FaultCase; hits: number } | undefined;
   /** SPEC-phase4 §6A: per-action console errors, redirect hops and the last load time. */
   private consoleErrors: string[] = [];
   private redirects: string[] = [];
@@ -339,6 +321,7 @@ export class SiteWindow {
     // SPEC-phase4 §6B.6: state_pass rewrites one of the site's own GETs, only on localhost.
     const f = this.fault;
     if (f && faultable(req, this.origin) && new URL(req.url).pathname.startsWith(f.endpoint)) {
+      f.hits += 1;
       void this.applyFault(id, f.fault, params).catch(() => undefined);
       return;
     }
@@ -455,8 +438,11 @@ export class SiteWindow {
     };
   }> {
     this.focus();
+    // Start from the top of the page: after a blur, Chromium resumes Tab from the last focused
+    // spot, and a sweep that began partway down called everything above it unreachable (found
+    // auditing apps/site, Nov 2). Focusing a throwaway first element moves the starting point.
     await this.evaluate(
-      'document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); return true;',
+      "document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); const t = document.createElement('span'); t.tabIndex = -1; document.body.prepend(t); t.focus({ preventScroll: true }); t.remove(); return true;",
     );
     const facts = await this.probes<{
       interactive: { ref: string; selector: string; name: string }[];
@@ -465,15 +451,20 @@ export class SiteWindow {
     }>('return P.keyboardFacts(F);');
     const stops: TabStop[] = [];
     const firstRef = new Set<string>();
+    // Three empty Tabs in a row: back at the address bar, the loop is done. One alone (a probe
+    // that couldn't read the focused element) isn't the end (bench:chat, Nov 2: a sweep that
+    // ended early read demo/chat's contacts filter and rows as unreachable).
+    let empty = 0;
     for (let i = 0; i < 200; i++) {
       this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
       this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
       await new Promise((r) => setTimeout(r, 30));
       const stop = await this.probes<TabStop | null>('return P.tabStop(F);').catch(() => null);
       if (!stop) {
-        if (stops.length > 0) break; // Back to the address bar: the loop is done.
+        if (stops.length > 0 && ++empty >= 3) break;
         continue;
       }
+      empty = 0;
       // Around once: the sweep is complete.
       if (firstRef.has(stop.ref) && stops.length > 3 && stops.at(-1)?.ref !== stop.ref) break;
       firstRef.add(stop.ref);
@@ -595,10 +586,13 @@ export class SiteWindow {
     };
     uncaught: number;
     busyWithin1s: boolean;
+    /** The page made the request at all (a search only asks when you type). */
+    hit: boolean;
     jpegBase64?: string;
     results: PageProbeResult[];
   }> {
-    this.fault = { endpoint, fault };
+    const state = { endpoint, fault, hits: 0 };
+    this.fault = state;
     this.consoleErrors = [];
     try {
       void this.load(route).catch(() => undefined);
@@ -614,6 +608,7 @@ export class SiteWindow {
         facts,
         uncaught: this.consoleErrors.length,
         busyWithin1s,
+        hit: state.hits > 0,
         ...(jpeg ? { jpegBase64: jpeg.toString('base64') } : {}),
         results,
       };
@@ -1205,14 +1200,17 @@ export class SiteWindow {
     const before = this.path();
     this.noteInput();
     this.focus();
-    const ok = await this.evaluate<boolean>(`
+    const how = await this.evaluate<'set' | 'keys' | null>(`
       const el = F.find(${JSON.stringify(ref)});
-      if (!el) return false;
+      if (!el) return null;
       el.scrollIntoView({ block: 'center' });
       el.focus();
+      if (F.pick(el, ${JSON.stringify(text)})) return 'set';
       if ('select' in el) el.select();
-      return true;`);
-    if (!ok) throw new Error(`No field ${ref} on ${before}`);
+      return 'keys';`);
+    if (!how) throw new Error(`No field ${ref} on ${before}`);
+    // A select or a date, time or month field takes a choice, not keystrokes: F.pick made one.
+    if (how === 'set') return null;
     this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
     this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
     for (const ch of text) {

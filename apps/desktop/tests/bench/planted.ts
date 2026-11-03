@@ -29,7 +29,7 @@ export const PLANTED: Planted[] = [
     issue: 'One action labeled NEXT / Send Text / Create Message',
     routes: ['/compose', '/compose/recipient', '/compose/confirm'],
     refs: ['compose-next', 'compose-create', 'compose-send', 'compose-next-1'],
-    words: /label|named|wording|inconsistent|different (words|labels|names)|same action/,
+    words: /label|named|wording|different (words|labels|names)|same action/,
   },
   {
     n: 3,
@@ -57,7 +57,8 @@ export const PLANTED: Planted[] = [
     issue: 'Recipient chosen on step 1 not shown on step 2',
     routes: ['/compose/recipient'],
     refs: ['compose-to'],
-    words: /recipient|who (it'?s|you'?re) (for|sending)|recogni|remember/,
+    words:
+      /recipient[^.]{0,30}(is ?n[o'’]t|not|never) (shown|visible|repeated)|(do(es)?n'?t|never) (show|say|repeat)[^.]{0,30}(recipient|who)|who (it'?s|you'?re) (for|sending)|forgets?|remember/,
   },
   {
     n: 7,
@@ -127,7 +128,8 @@ export const PLANTED: Planted[] = [
     issue: '"Delete conversation" deletes instantly',
     routes: ['/contacts/grandma'],
     refs: ['thread-delete'],
-    words: /delete|undo|without (asking|confirm)/,
+    words:
+      /delet\w*[^.]{0,40}(instantly|immediately|at once|without (asking|confirm)|no (confirm|undo))|without (asking|confirm)|\bundo\b/,
   },
   {
     n: 17,
@@ -149,14 +151,14 @@ export const PLANTED: Planted[] = [
     issue: 'Off-grid, inconsistent padding',
     routes: 'all',
     refs: [],
-    words: /spacing|padding|margin|grid/,
+    words: /padding|margin|grid|spacing (is|varies)|inconsistent spacing/,
   },
   {
     n: 21,
     issue: 'Settings has 14 ungrouped toggles',
     routes: ['/settings'],
     refs: ['settings-list'],
-    words: /toggle|group|too many|long list|switches/,
+    words: /toggle|group|too many|long list|flat list|one list|ungrouped|switches/,
   },
   {
     n: 22,
@@ -238,7 +240,9 @@ export const PLANTED: Planted[] = [
   },
 ];
 
-const textOf = (f: Finding) => [f.title, f.finding, ...f.evidence].join(' ').toLowerCase();
+// The title and the finding only: evidence quotes the page and other probes, and matching on it
+// paired findings with the wrong issues (Nov 2: a spacing finding counted as one action's labels).
+const textOf = (f: Finding) => [f.title, f.finding].join(' ').toLowerCase();
 
 export function matches(f: Finding, p: Planted): boolean {
   const routes = new Set([f.route, ...(f.locations ?? []).map((l) => l.route)]);

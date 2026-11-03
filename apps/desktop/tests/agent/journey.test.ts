@@ -143,6 +143,41 @@ describe('runJourney', () => {
     expect(s.performed.length).toBe(3);
   });
 
+  it('filling in a form on one screen is progress, not stuck', async () => {
+    const values: Record<string, string> = {};
+    const fields = ['name', 'phone', 'notes', 'email'];
+    const snap = (): AxSnapshot =>
+      page(
+        '/checkout',
+        fields.map((ref) => ({ ref, role: 'textbox', name: ref, value: values[ref] ?? '' })),
+      );
+    const s = site({});
+    const base = s.deps(
+      scripted([
+        ...fields.map((ref): JourneyAction => ({
+          kind: 'type',
+          ref,
+          name: ref,
+          text: 'x',
+          why: 'Filling',
+        })),
+        { kind: 'goal_met', why: 'Filled in' },
+      ]),
+    );
+    const r = await runJourney(
+      {
+        ...base,
+        snapshot: () => Promise.resolve(snap()),
+        perform: (action) => {
+          if (action.kind === 'type') values[action.ref] = action.text;
+          return Promise.resolve('/checkout');
+        },
+      },
+      { ...journey, start: '/checkout' },
+    );
+    expect(r.status).toBe('done');
+  });
+
   it('skips a ref the page doesn’t have and refuses a destructive control outside the plan', async () => {
     const s = site({
       '/compose': page('/compose', [{ ref: 'del', role: 'button', name: 'Delete conversation' }]),
@@ -160,6 +195,40 @@ describe('runJourney', () => {
     expect(r.reason).toMatch(/Delete conversation/);
     expect(s.performed).toEqual([]);
     expect(r.trace[0]).toMatch(/no ghost on the page/);
+  });
+
+  it('runs a journey that needs a payment up to the control that pays, never through it', async () => {
+    const book: Journey = {
+      ...journey,
+      id: 'book',
+      name: 'Book a bike',
+      start: '/checkout',
+      steps: ['Tap Checkout', 'Tap Continue', 'Tap Pay $24'],
+      needs: ['payment'],
+    };
+    const s = site(
+      {
+        '/checkout': page('/checkout', [{ ref: 'go->/details', role: 'button', name: 'Checkout' }]),
+        '/details': page('/details', [{ ref: 'next->/pay', role: 'button', name: 'Continue' }]),
+        '/pay': page('/pay', [{ ref: 'pay', role: 'button', name: 'Pay $24' }]),
+      },
+      '/checkout',
+    );
+    const r = await runJourney(
+      s.deps(
+        scripted([
+          { kind: 'click', ref: 'go->/details', name: 'Checkout', why: 'Opening checkout' },
+          { kind: 'click', ref: 'next->/pay', name: 'Continue', why: 'Next step' },
+          { kind: 'click', ref: 'pay', name: 'Pay $24', why: 'Paying' },
+        ]),
+      ),
+      book,
+    );
+    expect(r.status).toBe('blocked');
+    expect(r.reason).toMatch(/Pay \$24.*never pay/);
+    expect(
+      s.performed.map((a) => (a === 'back' ? a : a.kind === 'click' ? a.ref : a.kind)),
+    ).toEqual(['go->/details', 'next->/pay']);
   });
 
   it('types one invalid value per form from the App Model, then valid ones', async () => {
@@ -257,7 +326,7 @@ describe('formValue and fieldFor', () => {
 });
 
 describe('journeyOrder', () => {
-  it('runs priority 1 then 2 first, 3 later, and leaves out disabled or gated ones', () => {
+  it('runs priority 1 then 2 first, 3 later, and leaves out disabled or gated ones (a payment runs up to paying)', () => {
     const j = (id: string, priority: 1 | 2 | 3, extra: Partial<Journey> = {}): Journey => ({
       ...journey,
       id,
@@ -271,8 +340,10 @@ describe('journeyOrder', () => {
       j('off', 1, { enabled: false }),
       j('login', 1, { needs: ['login'] }),
       j('data', 2, { needs: ['data'] }),
+      j('pay', 2, { needs: ['payment'] }),
+      j('email', 2, { needs: ['email', 'payment'] }),
     ]);
-    expect(first.map((x) => x.id)).toEqual(['a', 'b', 'data']);
+    expect(first.map((x) => x.id)).toEqual(['a', 'b', 'data', 'pay']);
     expect(later.map((x) => x.id)).toEqual(['c']);
   });
 });

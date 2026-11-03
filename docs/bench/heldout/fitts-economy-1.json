@@ -1,0 +1,2594 @@
+{
+  "at": "2026-11-03T11:59:17.359Z",
+  "spent": 1.549157,
+  "routes": [
+    {
+      "path": "/",
+      "depth": 0,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/*",
+      "depth": 0,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/foldaway-mini",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/gravel-roamer",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/harbor-cruiser",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/packmule-cargo",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/ridgeback-trail",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/sprout-20",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/velo-sprint",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/bikes/volt-commuter",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/book/dates",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/book/review",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/book/rider",
+      "depth": 1,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/does-not-exist-fitts-test",
+      "depth": 0,
+      "status": "queued",
+      "issues": 0
+    },
+    {
+      "path": "/rentals",
+      "depth": 0,
+      "status": "done",
+      "issues": 0
+    },
+    {
+      "path": "/settings",
+      "depth": 0,
+      "status": "done",
+      "issues": 0
+    }
+  ],
+  "findings": [
+    {
+      "id": "run-1-f11",
+      "runId": "run-1",
+      "severity": 4,
+      "heuristic": "H1",
+      "lens": "accessibility",
+      "title": "No visible focus when using the keyboard",
+      "finding": "Tabbing through the page shows no focus outline, so keyboard users can’t tell where they are.",
+      "fix": "Remove the global `outline: none` and style :focus-visible instead.",
+      "route": "/rentals",
+      "agreement": {
+        "agreeing": 5,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Accessibility",
+          "Trust & ethics",
+          "Power user",
+          "Visual design"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "no visible change when focused with Tab (expected a visible focus indicator)",
+        "no visible change when focused with Tab (expected a visible focus indicator)",
+        "no visible change when focused with Tab (expected a visible focus indicator)",
+        "main#main > div.panel.center > a.btn.btn-primary shows no focus when tabbed to",
+        "no visible change when focused with Tab",
+        "measured: no visible change when focused with Tab"
+      ],
+      "evidenceIds": [
+        "run-1-ev26",
+        "run-1-ev40",
+        "run-1-ev53",
+        "run-1-ev67",
+        "run-1-ev81",
+        "run-1-ev95",
+        "run-1-ev109",
+        "run-1-ev126",
+        "run-1-ev139",
+        "run-1-ev152",
+        "run-1-ev165",
+        "run-1-ev178",
+        "run-1-ev194",
+        "run-1-ev207",
+        "run-1-ev220",
+        "obs-18",
+        "/rentals#snapshot",
+        "obs-26",
+        "/bikes/packmule-cargo#snapshot",
+        "obs-29",
+        "obs-33",
+        "/book/dates#snapshot",
+        "obs-37",
+        "/book/review#snapshot",
+        "obs-41",
+        "/book/rider#snapshot",
+        "obs-50",
+        "obs-62",
+        "/bikes/volt-commuter#snapshot",
+        "obs-69",
+        "/bikes/harbor-cruiser#snapshot",
+        "obs-76",
+        "obs-83",
+        "/bikes/velo-sprint#snapshot",
+        "obs-90",
+        "/bikes/foldaway-mini#snapshot",
+        "obs-100",
+        "/bikes/sprout-20#snapshot",
+        "obs-107",
+        "/bikes/gravel-roamer#snapshot",
+        "obs-110",
+        "/does-not-exist-fitts-test#snapshot"
+      ],
+      "elementRef": "e17",
+      "reviewerRepro": {
+        "expected": "The Find a bike button shows a clear focus outline.",
+        "actual": "The link stays the same with no outline when tabbed to."
+      },
+      "source": {
+        "file": "src/pages/Rentals.tsx",
+        "line": 52,
+        "col": 10,
+        "confidence": "plugin"
+      },
+      "stepIndex": 9,
+      "atMs": 44000,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/rentals",
+          "stepIndex": 7
+        },
+        {
+          "route": "/bikes/packmule-cargo",
+          "stepIndex": 12
+        },
+        {
+          "route": "/*",
+          "stepIndex": 16
+        },
+        {
+          "route": "/book/dates",
+          "stepIndex": 19
+        },
+        {
+          "route": "/book/review",
+          "stepIndex": 22
+        },
+        {
+          "route": "/book/rider",
+          "stepIndex": 25
+        },
+        {
+          "route": "/settings",
+          "stepIndex": 30
+        },
+        {
+          "route": "/bikes/volt-commuter",
+          "stepIndex": 41
+        },
+        {
+          "route": "/bikes/harbor-cruiser",
+          "stepIndex": 46
+        },
+        {
+          "route": "/bikes/ridgeback-trail",
+          "stepIndex": 51
+        },
+        {
+          "route": "/bikes/velo-sprint",
+          "stepIndex": 56
+        },
+        {
+          "route": "/bikes/foldaway-mini",
+          "stepIndex": 61
+        },
+        {
+          "route": "/bikes/sprout-20",
+          "stepIndex": 76
+        },
+        {
+          "route": "/bikes/gravel-roamer",
+          "stepIndex": 81
+        },
+        {
+          "route": "/does-not-exist-fitts-test",
+          "stepIndex": 94
+        }
+      ],
+      "replay": [
+        {
+          "step": 7,
+          "label": "Tapped “My rentals” → /rentals"
+        },
+        {
+          "step": 8,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 9,
+          "label": "Tapped “Find a bike” → /"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "host",
+          "src": "src/pages/Rentals.tsx:52:10"
+        },
+        {
+          "kind": "call",
+          "component": "LinkWithRef",
+          "src": "src/pages/Rentals.tsx:52:10"
+        },
+        {
+          "kind": "call",
+          "component": "Rentals",
+          "src": "src/App.tsx:66:42"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        }
+      ],
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_rentals.jpg",
+        "mask": "fitts-asset://loopline-bikes/run-1/assets/mask-run-1-f11.svg"
+      },
+      "box": {
+        "left": 708.109375,
+        "top": 217,
+        "width": 120.78125,
+        "height": 44
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f14",
+      "runId": "run-1",
+      "severity": 4,
+      "heuristic": "H3",
+      "lens": "accessibility",
+      "title": "Keyboard focus gets stuck",
+      "finding": "Tabbing through the page, focus stuck on \"input#s-name\" after 3 Tabs: keyboard users can't get out.",
+      "fix": "Let Tab move on (no focus traps outside open dialogs).",
+      "route": "/settings",
+      "agreement": {
+        "agreeing": 3,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Power user",
+          "Accessibility"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "focus stuck on \"input#s-name\" after 3 Tabs (expected Tab moves on to the next control)",
+        "focus stuck on \"input#s-name\" after 3 Tabs",
+        "focus stuck on \"input#s-name\" after 3 Tabs",
+        "\"focus stuck on \\\"input#s-name\\\" after 3 Tabs\""
+      ],
+      "evidenceIds": [
+        "run-1-ev111",
+        "obs-51"
+      ],
+      "elementRef": "settings-form",
+      "reviewerRepro": {
+        "expected": "Tab moves focus through all fields to Save changes",
+        "actual": "Focus stays stuck on the Name field after 3 Tabs",
+        "steps": [
+          "Tap Name field",
+          "Press Tab three times"
+        ]
+      },
+      "stepIndex": 30,
+      "atMs": 82000,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 30,
+          "label": "Opened /settings"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "call",
+          "component": "Settings",
+          "src": "src/App.tsx:67:43"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        },
+        {
+          "kind": "call",
+          "component": "BrowserRouter",
+          "src": "src/main.tsx:10:4"
+        }
+      ],
+      "source": {
+        "file": "src/App.tsx",
+        "line": 67,
+        "col": 43,
+        "confidence": "plugin"
+      },
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_settings.jpg"
+      },
+      "box": {
+        "left": 241,
+        "top": 136,
+        "width": 640,
+        "height": 570.96875
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f15",
+      "runId": "run-1",
+      "severity": 4,
+      "heuristic": "H4",
+      "lens": "usability",
+      "title": "A link goes to the wrong page",
+      "finding": "\"Email me a reminder the day before pickup\" went to /settings (its link says /bikes/sprout-20).",
+      "fix": "Point the control at the page it names.",
+      "route": "/settings",
+      "agreement": {
+        "agreeing": 4,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Power user",
+          "Accessibility",
+          "Trust & ethics"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "\"Email me a reminder the day before pickup\" went to /settings (its link says /bikes/sprout-20) (expected \"Email me a reminder the day before pickup\" opens /bikes/sprout-20)",
+        "\"Keep my account\" went to /settings (its link says /bikes/packmule-cargo) (expected \"Keep my account\" opens /bikes/packmule-cargo)",
+        "\"Back\" went to /bikes/foldaway-mini (its link says /bikes/volt-commuter) (expected \"Back\" opens /bikes/volt-commuter)",
+        "\"Back\" went to /bikes/foldaway-mini (its link says /bikes/volt-commuter)",
+        "going back lost what I typed",
+        "\"Back\" went to /bikes/foldaway-mini (its link says /bikes/volt-commuter)"
+      ],
+      "evidenceIds": [
+        "run-1-ev113",
+        "run-1-ev116",
+        "run-1-ev183",
+        "obs-94",
+        "obs-95",
+        "/book/dates#state-1",
+        "/book/dates#trace"
+      ],
+      "elementRef": "e10",
+      "reviewerRepro": {
+        "expected": "Back returns to the bike just viewed with dates kept.",
+        "actual": "It opens /bikes/foldaway-mini instead of the expected bike.",
+        "steps": [
+          "Open a bike page and tap Rent this bike to reach /book/dates",
+          "Type dates in Pickup date and Return date",
+          "Tap Back"
+        ]
+      },
+      "stepIndex": 36,
+      "atMs": 82000,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/settings",
+          "stepIndex": 30
+        },
+        {
+          "route": "/book/dates",
+          "stepIndex": 19
+        }
+      ],
+      "replay": [
+        {
+          "step": 30,
+          "label": "Opened /settings"
+        },
+        {
+          "step": 31,
+          "label": "Typed in “Name”"
+        },
+        {
+          "step": 32,
+          "label": "Typed in “Email”"
+        },
+        {
+          "step": 33,
+          "label": "Typed in “Phone”"
+        },
+        {
+          "step": 34,
+          "label": "Typed in “Usual pickup station”"
+        },
+        {
+          "step": 35,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 36,
+          "label": "Tapped “Email me a reminder the day before pickup”"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "call",
+          "component": "Settings",
+          "src": "src/App.tsx:67:43"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        },
+        {
+          "kind": "call",
+          "component": "BrowserRouter",
+          "src": "src/main.tsx:10:4"
+        }
+      ],
+      "source": {
+        "file": "src/App.tsx",
+        "line": 67,
+        "col": 43,
+        "confidence": "plugin"
+      },
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_settings.jpg"
+      },
+      "box": {
+        "left": 270,
+        "top": 592.96875,
+        "width": 20,
+        "height": 20
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f17",
+      "runId": "run-1",
+      "severity": 4,
+      "heuristic": "H1",
+      "lens": "performance",
+      "title": "Page content jumps after loading",
+      "finding": "The list jumps down shortly after loading, so a commuter on a phone can lose their place or tap the wrong bike.",
+      "fix": "Reserve space for the hero and promo banner so late content does not push the list.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 4,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Accessibility",
+          "Trust & ethics",
+          "Judge"
+        ]
+      },
+      "evidence": [
+        "Noticed the content jumped 453 px down 1.2 s after the page loaded, with no tap",
+        "focus moved to \"span\" 2.2 s after the last tap, with nothing pressed",
+        "content jumped 453 px down 1.2 s after the page loaded, with no tap"
+      ],
+      "evidenceIds": [
+        "obs-1",
+        "obs-10"
+      ],
+      "elementRef": "fav-volt-commuter",
+      "reviewerRepro": {
+        "expected": "Page content stays stable after it first appears.",
+        "actual": "Content jumped 453 px down 1.2 s after load with no tap."
+      },
+      "stepIndex": 0,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "moment": {
+        "frames": [
+          {
+            "t": -1657.199951171875,
+            "url": "fitts-asset://loopline-bikes/run-1/assets/moment-obs-1-0.jpg"
+          },
+          {
+            "t": -1386.199951171875,
+            "url": "fitts-asset://loopline-bikes/run-1/assets/moment-obs-1-1.jpg"
+          },
+          {
+            "t": -1216.199951171875,
+            "url": "fitts-asset://loopline-bikes/run-1/assets/moment-obs-1-2.jpg"
+          },
+          {
+            "t": 21.800048828125,
+            "url": "fitts-asset://loopline-bikes/run-1/assets/moment-obs-1-3.jpg"
+          }
+        ],
+        "width": 1026,
+        "height": 703
+      },
+      "source": {
+        "file": "src/App.tsx",
+        "line": 17,
+        "confidence": "search"
+      }
+    },
+    {
+      "id": "run-1-f20",
+      "runId": "run-1",
+      "severity": 4,
+      "heuristic": "H5",
+      "lens": "usability",
+      "title": "Renting has no total or confirmation",
+      "finding": "A person can commit to a paid booking from this page without seeing a total or a confirmation. That risks a surprise charge for commuters booking quickly on phones.",
+      "fix": "Add a confirm step showing total, frame size, and free-cancellation terms before charging.",
+      "route": "/bikes/volt-commuter",
+      "agreement": {
+        "agreeing": 3,
+        "total": 5,
+        "who": [
+          "Trust & ethics",
+          "Novice",
+          "Power user"
+        ]
+      },
+      "evidence": [
+        "\"$12 per hour · $49 per day\"",
+        "\"Rent this bike\"",
+        "Trace: click Rent this bike -> navigate /bikes/packmule-cargo"
+      ],
+      "evidenceIds": [
+        "/bikes/volt-commuter#shot",
+        "/bikes/volt-commuter#snapshot",
+        "/bikes/volt-commuter#trace",
+        "/bikes/gravel-roamer#trace",
+        "/bikes/gravel-roamer#snapshot",
+        "/bikes/gravel-roamer#shot"
+      ],
+      "elementRef": "rent-button",
+      "reviewerRepro": {
+        "expected": "Tapping Rent shows total charge and asks to confirm before booking.",
+        "actual": "Only an immediate 'Rent this bike' button is offered with hourly/daily rates and no total, dates, or confirm step.",
+        "steps": [
+          "Open /bikes/volt-commuter",
+          "Optionally choose frame size M or L",
+          "Tap Rent this bike"
+        ]
+      },
+      "stepIndex": 45,
+      "atMs": 98000,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/bikes/volt-commuter",
+          "stepIndex": 41
+        },
+        {
+          "route": "/bikes/gravel-roamer",
+          "stepIndex": 81
+        }
+      ],
+      "replay": [
+        {
+          "step": 41,
+          "label": "Opened /bikes/volt-commuter"
+        },
+        {
+          "step": 42,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 43,
+          "label": "Tapped “← All bikes” → /"
+        },
+        {
+          "step": 44,
+          "label": "Opened /bikes/volt-commuter"
+        },
+        {
+          "step": 45,
+          "label": "Tapped “Rent this bike”"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "host",
+          "src": "src/pages/BikeDetail.tsx:73:10"
+        },
+        {
+          "kind": "call",
+          "component": "BikeDetail",
+          "src": "src/App.tsx:61:44"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        }
+      ],
+      "source": {
+        "file": "src/pages/BikeDetail.tsx",
+        "line": 73,
+        "col": 10,
+        "confidence": "plugin"
+      },
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_bikes_volt_commuter.jpg"
+      },
+      "box": {
+        "left": 808.5,
+        "top": 469.1875,
+        "width": 161.4375,
+        "height": 52
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f21",
+      "runId": "run-1",
+      "severity": 4,
+      "heuristic": "H3",
+      "lens": "usability",
+      "title": "Rent button opens wrong bike",
+      "finding": "Tapping Rent this bike leaves Harbor Cruiser and opens a different bike page, so a person cannot book this bike.",
+      "fix": "Point Rent this bike to the Harbor Cruiser booking flow.",
+      "route": "/bikes/harbor-cruiser",
+      "agreement": {
+        "agreeing": 3,
+        "total": 5,
+        "who": [
+          "Power user",
+          "Novice",
+          "Trust & ethics"
+        ]
+      },
+      "evidence": [
+        "trace: tapping Rent this bike | opened /bikes/ridgeback-trail",
+        "Trace: \"click Rent this bike\" then \"navigate /bikes/velo-sprint\"",
+        "\"Rent this bike\" button on Ridgeback Trail page"
+      ],
+      "evidenceIds": [
+        "/bikes/harbor-cruiser#trace",
+        "/bikes/ridgeback-trail#trace",
+        "/bikes/ridgeback-trail#snapshot",
+        "/bikes/ridgeback-trail#shot",
+        "/bikes/velo-sprint#trace"
+      ],
+      "elementRef": "rent-button",
+      "reviewerRepro": {
+        "expected": "Rent starts booking for Harbor Cruiser",
+        "actual": "Tap goes to /bikes/ridgeback-trail instead of a rental flow",
+        "steps": [
+          "Open /bikes/harbor-cruiser",
+          "Tap Rent this bike"
+        ]
+      },
+      "stepIndex": 50,
+      "atMs": 104000,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/bikes/harbor-cruiser",
+          "stepIndex": 46
+        },
+        {
+          "route": "/bikes/ridgeback-trail",
+          "stepIndex": 51
+        },
+        {
+          "route": "/bikes/velo-sprint",
+          "stepIndex": 56
+        }
+      ],
+      "replay": [
+        {
+          "step": 46,
+          "label": "Opened /bikes/harbor-cruiser"
+        },
+        {
+          "step": 47,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 48,
+          "label": "Tapped “← All bikes” → /"
+        },
+        {
+          "step": 49,
+          "label": "Opened /bikes/harbor-cruiser"
+        },
+        {
+          "step": 50,
+          "label": "Tapped “Rent this bike”"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "host",
+          "src": "src/pages/BikeDetail.tsx:73:10"
+        },
+        {
+          "kind": "call",
+          "component": "BikeDetail",
+          "src": "src/App.tsx:61:44"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        }
+      ],
+      "source": {
+        "file": "src/pages/BikeDetail.tsx",
+        "line": 73,
+        "col": 10,
+        "confidence": "plugin"
+      },
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_bikes_harbor_cruiser.jpg"
+      },
+      "box": {
+        "left": 808.5,
+        "top": 493.1875,
+        "width": 161.4375,
+        "height": 52
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f1",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H4",
+      "lens": "accessibility",
+      "title": "Icon buttons have no accessible name",
+      "finding": "Screen readers announce these buttons as just \"button\", so people can’t tell what they do.",
+      "fix": "Add an aria-label that says what each button does.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 2,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Accessibility"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "button with no accessible name (expected a name people and screen readers can use)",
+        "button with no accessible name",
+        "button \"name\": \"\" for all fav-* in snapshot",
+        "button with no accessible name"
+      ],
+      "evidenceIds": [
+        "run-1-ev3",
+        "obs-2",
+        "/#snapshot"
+      ],
+      "elementRef": "fav-packmule-cargo",
+      "reviewerRepro": {
+        "expected": "Each heart button announces which bike it saves.",
+        "actual": "Screen readers get a button with no name for each heart icon."
+      },
+      "source": {
+        "file": "src/pages/Browse.tsx",
+        "line": 123,
+        "col": 16,
+        "confidence": "plugin"
+      },
+      "stepIndex": 5,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 1,
+          "label": "Typed in “Search bikes…”"
+        },
+        {
+          "step": 2,
+          "label": "Tapped “Type”"
+        },
+        {
+          "step": 3,
+          "label": "Typed in “Type”"
+        },
+        {
+          "step": 4,
+          "label": "Tapped “Sort by”"
+        },
+        {
+          "step": 5,
+          "label": "Tapped “fav-packmule-cargo”"
+        }
+      ]
+    },
+    {
+      "id": "run-1-f2",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H4",
+      "lens": "look-and-feel",
+      "title": "Too many text sizes",
+      "finding": "The site uses 7 font sizes; more than about 6 makes the hierarchy hard to read.",
+      "fix": "Settle on a type scale of about 6 sizes and use them throughout.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 1,
+        "total": 5,
+        "who": [
+          "Visual design"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "7 font sizes: 16px, 17.6px, 32px, 15.2px, 12px, 18.4px, 14.4px (expected at most 6 sizes)",
+        "7 font sizes: 16px, 17.6px, 12px, 28px, 14.4px, 16.8px, 13.6px (expected at most 6 sizes)",
+        "7 font sizes: 16px, 17.6px, 28px, 16.8px, 15.2px, 13.6px, 14.4px (expected at most 6 sizes)",
+        "7 font sizes: 16px, 17.6px, 32px, 15.2px, 12px, 18.4px, 14.4px"
+      ],
+      "evidenceIds": [
+        "run-1-ev6",
+        "run-1-ev36",
+        "run-1-ev105",
+        "run-1-ev122",
+        "run-1-ev135",
+        "run-1-ev148",
+        "run-1-ev161",
+        "run-1-ev174",
+        "run-1-ev190",
+        "run-1-ev203",
+        "obs-3",
+        "obs-22",
+        "obs-46",
+        "/settings#shot",
+        "obs-65",
+        "/bikes/harbor-cruiser#shot",
+        "obs-79",
+        "/bikes/velo-sprint#shot",
+        "obs-103",
+        "/bikes/gravel-roamer#shot"
+      ],
+      "elementRef": "e5",
+      "reviewerRepro": {
+        "expected": "At most 6 text sizes on one page",
+        "actual": "7 sizes in use: 16px, 17.6px, 32px, 15.2px, 12px, 18.4px, 14.4px"
+      },
+      "stepIndex": 0,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/",
+          "stepIndex": 0
+        },
+        {
+          "route": "/bikes/packmule-cargo",
+          "stepIndex": 12
+        },
+        {
+          "route": "/settings",
+          "stepIndex": 30
+        },
+        {
+          "route": "/bikes/volt-commuter",
+          "stepIndex": 41
+        },
+        {
+          "route": "/bikes/harbor-cruiser",
+          "stepIndex": 46
+        },
+        {
+          "route": "/bikes/ridgeback-trail",
+          "stepIndex": 51
+        },
+        {
+          "route": "/bikes/velo-sprint",
+          "stepIndex": 56
+        },
+        {
+          "route": "/bikes/foldaway-mini",
+          "stepIndex": 61
+        },
+        {
+          "route": "/bikes/sprout-20",
+          "stepIndex": 76
+        },
+        {
+          "route": "/bikes/gravel-roamer",
+          "stepIndex": 81
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "call",
+          "component": "Settings",
+          "src": "src/App.tsx:67:43"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        },
+        {
+          "kind": "call",
+          "component": "BrowserRouter",
+          "src": "src/main.tsx:10:4"
+        }
+      ],
+      "source": {
+        "file": "src/App.tsx",
+        "line": 67,
+        "col": 43,
+        "confidence": "plugin"
+      }
+    },
+    {
+      "id": "run-1-f3",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H8",
+      "lens": "look-and-feel",
+      "title": "Spacing is inconsistent and off-grid",
+      "finding": "Padding and margins use odd values (padding-right 6px), so spacing looks uneven from one element to the next.",
+      "fix": "Use spacing tokens on a 4px grid.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 1,
+        "total": 5,
+        "who": [
+          "Visual design"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "padding-right 6px (expected a multiple of 4px)",
+        "padding-top 10px (expected a multiple of 4px)",
+        "padding-right 14px (expected a multiple of 4px)",
+        "padding-right 18px",
+        "padding-right 6px"
+      ],
+      "evidenceIds": [
+        "run-1-ev7",
+        "run-1-ev37",
+        "run-1-ev106",
+        "run-1-ev123",
+        "run-1-ev136",
+        "run-1-ev149",
+        "run-1-ev162",
+        "run-1-ev175",
+        "run-1-ev191",
+        "run-1-ev204",
+        "obs-4",
+        "obs-7",
+        "obs-47",
+        "obs-49",
+        "obs-66",
+        "obs-67",
+        "obs-68",
+        "obs-80",
+        "/bikes/velo-sprint#shot",
+        "obs-104",
+        "obs-105",
+        "obs-106"
+      ],
+      "elementRef": "fav-packmule-cargo",
+      "reviewerRepro": {
+        "expected": "All spacing snaps to a 4px grid",
+        "actual": "Padding values of 6px, 10px, 14px and 18px in use"
+      },
+      "source": {
+        "file": "src/pages/Browse.tsx",
+        "line": 123,
+        "col": 16,
+        "confidence": "plugin"
+      },
+      "stepIndex": 5,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/",
+          "stepIndex": 0
+        },
+        {
+          "route": "/bikes/packmule-cargo",
+          "stepIndex": 12
+        },
+        {
+          "route": "/settings",
+          "stepIndex": 30
+        },
+        {
+          "route": "/bikes/volt-commuter",
+          "stepIndex": 41
+        },
+        {
+          "route": "/bikes/harbor-cruiser",
+          "stepIndex": 46
+        },
+        {
+          "route": "/bikes/ridgeback-trail",
+          "stepIndex": 51
+        },
+        {
+          "route": "/bikes/velo-sprint",
+          "stepIndex": 56
+        },
+        {
+          "route": "/bikes/foldaway-mini",
+          "stepIndex": 61
+        },
+        {
+          "route": "/bikes/sprout-20",
+          "stepIndex": 76
+        },
+        {
+          "route": "/bikes/gravel-roamer",
+          "stepIndex": 81
+        }
+      ],
+      "replay": [
+        {
+          "step": 1,
+          "label": "Typed in “Search bikes…”"
+        },
+        {
+          "step": 2,
+          "label": "Tapped “Type”"
+        },
+        {
+          "step": 3,
+          "label": "Typed in “Type”"
+        },
+        {
+          "step": 4,
+          "label": "Tapped “Sort by”"
+        },
+        {
+          "step": 5,
+          "label": "Tapped “fav-packmule-cargo”"
+        }
+      ]
+    },
+    {
+      "id": "run-1-f8",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H3",
+      "lens": "usability",
+      "title": "No back or cancel in this flow",
+      "finding": "There’s no back or cancel control on /rentals, so people who change their mind are stuck.",
+      "fix": "Add a Back link (and Cancel) on every step.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 3,
+        "total": 5,
+        "who": [
+          "Power user",
+          "Accessibility",
+          "Trust & ethics"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "no back or cancel control on /rentals (expected a visible way back that keeps what was entered)",
+        "no back or cancel control on /bikes/foldaway-mini (expected a visible way back that keeps what was entered)",
+        "no back or cancel control on /bikes/foldaway-mini",
+        "no back or cancel control on /bikes/foldaway-mini",
+        "going back lost what I typed"
+      ],
+      "evidenceIds": [
+        "run-1-ev16",
+        "run-1-ev184",
+        "obs-95",
+        "/book/dates#trace"
+      ],
+      "reviewerRepro": {
+        "expected": "Going back keeps entered dates and offers a way to resume",
+        "actual": "Entered dates are lost with no way to resume checkout",
+        "steps": [
+          "Open /book/dates with a bike selected",
+          "Type pickup and return dates",
+          "Tap Back",
+          "Try to return to /book/dates"
+        ]
+      },
+      "stepIndex": 0,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/",
+          "stepIndex": 0
+        },
+        {
+          "route": "/book/dates",
+          "stepIndex": 19
+        }
+      ],
+      "source": {
+        "file": "src/pages/Browse.tsx",
+        "line": 1,
+        "confidence": "model"
+      }
+    },
+    {
+      "id": "run-1-f9",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H3",
+      "lens": "usability",
+      "title": "Going back loses what you typed",
+      "finding": "Pressing Back mid-flow throws the draft away (after Back the field shows \"All\").",
+      "fix": "Keep the draft in shared state (or the URL) so Back restores it.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 2,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Power user"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "after Back the field shows \"All\" (expected what was typed is still there)",
+        "after Back the field shows \"All\"",
+        "no back or cancel control on /rentals",
+        "after Back the field shows \"All\""
+      ],
+      "evidenceIds": [
+        "run-1-ev16",
+        "obs-15",
+        "obs-16"
+      ],
+      "elementRef": "type-filter",
+      "reviewerRepro": {
+        "expected": "Filter choice is kept when going to My rentals and back.",
+        "actual": "After Back the Type field shows \"All\" instead of what was chosen and there is no back control keeping it.",
+        "steps": [
+          "Change Type from All to another value",
+          "Tap My rentals",
+          "Go Back to Bikes"
+        ]
+      },
+      "stepIndex": 2,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 1,
+          "label": "Typed in “Search bikes…”"
+        },
+        {
+          "step": 2,
+          "label": "Tapped “Type”"
+        }
+      ],
+      "source": {
+        "file": "index.html",
+        "line": 1,
+        "confidence": "search"
+      }
+    },
+    {
+      "id": "run-1-f10",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H7",
+      "lens": "ergonomics",
+      "title": "Tap target is too small",
+      "finding": "This control is 114×21px, smaller than the 24×24px minimum, so it's easy to miss.",
+      "fix": "Give it at least 44×44px of tappable area (padding counts).",
+      "route": "/rentals",
+      "agreement": {
+        "agreeing": 4,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Power user",
+          "Accessibility",
+          "Trust & ethics"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "114×21px (expected at least 24×24px)",
+        "ul.saved-list > li > a is small to tap: 114×21px",
+        "Saved list shows 'Packmule Cargo from $14/hour' as a thin text link",
+        "114×21px (needs at least 24×24px)"
+      ],
+      "evidenceIds": [
+        "run-1-ev18",
+        "obs-17",
+        "/rentals#shot"
+      ],
+      "elementRef": "e18",
+      "reviewerRepro": {
+        "expected": "Saved-bike links are at least 24px tall with padded tap area.",
+        "actual": "The saved-bike link is only 21px tall to tap."
+      },
+      "source": {
+        "file": "src/pages/Rentals.tsx",
+        "line": 100,
+        "col": 14,
+        "confidence": "plugin"
+      },
+      "stepIndex": 29,
+      "atMs": 44000,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 22,
+          "label": "Opened /book/review"
+        },
+        {
+          "step": 23,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 24,
+          "label": "Tapped “Browse bikes” → /"
+        },
+        {
+          "step": 25,
+          "label": "Opened /book/rider"
+        },
+        {
+          "step": 26,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 27,
+          "label": "Tapped “Browse bikes” → /"
+        },
+        {
+          "step": 28,
+          "label": "Opened /rentals"
+        },
+        {
+          "step": 29,
+          "label": "Started exploring"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "host",
+          "src": "src/pages/Rentals.tsx:100:14"
+        },
+        {
+          "kind": "call",
+          "component": "LinkWithRef",
+          "src": "src/pages/Rentals.tsx:100:14"
+        },
+        {
+          "kind": "call",
+          "component": "Rentals",
+          "src": "src/App.tsx:66:42"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        }
+      ],
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_rentals.jpg"
+      },
+      "box": {
+        "left": 268.5,
+        "top": 370.1875,
+        "width": 113.765625,
+        "height": 21
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f13",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H1",
+      "lens": "accessibility",
+      "title": "Text is too faint to read",
+      "finding": "Some text has text contrast 1.9:1, below the 4.5:1 contrast people need to read it comfortably.",
+      "fix": "Darken the text color to reach at least 4.5:1 contrast.",
+      "route": "/settings",
+      "agreement": {
+        "agreeing": 3,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Accessibility",
+          "Visual design"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "text contrast 1.9:1 (expected at least 4.5:1)",
+        "text contrast 1.9:1 (expected at least 4.5:1)",
+        "text contrast 1.9:1 (expected at least 4.5:1)",
+        "text contrast 1.9:1 (needs at least 4.5:1)",
+        "\"Return the bike to the same station.\" is barely visible grey",
+        "text contrast 1.9:1 (needs at least 4.5:1)"
+      ],
+      "evidenceIds": [
+        "run-1-ev100",
+        "run-1-ev115",
+        "run-1-ev182",
+        "obs-93",
+        "/book/dates#state-1",
+        "obs-45",
+        "/settings#shot"
+      ],
+      "elementRef": "settings-form",
+      "reviewerRepro": {
+        "expected": "Helper text contrast is at least 4.5:1.",
+        "actual": "Helper notes render at 1.9:1 contrast.",
+        "steps": [
+          "Open a bike page and tap Rent this bike to reach /book/dates",
+          "Look at the notes under Pickup station and under the dates"
+        ]
+      },
+      "source": {
+        "file": "src/App.tsx",
+        "line": 58,
+        "col": 6,
+        "confidence": "plugin"
+      },
+      "stepIndex": 30,
+      "atMs": 82000,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/settings",
+          "stepIndex": 30
+        },
+        {
+          "route": "/book/dates",
+          "stepIndex": 19
+        }
+      ],
+      "replay": [
+        {
+          "step": 30,
+          "label": "Opened /settings"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "call",
+          "component": "Settings",
+          "src": "src/App.tsx:67:43"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        },
+        {
+          "kind": "call",
+          "component": "BrowserRouter",
+          "src": "src/main.tsx:10:4"
+        }
+      ],
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_settings.jpg"
+      },
+      "box": {
+        "left": 241,
+        "top": 136,
+        "width": 640,
+        "height": 570.96875
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f18",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H1",
+      "lens": "usability",
+      "title": "Filters give no visible response",
+      "finding": "Changing Type or Sort by shows no change, so a person cannot tell if the action worked and cannot trust the list when trying to book quickly.",
+      "fix": "Update the result count and bike list immediately when Type or Sort by changes, with a loading indicator.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 1,
+        "total": 5,
+        "who": [
+          "Trust & ethics"
+        ]
+      },
+      "evidence": [
+        "\"Type\" changed nothing on screen",
+        "\"Sort by\" changed nothing on screen"
+      ],
+      "evidenceIds": [
+        "run-1-ev13",
+        "run-1-ev14",
+        "obs-9",
+        "obs-11",
+        "obs-12",
+        "obs-13"
+      ],
+      "reviewerRepro": {
+        "expected": "Changing a filter gives a visible response within 0.1s",
+        "actual": "Changing Type or Sort by changed nothing on screen",
+        "steps": [
+          "Open /",
+          "Select a different option in Type",
+          "Select a different option in Sort by"
+        ]
+      },
+      "stepIndex": 0,
+      "atMs": 0,
+      "status": "open",
+      "lane": "suggestion"
+    },
+    {
+      "id": "run-1-f22",
+      "runId": "run-1",
+      "severity": 3,
+      "heuristic": "H4",
+      "lens": "usability",
+      "title": "Frame size cannot be selected",
+      "finding": "A person sees Frame size M L XL but there is no selectable control for them, so they cannot pick a size before renting.",
+      "fix": "Implement M, L, XL as real radio buttons with selected state.",
+      "route": "/bikes/ridgeback-trail",
+      "agreement": {
+        "agreeing": 2,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Power user"
+        ]
+      },
+      "evidence": [
+        "Headings include \"Frame size\" with visible M L XL",
+        "Controls list has only \"Rent this bike\", no M L XL option",
+        "Snapshot lists only 'Rent this bike' button, no S M L XL"
+      ],
+      "evidenceIds": [
+        "/bikes/ridgeback-trail#shot",
+        "/bikes/ridgeback-trail#snapshot",
+        "/bikes/velo-sprint#snapshot",
+        "/bikes/velo-sprint#shot"
+      ],
+      "reviewerRepro": {
+        "expected": "Frame size can be chosen and choice is shown.",
+        "actual": "M, L, XL look like buttons but expose no control to choose them.",
+        "steps": [
+          "Open /bikes/ridgeback-trail",
+          "Try to choose a Frame size M, L or XL"
+        ]
+      },
+      "stepIndex": 51,
+      "atMs": 111000,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/bikes/ridgeback-trail",
+          "stepIndex": 51
+        },
+        {
+          "route": "/bikes/velo-sprint",
+          "stepIndex": 56
+        }
+      ],
+      "replay": [
+        {
+          "step": 51,
+          "label": "Opened /bikes/ridgeback-trail"
+        }
+      ],
+      "source": {
+        "file": "src/pages/BikeDetail.tsx",
+        "line": 19,
+        "confidence": "search"
+      },
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_bikes_ridgeback_trail.jpg"
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f4",
+      "runId": "run-1",
+      "severity": 2,
+      "heuristic": "H1",
+      "lens": "accessibility",
+      "title": "The focused control is hidden",
+      "finding": "\"ul.grid > li.card > button.fav-btn\" is hidden while focused (20% visible): keyboard users can't see where they are.",
+      "fix": "Leave room for sticky headers (scroll-padding-top) and keep focused controls in view.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 2,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Accessibility"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "\"ul.grid > li.card > button.fav-btn\" is hidden while focused (20% visible) (expected the focused control in view)",
+        "\"ul.grid > li.card > button.fav-btn\" is hidden while focused (20% visible)",
+        "\"ul.grid > li.card > button.fav-btn\" is hidden while focused (20% visible)"
+      ],
+      "evidenceIds": [
+        "run-1-ev12",
+        "obs-8"
+      ],
+      "elementRef": "fav-packmule-cargo",
+      "reviewerRepro": {
+        "expected": "A keyboard-focused control stays fully in view.",
+        "actual": "The focused favorite button is only 20% visible.",
+        "steps": [
+          "Press Tab until focus reaches a heart button on a bike card"
+        ]
+      },
+      "stepIndex": 5,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 1,
+          "label": "Typed in “Search bikes…”"
+        },
+        {
+          "step": 2,
+          "label": "Tapped “Type”"
+        },
+        {
+          "step": 3,
+          "label": "Typed in “Type”"
+        },
+        {
+          "step": 4,
+          "label": "Tapped “Sort by”"
+        },
+        {
+          "step": 5,
+          "label": "Tapped “fav-packmule-cargo”"
+        }
+      ],
+      "source": {
+        "file": "src/pages/Browse.tsx",
+        "line": 1,
+        "confidence": "model"
+      }
+    },
+    {
+      "id": "run-1-f19",
+      "runId": "run-1",
+      "severity": 2,
+      "heuristic": "H8",
+      "lens": "look-and-feel",
+      "title": "Option looks same as Rent action",
+      "finding": "The 'One size' selector looks identical to 'Rent this bike', so the main booking action does not stand out and the option looks tappable as an action.",
+      "fix": "Restyle the frame-size selector as a neutral chip and reserve the primary button style for 'Rent this bike' only.",
+      "route": "/bikes/packmule-cargo",
+      "agreement": {
+        "agreeing": 1,
+        "total": 5,
+        "who": [
+          "Visual design"
+        ]
+      },
+      "evidence": [
+        "'One size' and 'Rent this bike' both show as solid dark-green buttons",
+        "Primary action does not stand out in screenshot"
+      ],
+      "evidenceIds": [
+        "/bikes/packmule-cargo#shot",
+        "/bikes/packmule-cargo#snapshot"
+      ],
+      "elementRef": "rent-button",
+      "reviewerRepro": {
+        "expected": "Booking action looks distinct from option chips",
+        "actual": "Both use the same solid dark-green primary-button style"
+      },
+      "stepIndex": 87,
+      "atMs": 53000,
+      "status": "open",
+      "lane": "suggestion",
+      "replay": [
+        {
+          "step": 80,
+          "label": "Tapped “Rent this bike” → /book/dates"
+        },
+        {
+          "step": 81,
+          "label": "Opened /bikes/gravel-roamer"
+        },
+        {
+          "step": 82,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 83,
+          "label": "Tapped “← All bikes” → /"
+        },
+        {
+          "step": 84,
+          "label": "Opened /bikes/gravel-roamer"
+        },
+        {
+          "step": 85,
+          "label": "Tapped “Rent this bike”"
+        },
+        {
+          "step": 86,
+          "label": "Opened /bikes/packmule-cargo"
+        },
+        {
+          "step": 87,
+          "label": "Tapped “Rent this bike” → /book/dates"
+        }
+      ]
+    },
+    {
+      "id": "run-1-f24",
+      "runId": "run-1",
+      "severity": 2,
+      "heuristic": "H2",
+      "lens": "content",
+      "title": "Specs use unexplained bike jargon",
+      "finding": "A first-time renter sees codes like 1x11 and 700 x 40c with no plain meaning, so commuters and tourists cannot tell if the bike fits them.",
+      "fix": "Add plain-language explanations for gear, tyre, and size codes.",
+      "route": "/bikes/gravel-roamer",
+      "agreement": {
+        "agreeing": 1,
+        "total": 5,
+        "who": [
+          "Novice"
+        ]
+      },
+      "evidence": [
+        "40 mm tyres, 1x11 drivetrain and frame bag mounts.",
+        "Specs show '700 x 40c' and '1x11'"
+      ],
+      "evidenceIds": [
+        "/bikes/gravel-roamer#shot"
+      ],
+      "reviewerRepro": {
+        "expected": "Specs are explained in plain words for tourists",
+        "actual": "It shows '1x11 drivetrain', '700 x 40c', '1x11' with no explanation"
+      },
+      "stepIndex": 81,
+      "atMs": 151000,
+      "status": "open",
+      "lane": "suggestion",
+      "replay": [
+        {
+          "step": 81,
+          "label": "Opened /bikes/gravel-roamer"
+        }
+      ]
+    },
+    {
+      "id": "run-1-f5",
+      "runId": "run-1",
+      "severity": 1,
+      "heuristic": "H1",
+      "lens": "usability",
+      "title": "“Type” does nothing visible",
+      "finding": "Pressing it changes nothing on screen.",
+      "fix": "Give visible feedback, or remove the control.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 2,
+        "total": 5,
+        "who": [
+          "Power user",
+          "Accessibility"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "\"Type\" changed nothing on screen (expected a visible response within 0.1s)",
+        "\"Type\" changed nothing on screen",
+        "\"Sort by\" changed nothing on screen",
+        "\"Type\" changed nothing on screen"
+      ],
+      "evidenceIds": [
+        "run-1-ev13",
+        "run-1-ev14",
+        "obs-9",
+        "obs-12",
+        "obs-11",
+        "obs-13"
+      ],
+      "elementRef": "type-filter",
+      "reviewerRepro": {
+        "expected": "Changing filter shows a visible response within 0.1s",
+        "actual": "\"Type\" and \"Sort by\" changed nothing on screen",
+        "steps": [
+          "Select a value in Type",
+          "Select a value in Sort by"
+        ]
+      },
+      "stepIndex": 2,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 1,
+          "label": "Typed in “Search bikes…”"
+        },
+        {
+          "step": 2,
+          "label": "Tapped “Type”"
+        }
+      ],
+      "source": {
+        "file": "index.html",
+        "line": 1,
+        "confidence": "search"
+      }
+    },
+    {
+      "id": "run-1-f6",
+      "runId": "run-1",
+      "severity": 1,
+      "heuristic": "H1",
+      "lens": "usability",
+      "title": "“Sort by” does nothing visible",
+      "finding": "Pressing it changes nothing on screen.",
+      "fix": "Give visible feedback, or remove the control.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 0,
+        "total": 5,
+        "who": [],
+        "measured": true
+      },
+      "evidence": [
+        "\"Sort by\" changed nothing on screen (expected a visible response within 0.1s)"
+      ],
+      "evidenceIds": [
+        "run-1-ev14"
+      ],
+      "elementRef": "sort-select",
+      "stepIndex": 4,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 1,
+          "label": "Typed in “Search bikes…”"
+        },
+        {
+          "step": 2,
+          "label": "Tapped “Type”"
+        },
+        {
+          "step": 3,
+          "label": "Typed in “Type”"
+        },
+        {
+          "step": 4,
+          "label": "Tapped “Sort by”"
+        }
+      ],
+      "source": {
+        "file": "src/pages/Browse.tsx",
+        "line": 77,
+        "confidence": "search"
+      }
+    },
+    {
+      "id": "run-1-f7",
+      "runId": "run-1",
+      "severity": 1,
+      "heuristic": "H7",
+      "lens": "ergonomics",
+      "title": "Main action is hard to reach",
+      "finding": "Reaching it takes ID 4.3 bits (818px away, 44px wide).",
+      "fix": "Make it bigger and put it near where the previous step ended.",
+      "route": "/",
+      "agreement": {
+        "agreeing": 1,
+        "total": 5,
+        "who": [
+          "Power user"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "ID 4.3 bits (818px away, 44px wide) (expected at most 4 bits for a main action)",
+        "ID 4.1 bits (718px away, 44px wide) (expected at most 4 bits for a main action)",
+        "ID 4.1 bits (722px away, 44px wide) (expected at most 4 bits for a main action)",
+        "ID 4.3 bits (818px away, 44px wide)"
+      ],
+      "evidenceIds": [
+        "run-1-ev15",
+        "run-1-ev30",
+        "run-1-ev57",
+        "run-1-ev71",
+        "run-1-ev85",
+        "run-1-ev99",
+        "obs-14",
+        "obs-21",
+        "obs-32",
+        "obs-36",
+        "/book/dates#shot"
+      ],
+      "elementRef": "e2",
+      "reviewerRepro": {
+        "expected": "Frequent action is close and large",
+        "actual": "My rentals is 818px away and 44px wide"
+      },
+      "stepIndex": 6,
+      "atMs": 0,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/",
+          "stepIndex": 0
+        },
+        {
+          "route": "/rentals",
+          "stepIndex": 7
+        },
+        {
+          "route": "/*",
+          "stepIndex": 16
+        },
+        {
+          "route": "/book/dates",
+          "stepIndex": 19
+        },
+        {
+          "route": "/book/review",
+          "stepIndex": 22
+        },
+        {
+          "route": "/book/rider",
+          "stepIndex": 25
+        }
+      ],
+      "replay": [
+        {
+          "step": 1,
+          "label": "Typed in “Search bikes…”"
+        },
+        {
+          "step": 2,
+          "label": "Tapped “Type”"
+        },
+        {
+          "step": 3,
+          "label": "Typed in “Type”"
+        },
+        {
+          "step": 4,
+          "label": "Tapped “Sort by”"
+        },
+        {
+          "step": 5,
+          "label": "Tapped “fav-packmule-cargo”"
+        },
+        {
+          "step": 6,
+          "label": "Tapped “My rentals” → /rentals"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "host",
+          "src": "src/App.tsx:51:14"
+        },
+        {
+          "kind": "call",
+          "component": "LinkWithRef",
+          "src": "src/App.tsx:51:14"
+        },
+        {
+          "kind": "call",
+          "component": "NavLinkWithRef",
+          "src": "src/App.tsx:51:14"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        },
+        {
+          "kind": "call",
+          "component": "BrowserRouter",
+          "src": "src/main.tsx:10:4"
+        }
+      ],
+      "source": {
+        "file": "src/App.tsx",
+        "line": 51,
+        "col": 14,
+        "confidence": "plugin"
+      }
+    },
+    {
+      "id": "run-1-f12",
+      "runId": "run-1",
+      "severity": 1,
+      "heuristic": "H1",
+      "lens": "usability",
+      "title": "“Skip to main content” does nothing visible",
+      "finding": "Pressing it changes nothing on screen.",
+      "fix": "Give visible feedback, or remove the control.",
+      "route": "/rentals",
+      "agreement": {
+        "agreeing": 4,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Accessibility",
+          "Trust & ethics",
+          "Power user"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "\"Skip to main content\" changed nothing on screen (expected a visible response within 0.1s)",
+        "\"Skip to main content\" changed nothing on screen (expected a visible response within 0.1s)",
+        "\"Skip to main content\" changed nothing on screen (expected a visible response within 0.1s)",
+        "Tapped Skip to main content · nothing changed on screen",
+        "\"Skip to main content\" changed nothing on screen",
+        "\"Skip to main content\" changed nothing on screen"
+      ],
+      "evidenceIds": [
+        "run-1-ev29",
+        "run-1-ev43",
+        "run-1-ev56",
+        "run-1-ev70",
+        "run-1-ev84",
+        "run-1-ev98",
+        "run-1-ev112",
+        "run-1-ev129",
+        "run-1-ev142",
+        "run-1-ev155",
+        "run-1-ev168",
+        "run-1-ev181",
+        "run-1-ev197",
+        "run-1-ev210",
+        "obs-19",
+        "obs-20",
+        "/rentals#trace",
+        "obs-27",
+        "obs-28",
+        "/bikes/packmule-cargo#trace",
+        "obs-30",
+        "obs-31",
+        "obs-34",
+        "obs-35",
+        "obs-38",
+        "obs-39",
+        "/book/review#trace",
+        "obs-63",
+        "obs-64",
+        "/bikes/volt-commuter#trace",
+        "obs-70",
+        "obs-71",
+        "/bikes/harbor-cruiser#trace",
+        "/bikes/ridgeback-trail#trace",
+        "obs-77",
+        "obs-78",
+        "obs-84",
+        "obs-85",
+        "/bikes/velo-sprint#trace",
+        "obs-91",
+        "obs-92",
+        "/bikes/foldaway-mini#trace",
+        "obs-101",
+        "obs-102",
+        "/bikes/sprout-20#trace",
+        "obs-109",
+        "obs-108",
+        "/bikes/gravel-roamer#trace"
+      ],
+      "elementRef": "skip-link",
+      "reviewerRepro": {
+        "expected": "Focus visibly jumps to the main content.",
+        "actual": "Nothing visibly moves or changes on screen."
+      },
+      "stepIndex": 8,
+      "atMs": 44000,
+      "status": "open",
+      "lane": "shown",
+      "locations": [
+        {
+          "route": "/rentals",
+          "stepIndex": 7
+        },
+        {
+          "route": "/bikes/packmule-cargo",
+          "stepIndex": 12
+        },
+        {
+          "route": "/*",
+          "stepIndex": 16
+        },
+        {
+          "route": "/book/dates",
+          "stepIndex": 19
+        },
+        {
+          "route": "/book/review",
+          "stepIndex": 22
+        },
+        {
+          "route": "/book/rider",
+          "stepIndex": 25
+        },
+        {
+          "route": "/settings",
+          "stepIndex": 30
+        },
+        {
+          "route": "/bikes/volt-commuter",
+          "stepIndex": 41
+        },
+        {
+          "route": "/bikes/harbor-cruiser",
+          "stepIndex": 46
+        },
+        {
+          "route": "/bikes/ridgeback-trail",
+          "stepIndex": 51
+        },
+        {
+          "route": "/bikes/velo-sprint",
+          "stepIndex": 56
+        },
+        {
+          "route": "/bikes/foldaway-mini",
+          "stepIndex": 61
+        },
+        {
+          "route": "/bikes/sprout-20",
+          "stepIndex": 76
+        },
+        {
+          "route": "/bikes/gravel-roamer",
+          "stepIndex": 81
+        }
+      ],
+      "replay": [
+        {
+          "step": 7,
+          "label": "Tapped “My rentals” → /rentals"
+        },
+        {
+          "step": 8,
+          "label": "Tapped “Skip to main content”"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "host",
+          "src": "src/App.tsx:32:6"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        },
+        {
+          "kind": "call",
+          "component": "BrowserRouter",
+          "src": "src/main.tsx:10:4"
+        }
+      ],
+      "source": {
+        "file": "src/App.tsx",
+        "line": 32,
+        "col": 6,
+        "confidence": "plugin"
+      },
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_rentals.jpg"
+      },
+      "box": {
+        "left": 12,
+        "top": -48,
+        "width": 179.125,
+        "height": 44
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f16",
+      "runId": "run-1",
+      "severity": 1,
+      "heuristic": "H1",
+      "lens": "usability",
+      "title": "“Save changes” does nothing visible",
+      "finding": "Pressing it changes nothing on screen.",
+      "fix": "Give visible feedback, or remove the control.",
+      "route": "/settings",
+      "agreement": {
+        "agreeing": 4,
+        "total": 5,
+        "who": [
+          "Novice",
+          "Power user",
+          "Accessibility",
+          "Trust & ethics"
+        ],
+        "measured": true
+      },
+      "evidence": [
+        "\"Save changes\" changed nothing on screen (expected a visible response within 0.1s)",
+        "\"Save changes\" changed nothing on screen",
+        "Tapped Save changes · nothing changed on screen",
+        "\"Save changes\" changed nothing on screen"
+      ],
+      "evidenceIds": [
+        "run-1-ev114",
+        "obs-55",
+        "obs-56",
+        "/settings#trace",
+        "/settings#snapshot"
+      ],
+      "elementRef": "settings-save",
+      "reviewerRepro": {
+        "expected": "A visible confirmation that changes were saved shows",
+        "actual": "Nothing changes on screen after tapping it",
+        "steps": [
+          "Type a new value in Name",
+          "Tap Save changes"
+        ]
+      },
+      "stepIndex": 37,
+      "atMs": 82000,
+      "status": "open",
+      "lane": "shown",
+      "replay": [
+        {
+          "step": 30,
+          "label": "Opened /settings"
+        },
+        {
+          "step": 31,
+          "label": "Typed in “Name”"
+        },
+        {
+          "step": 32,
+          "label": "Typed in “Email”"
+        },
+        {
+          "step": 33,
+          "label": "Typed in “Phone”"
+        },
+        {
+          "step": 34,
+          "label": "Typed in “Usual pickup station”"
+        },
+        {
+          "step": 35,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 36,
+          "label": "Tapped “Email me a reminder the day before pickup”"
+        },
+        {
+          "step": 37,
+          "label": "Tapped “Save changes”"
+        }
+      ],
+      "sourceChain": [
+        {
+          "kind": "call",
+          "component": "Settings",
+          "src": "src/App.tsx:67:43"
+        },
+        {
+          "kind": "debug",
+          "component": "RenderedRoute"
+        },
+        {
+          "kind": "call",
+          "component": "Routes",
+          "src": "src/App.tsx:59:8"
+        },
+        {
+          "kind": "call",
+          "component": "App",
+          "src": "src/main.tsx:12:8"
+        },
+        {
+          "kind": "call",
+          "src": "src/store.tsx:152:9"
+        },
+        {
+          "kind": "call",
+          "component": "StoreProvider",
+          "src": "src/main.tsx:11:6"
+        },
+        {
+          "kind": "debug",
+          "component": "Router"
+        },
+        {
+          "kind": "call",
+          "component": "BrowserRouter",
+          "src": "src/main.tsx:10:4"
+        }
+      ],
+      "source": {
+        "file": "src/App.tsx",
+        "line": 67,
+        "col": 43,
+        "confidence": "plugin"
+      },
+      "assets": {
+        "shot": "fitts-asset://loopline-bikes/run-1/assets/shot-_settings.jpg"
+      },
+      "box": {
+        "left": 716.484375,
+        "top": 637.96875,
+        "width": 139.515625,
+        "height": 44
+      },
+      "shotSize": {
+        "width": 1536,
+        "height": 960
+      }
+    },
+    {
+      "id": "run-1-f23",
+      "runId": "run-1",
+      "severity": 1,
+      "heuristic": "H4",
+      "lens": "usability",
+      "title": "Two names for same bikes list",
+      "finding": "The header says Bikes while the back link says All bikes for the same destination, forcing repeat users to re-check where each goes.",
+      "fix": "Use one consistent label for the bikes list link.",
+      "route": "/bikes/ridgeback-trail",
+      "agreement": {
+        "agreeing": 1,
+        "total": 5,
+        "who": [
+          "Power user"
+        ]
+      },
+      "evidence": [
+        "\"Bikes\" href \"/\"",
+        "\"← All bikes\" href \"/\""
+      ],
+      "evidenceIds": [
+        "/bikes/ridgeback-trail#snapshot",
+        "/bikes/sprout-20#snapshot"
+      ],
+      "elementRef": "e4",
+      "reviewerRepro": {
+        "expected": "Links to '/' share one name",
+        "actual": "One says 'Bikes', the other says '← All bikes'"
+      },
+      "stepIndex": 53,
+      "atMs": 111000,
+      "status": "open",
+      "lane": "suggestion",
+      "locations": [
+        {
+          "route": "/bikes/ridgeback-trail",
+          "stepIndex": 51
+        },
+        {
+          "route": "/bikes/sprout-20",
+          "stepIndex": 76
+        }
+      ],
+      "replay": [
+        {
+          "step": 51,
+          "label": "Opened /bikes/ridgeback-trail"
+        },
+        {
+          "step": 52,
+          "label": "Tapped “Skip to main content”"
+        },
+        {
+          "step": 53,
+          "label": "Tapped “← All bikes” → /"
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,9 @@
 // @vitest-environment node
 // Sign in with GitHub (device flow) and the API's helpers. No network: a fake fetch.
 import { describe, expect, it } from 'vitest';
-import { GitHubAuth, type Tokens } from '../../src/main/github/auth';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { GitHubAuth, githubError, type Tokens } from '../../src/main/github/auth';
 import { gitAuthEnv, repoFromRemote } from '../../src/main/github/api';
 
 const json = (body: unknown, status = 200) =>
@@ -94,5 +96,36 @@ describe('Sign in with GitHub', () => {
     expect(env['GIT_CONFIG_VALUE_0']).toBe(
       `AUTHORIZATION: basic ${Buffer.from('x-access-token:ghu_x').toString('base64')}`,
     );
+  });
+});
+
+describe('GitHub sign-in errors say why', () => {
+  // GitHub's answer to /login/device/code when the app hasn't turned on Device Flow (the
+  // documented shape of that 400, as JSON).
+  const disabled = JSON.parse(
+    readFileSync(resolve(__dirname, '../fixtures/github/device-flow-disabled.json'), 'utf8'),
+  ) as { status: number; body: unknown };
+
+  it('a 400 with error_description shows GitHub’s reason, not only the status', async () => {
+    process.env['FITTS_GITHUB_CLIENT_ID'] = 'Iv1.test';
+    const auth = new GitHubAuth({ load: () => null, save: () => undefined }, () =>
+      Promise.resolve(json(disabled.body, disabled.status)),
+    );
+    expect(await auth.start()).toEqual({
+      state: 'error',
+      message: 'GitHub said 400: Device Flow must be explicitly enabled for this App',
+    });
+    delete process.env['FITTS_GITHUB_CLIENT_ID'];
+  });
+
+  it('falls back to message, then to the status alone', async () => {
+    expect(await githubError(json({ message: 'Bad credentials' }, 401))).toBe(
+      'GitHub said 401: Bad credentials',
+    );
+    const notJson = {
+      status: 502,
+      json: () => Promise.reject(new Error('not json')),
+    } as unknown as Response;
+    expect(await githubError(notJson)).toBe('GitHub said 502');
   });
 });

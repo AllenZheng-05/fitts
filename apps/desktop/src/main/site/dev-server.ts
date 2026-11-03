@@ -5,6 +5,9 @@ import { killTree, spawnProcess, splitCommand } from '../spawn';
 
 const LOG_LINES = 200;
 
+/** Expo's Metro: its own status endpoint, never the (possibly slow) web build at `/`. */
+export const METRO_HEALTH = '/status';
+
 /** True when something answers HTTP on the URL (any status). Localhost only. */
 export async function responds(url: string, timeoutMs = 1500): Promise<boolean> {
   try {
@@ -24,14 +27,34 @@ export class DevServer {
     private readonly folder: string,
     private readonly command: string,
     readonly port: number,
+    /**
+     * Where it's checked. Expo's Metro answers `/status` at once, while `/` can be a slow web
+     * build (Nov 2: a check on `/` timed out, and a second Metro failed on the busy port).
+     */
+    private readonly healthPath = '/',
+    /**
+     * Whether a server already answering on the port is the one wanted (the project's own dev
+     * server, started by the user). A worktree's server never reuses one: it would be another
+     * branch's, or one just stopped.
+     */
+    private readonly reuse = true,
   ) {}
 
   get url(): string {
     return `http://localhost:${this.port}`;
   }
 
+  get healthUrl(): string {
+    return `${this.url}${this.healthPath}`;
+  }
+
   get log(): string[] {
     return this.lines.slice(-20);
+  }
+
+  /** Whether the server has printed a line like `re` (in the last 200 kept). */
+  printed(re: RegExp): boolean {
+    return this.lines.some((l) => re.test(l));
   }
 
   private push(chunk: Buffer) {
@@ -46,7 +69,7 @@ export class DevServer {
 
   /** Starts the server unless one already answers on the port; resolves once it's healthy. */
   async start(timeoutMs = 60_000): Promise<boolean> {
-    if (await responds(this.url)) return true;
+    if (await responds(this.healthUrl)) return this.reuse;
     const [cmd, args] = splitCommand(this.command);
     this.exited = false;
     this.child = spawnProcess(cmd, args, { cwd: this.folder, env: { PORT: String(this.port) } });
@@ -58,7 +81,7 @@ export class DevServer {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (this.exited) return false;
-      if (await responds(this.url)) return true;
+      if (await responds(this.healthUrl)) return true;
       await new Promise((r) => setTimeout(r, 400));
     }
     return false;

@@ -26,7 +26,8 @@ import { startRoute } from '../../mock/sites';
 import { getEngine } from '../../state/engine';
 import { useAuditOnly, useProject } from '../../state/projects';
 import { useSite } from '../../state/site';
-import { fixedBranch, useSiteVersion } from '../../state/site-versions';
+import { fixedBranch, useAfterView } from '../../state/site-versions';
+import { PhoneToggle } from '../site-view/PhoneToggle';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
@@ -60,20 +61,14 @@ export function DoneLayout({ run }: { run: RunState }) {
   const redesign = appliedRedesign(run);
   const doneSite = useLayout((s) => s.panels.doneSite);
   const branch = fixedBranch(run);
-  const [view, setView] = useState<'before' | 'after'>('after');
-  const showAfter = view === 'after' && branch !== undefined;
-  const afterId = useSiteVersion(
-    run.projectId,
-    run.runId,
-    'after',
-    showAfter && branch ? { kind: 'branch', branch } : null,
-  );
+  const after = useAfterView(run, 'after', branch);
+  const { showAfter, siteId: afterId } = after;
   return (
     <>
       <SiteView
-        key={showAfter ? afterId : run.projectId}
+        key={afterId ?? run.projectId}
         projectId={run.projectId}
-        siteId={showAfter ? afterId : undefined}
+        siteId={afterId}
         label={copy.done.preview}
         className="flex-none"
         style={{ width: panelSize(doneSite, 'doneSite') }}
@@ -84,21 +79,29 @@ export function DoneLayout({ run }: { run: RunState }) {
         addressHost={TEST_BUILD ? previewUrl : undefined}
         toolbarEnd={
           <>
-            {branch !== undefined && (
+            {branch !== undefined && after.android && (
+              <PhoneToggle
+                projectId={run.projectId}
+                showAfter={showAfter}
+                state={after.state}
+                onChoose={after.choose}
+              />
+            )}
+            {branch !== undefined && !after.android && (
               <SegmentedControl
                 label={copy.site.beforeAfter}
                 selected={showAfter ? 'after' : 'before'}
-                onSelect={(id) => setView(id === 'after' ? 'after' : 'before')}
+                onSelect={(id) => after.choose(id === 'after' ? 'fixed' : 'live')}
                 segments={[
                   { id: 'before', label: copy.site.before },
                   { id: 'after', label: copy.site.after },
                 ]}
               />
             )}
-            {!TEST_BUILD && project?.kind === 'local' && (
+            {!TEST_BUILD && project?.kind === 'local' && !after.android && (
               <Button
                 size="sm"
-                onClick={() => bridge().site?.openInBrowser(showAfter ? afterId : run.projectId)}
+                onClick={() => bridge().site?.openInBrowser(afterId ?? run.projectId)}
               >
                 {copy.done.openInBrowser}
               </Button>

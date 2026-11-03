@@ -20,28 +20,35 @@ test.afterAll(async () => {
 });
 
 test('bench:chat', async () => {
+  const started = Date.now();
   test.setTimeout(30 * 60_000);
   launched = await launchApp({
     env: {
       FITTS_E2E_PICK_FOLDER: DEMO,
       FITTS_SITE_PORT: PORT,
       FITTS_CRAWL_BRAIN: 'explorer',
+      // The answer key is the bench's, never Fitts's to read.
+      FITTS_HIDE_FILES: 'PLANTED.md',
       FITTS_OFFLINE: OFFLINE ? '1' : '0',
       FITTS_NO_DEV_KEYS: OFFLINE ? '1' : '0',
+      // The baseline comparison's ablation arm (docs/bench/PLAN.md): BENCH_JUDGE=0.
+      FITTS_JUDGE: process.env['BENCH_JUDGE'] ?? '1',
     },
   });
   const { page } = launched;
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Economy (5× Spark), contributor pricing on demo projects, a $2 cap.
-  await page.evaluate(() => {
+  // Economy (5× Spark) unless BENCH_PROFILE says quality or open; contributor pricing on demo
+  // projects; a $2 cap.
+  const profile = process.env['BENCH_PROFILE'] ?? 'economy';
+  await page.evaluate((profile) => {
     const raw = localStorage.getItem('fitts.settings');
     const saved = raw
       ? (JSON.parse(raw) as { state: Record<string, unknown>; version: number })
       : { state: {}, version: 1 };
-    saved.state = { ...saved.state, modelProfile: 'economy', contributorMode: true, capUsd: 2 };
+    saved.state = { ...saved.state, modelProfile: profile, contributorMode: true, capUsd: 2 };
     localStorage.setItem('fitts.settings', JSON.stringify(saved));
-  });
+  }, profile);
   await page.reload();
 
   if (OFFLINE) await page.getByLabel('Meta Model API key').fill('meta-key-12345');
@@ -112,6 +119,16 @@ test('bench:chat', async () => {
   const spent = state?.cost.spentUsd ?? 0;
   console.log(
     `\n${text}\nSpent $${spent.toFixed(4)} (${OFFLINE ? 'offline: probes only' : 'real reviewer calls'})\n`,
+  );
+
+  // The baseline table's line (docs/bench/PLAN.md): strata, precision, cost, wall.
+  const S1 = new Set([1, 7, 8, 9, 10, 11, 12, 17, 19, 20, 23, 24, 26, 27, 28, 29, 31, 32, 33]);
+  const m1 = s.matched.filter((m) => S1.has(m.planted.n)).length;
+  const shown = findings.filter((f) => f.lane !== 'suggestion');
+  const sev2 = shown.filter((f) => f.severity >= 2);
+  const hit = new Set(s.matched.map((m) => m.finding.id));
+  console.log(
+    `BENCH-CHAT profile=${profile} judge=${process.env['BENCH_JUDGE'] ?? '1'} at=${new Date().toISOString()} recall=${s.matched.length}/33 S1=${m1}/19 S2=${s.matched.length - m1}/14 shown=${shown.length} precisionStrict=${(shown.filter((f) => hit.has(f.id)).length / Math.max(1, shown.length)).toFixed(3)} precisionSev2=${(sev2.filter((f) => hit.has(f.id)).length / Math.max(1, sev2.length)).toFixed(3)} unplannedSev2=${s.falsePositives.length} cost=${spent.toFixed(4)} wall=${Math.round((Date.now() - started) / 1000)}s`,
   );
 
   // Keep the findings for tuning, next to the dev spend log (gitignored).

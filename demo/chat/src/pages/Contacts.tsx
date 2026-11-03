@@ -47,14 +47,16 @@ export function Contacts() {
         onChange={(e) => setFilter(e.target.value)}
         className="input"
       />
-      <ul data-ref="contacts-list" className="contacts">
+      {/* Room for the list before it loads, so the form below doesn't jump (not planted). */}
+      <ul data-ref="contacts-list" className="contacts" style={{ minHeight: 4 * 44 }}>
         {shown.map((c) => (
           <li key={c.id}>
             <button
               type="button"
               data-ref={`contact-${c.name.toLowerCase().replace(' ', '-')}`}
               className="contact-row"
-              onClick={() => navigate('/contacts/grandma')}
+              // Grandma has the only conversation; anyone else starts a new message.
+              onClick={() => navigate(c.id === 1 ? '/contacts/grandma' : '/compose')}
             >
               {c.name}
             </button>

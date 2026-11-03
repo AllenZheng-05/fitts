@@ -6,10 +6,22 @@ import { navigate } from '../router';
 export function Search() {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<SearchItem[]>([]);
+  // A failed search says so (not planted; #13, no loading indicator, still stands).
+  const [failed, setFailed] = useState(false);
+  // The query the last answer was for: "no matches" shows only once there's an answer, so it
+  // isn't a loading sign (#13 stands). Not planted.
+  const [answered, setAnswered] = useState('');
 
   const onChange = (q: string) => {
     setQuery(q);
-    void api.search(q).then((res) => setItems(res.items));
+    api
+      .search(q)
+      .then((res) => {
+        setFailed(!Array.isArray(res.items));
+        setItems(Array.isArray(res.items) ? res.items : []);
+        setAnswered(q);
+      })
+      .catch(() => setFailed(true));
   };
   const q = query.trim().toLowerCase();
   const results = q
@@ -27,6 +39,14 @@ export function Search() {
         onChange={(e) => onChange(e.target.value)}
         className="input"
       />
+      {failed && (
+        <p role="alert" className="muted">
+          Search didn’t work. Try again in a moment.
+        </p>
+      )}
+      {!failed && q && answered.trim().toLowerCase() === q && results.length === 0 && (
+        <p className="muted">No messages match “{query.trim()}”.</p>
+      )}
       <ul className="results">
         {results.slice(0, 50).map((r) => (
           <li key={r.id}>

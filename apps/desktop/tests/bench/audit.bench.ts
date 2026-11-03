@@ -61,15 +61,23 @@ test('bench:audit', async () => {
   if (AUTONOMOUS) await page.getByLabel('How much should I ask you?').selectOption('autonomous');
   await page.getByRole('button', { name: 'Browse' }).click();
   // Main's real detection (its framework line) before opening, never a Phase 1 fixture.
-  const pkg = JSON.parse(readFileSync(join(FOLDER, 'package.json'), 'utf8')) as { name?: string };
-  await expect(page.getByText(pkg.name ?? basename(FOLDER)).first()).toBeVisible();
+  // Welcome no longer shows the package name; the project is ready to open once detected.
+  await expect(page.getByRole('button', { name: 'Open my project' })).toBeEnabled();
   await page.getByRole('button', { name: 'Open my project' }).click();
   await expect(page.getByLabel('Address')).toHaveValue(new RegExp(`localhost:${PORT}`), {
     timeout: 120_000,
   });
-  await page.getByLabel('Message Fitts').fill(BRIEF);
-  await page.getByLabel('Message Fitts').press('Enter');
-  await page.getByRole('button', { name: 'Start the audit' }).click();
+  // The interview can ask follow-ups: BENCH_BRIEF's parts, split on "|", answer them in turn,
+  // then "go ahead" until the Start button shows.
+  const answers = [...BRIEF.split('|').map((a) => a.trim()), "That's all. Go ahead and look."];
+  const start = page.getByRole('button', { name: 'Start the audit' });
+  for (const answer of answers) {
+    if (await start.isVisible()) break;
+    await page.getByLabel('Message Fitts').fill(answer);
+    await page.getByLabel('Message Fitts').press('Enter');
+    await start.waitFor({ timeout: 30_000 }).catch(() => undefined);
+  }
+  await start.click();
 
   const states = () =>
     page.evaluate(async () => {
@@ -110,6 +118,9 @@ test('bench:audit', async () => {
         return (
           s.phase === 'done' ||
           (!AUTONOMOUS && s.waitingFor === 'approval') ||
+          // "I think I'm done": only the owner ends a run, so the audit is over here too (the
+          // site session found runs that ended at this card never reported).
+          s.waitingFor === 'finish-proposal' ||
           s.chat.some((c) => c.type === 'state' && c.stateKind === 'nothing-found')
         );
       },

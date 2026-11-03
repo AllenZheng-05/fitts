@@ -50,11 +50,17 @@ export function keyboardProblems(input: KeyboardInput): KeyboardResult {
       break;
     }
   }
-  // Never reached by Tab (only when the sweep wasn't stuck: a stuck sweep reaches nothing).
-  if (items.length === 0) {
+  // Never reached by Tab (only when the sweep wasn't stuck: a stuck sweep reaches nothing). A
+  // sweep that stopped nowhere says nothing about reachability: the page wasn't in its normal
+  // state (bench:chat, Nov 2: a forced failure had blanked /contacts, and every control read as
+  // unreachable).
+  if (items.length === 0 && stops.length > 0) {
+    // By ref or by selector: refs can be re-issued between the snapshot and the sweep, and a
+    // reachable field read as unreachable (bench:chat, Nov 2: demo/chat's contacts filter).
     const reached = new Set(stops.map((s) => s.ref));
+    const reachedAt = new Set(stops.map((s) => s.selector).filter(Boolean));
     for (const el of input.interactive) {
-      if (reached.has(el.ref)) continue;
+      if (reached.has(el.ref) || (el.selector && reachedAt.has(el.selector))) continue;
       items.push({
         ref: el.ref,
         selector: el.selector,

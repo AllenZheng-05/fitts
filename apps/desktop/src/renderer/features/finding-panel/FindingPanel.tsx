@@ -19,7 +19,8 @@ import { useAuditOnly } from '../../state/projects';
 import { useToasts } from '../../state/toasts';
 import { useUi } from '../../state/ui';
 import { SegmentedControl } from '../../components/SegmentedControl';
-import { useSiteVersion } from '../../state/site-versions';
+import { useAfterView } from '../../state/site-versions';
+import { PhoneToggle } from '../site-view/PhoneToggle';
 import { RetryControls } from '../chat/RetryControls';
 import { MESSAGE_BOX_ID, SiteView } from '../site-view/SiteView';
 import type { Decision } from '../../state/ui';
@@ -232,37 +233,40 @@ function SourceLine({ finding }: { finding: Finding }) {
 function LivePreview({ run, finding }: { run: RunState; finding: Finding }) {
   const change = run.changes.find((c) => c.findingIds.includes(finding.id));
   const branch = change?.status === 'verified' ? change.branch : undefined;
-  const [view, setView] = useState<'before' | 'after'>(branch ? 'after' : 'before');
-  const showAfter = view === 'after' && Boolean(branch);
-  const siteId = useSiteVersion(
-    run.projectId,
-    run.runId,
-    `fix-${finding.id}`,
-    showAfter && branch ? { kind: 'branch', branch, path: finding.route } : null,
-  );
+  const after = useAfterView(run, `fix-${finding.id}`, branch, finding.route);
+  const { showAfter, siteId } = after;
   const shot =
     finding.assets?.shot ??
     `fitts-asset://${run.projectId}/${run.runId}/shots/${Math.max(1, finding.stepIndex)}.jpg`;
   return (
     <div className="flex flex-col gap-2">
-      {branch && (
+      {branch && after.android && (
+        // Android: the toggle moves the emulator, shared with the Done page's (Allen, Nov 2).
+        <PhoneToggle
+          projectId={run.projectId}
+          showAfter={showAfter}
+          state={after.state}
+          onChoose={after.choose}
+        />
+      )}
+      {branch && !after.android && (
         <SegmentedControl
           label={copy.finding.livePreview}
-          selected={view}
-          onSelect={(id) => setView(id === 'after' ? 'after' : 'before')}
+          selected={showAfter ? 'after' : 'before'}
+          onSelect={(id) => after.choose(id === 'after' ? 'fixed' : 'live')}
           segments={[
             { id: 'before', label: copy.finding.previewBefore },
             { id: 'after', label: copy.finding.previewAfter },
           ]}
         />
       )}
-      {showAfter ? (
+      {showAfter || (after.android && branch) ? (
         <SiteView
-          key={siteId}
+          key={siteId ?? run.projectId}
           projectId={run.projectId}
           siteId={siteId}
           interactive
-          label={copy.finding.previewAfter}
+          label={showAfter ? copy.finding.previewAfter : copy.site.liveApp}
           className="h-[380px]"
         />
       ) : (

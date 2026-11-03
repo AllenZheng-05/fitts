@@ -2,6 +2,7 @@
 // that puts the mock engine into that state.
 import type { EdgeStateKind, Mode } from '@fitts/schema';
 import type { MockRunEngine } from '../../state/mock-engine';
+import { useLiveSites } from '../../state/live-site';
 import { useSettings } from '../../state/settings';
 import { LIVE_FINDINGS } from '../fixtures/demo-chat';
 import { DEMO_CHAT, HARTWELL, PORTFOLIO } from '../fixtures/projects';
@@ -158,6 +159,25 @@ export const SCENARIOS: ScenarioEntry[] = [
     projectId: DEMO_CHAT,
     screen: 'workspace',
     setup: (engine) => demoAt(engine, 'done'),
+  },
+  {
+    // Done for an Android app (Allen, Nov 2): the run's branch, and the project's site on an
+    // emulator, so the "Live app / Fixed version" toggle shows. The phone itself is main's.
+    id: 'done-android',
+    label: 'Done · Android',
+    group: 'Runs',
+    projectId: DEMO_CHAT,
+    screen: 'workspace',
+    setup: (engine) => {
+      demoAt(engine, 'done');
+      engine.onBranch(DEMO_CHAT, 'fitts/run-run-1');
+      useLiveSites.setState((s) => ({
+        sites: {
+          ...s.sites,
+          [DEMO_CHAT]: { projectId: DEMO_CHAT, status: 'running', url: 'android:emulator-5554' },
+        },
+      }));
+    },
   },
   {
     id: 'settings',

@@ -15,6 +15,7 @@ import { VoiceHost } from './voice';
 import { registerTools } from './tools';
 import { githubPages, recheck, registerVerify } from './verify-site';
 import { createGitHub, registerGitHub } from './github';
+import { phoneFor } from './android/phone-switch';
 import { SiteManager } from './site/manager';
 import { UnderstandHost } from './understand';
 import { MemoryStore } from './store/memory';
@@ -88,6 +89,24 @@ void app.whenReady().then(() => {
         : sites.run(projectId, op);
   sites.onStatus = (status) => host.siteStatus(status);
   sites.versions = fixes;
+  // The emulator between the live app and the run's fixed version (Allen, Nov 2): the agent and
+  // its checks always get the live app back first.
+  fixes.beforeDevice = (projectId) => sites.showLive(projectId);
+  sites.phoneBusy = (projectId) => {
+    const s = host.state(projectId);
+    return Boolean(
+      s && s.phase !== 'done' && (s.fixingCount > 0 || s.activity !== 'waiting-on-user'),
+    );
+  };
+  host.onState = (projectId, prev, next) => {
+    const to = phoneFor(prev, next);
+    if (to?.kind === 'live') void sites.showLive(projectId);
+    // Allen, Nov 2: the web imitation is the "after"; the phone switch is off unless asked for
+    // (it didn't come up reliably in the bench, DECISIONS "the fixed Android app on the emulator").
+    else if (to && process.env['FITTS_PHONE_SWITCH'] === '1')
+      void sites.showFixed(projectId, next.runId, to.branch);
+  };
+
   // Understand (SPEC-phase4 §3): a local project opening is read in the background, cached by
   // commit under userData, never in the repo.
   const understand = new UnderstandHost(
@@ -151,8 +170,17 @@ void app.whenReady().then(() => {
   registerKeys(secrets, host);
   projects.register();
   sites.register();
-  // Dev servers Fitts started never outlive it.
-  app.on('before-quit', () => sites.closeAll());
+  // Dev servers Fitts started never outlive it, and the emulator goes back to the live app.
+  let phonesBack = false;
+  app.on('before-quit', (e) => {
+    if (!phonesBack && sites.phoneShowingFixed()) {
+      e.preventDefault();
+      phonesBack = true;
+      void sites.restorePhones().finally(() => app.quit());
+      return;
+    }
+    sites.closeAll();
+  });
   app.on('will-quit', () => sites.closeAll());
   process.on('exit', () => sites.closeAll());
   buildAppMenu();

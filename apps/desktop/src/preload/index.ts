@@ -59,6 +59,7 @@ const bridge: FittsBridge = {
     openVersion: (siteId, projectId, runId, version) =>
       ipcRenderer.send(IPC.siteOpenVersion, siteId, projectId, runId, version),
     openInBrowser: (siteId) => ipcRenderer.send(IPC.siteOpenInBrowser, siteId),
+    phone: (projectId, runId, branch) => ipcRenderer.send(IPC.sitePhone, projectId, runId, branch),
     resize: (projectId, width, height) =>
       ipcRenderer.send(IPC.siteResize, projectId, width, height),
     device: (projectId, device) => ipcRenderer.send(IPC.siteDevice, projectId, device?.id ?? null),

@@ -357,3 +357,59 @@ describe('where a finding shows up (Allen’s feedback, round 5)', () => {
     expect(at(768)?.seenOn).toBe('tablet');
   });
 });
+
+describe('the same missing loading sign seen twice on a page', () => {
+  it('the state pass folds into the page’s own feedback finding; other pages stay', () => {
+    const findings = aggregate({
+      runId: 'run-1',
+      probes: [
+        probe({
+          evidenceId: 'run-1-ev1',
+          probe: 'feedback-timing',
+          route: '/search',
+          items: [
+            {
+              ref: 'search-input',
+              selector: '',
+              measured: 'no loading indicator for 1.5 s after typing',
+              expected: 'a loading indicator within 1 s',
+            },
+          ],
+        }),
+        probe({
+          evidenceId: 'run-1-ev2',
+          probe: 'state',
+          route: '/search',
+          items: [
+            {
+              ref: '',
+              selector: '',
+              measured: 'no sign /search is loading when search takes 3 s',
+              expected: 'a loading indicator within 1 s',
+            },
+          ],
+        }),
+        probe({
+          evidenceId: 'run-1-ev3',
+          probe: 'state',
+          route: '/contacts',
+          items: [
+            {
+              ref: '',
+              selector: '',
+              measured: 'no sign /contacts is loading when contacts takes 3 s',
+              expected: 'a loading indicator within 1 s',
+            },
+          ],
+        }),
+      ],
+      reviews: [],
+      stepOf,
+    });
+    const titles = findings.map((f) => `${f.title} ${f.route}`);
+    expect(titles.filter((t) => /loading/i.test(t))).toHaveLength(2);
+    expect(findings.find((f) => f.title === 'No sign the page is loading')?.route).toBe(
+      '/contacts',
+    );
+  });
+});

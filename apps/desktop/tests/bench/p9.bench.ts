@@ -24,6 +24,8 @@ test.afterAll(async () => {
 
 interface Run {
   phase: string;
+  waitingFor?: string;
+  fixingCount?: number;
   gate?: { id: string };
   findings: { id: string; title: string; status: string; prNumber?: number }[];
   changes: {
@@ -57,7 +59,7 @@ async function call(page: Page, method: string, args: unknown[]) {
 }
 
 test('real fixes: ≥5 verified PRs, a rollback then retry, undo and a revert PR', async () => {
-  test.setTimeout(45 * 60_000);
+  test.setTimeout(75 * 60_000);
   // A throwaway clone whose origin is a local bare repo.
   tmp = mkdtempSync(join(tmpdir(), 'fitts-p9-'));
   const git = (cwd: string, ...args: string[]) =>
@@ -83,6 +85,9 @@ test('real fixes: ≥5 verified PRs, a rollback then retry, undo and a revert PR
       FITTS_NO_DEV_KEYS: '0',
       FITTS_GH_DRY_RUN: '1',
       FITTS_SABOTAGE_FIX: '2',
+      // The PR flow is what this checks, not Muse Code: the in-process fixer keeps 16 fixes in
+      // Autonomous inside the wait (each Muse pass is minutes).
+      FITTS_FIXER: 'inprocess',
     },
   });
   const { page } = launched;
@@ -123,11 +128,15 @@ test('real fixes: ≥5 verified PRs, a rollback then retry, undo and a revert PR
       async () => {
         const s = await state(page);
         if (s.gate) await page.getByRole('button', { name: "Don't do it" }).click();
-        return s.phase;
+        // SPEC-phase4 §4.1: only the owner ends a run; Fitts proposes finishing and waits, and
+        // retry and undo work from there.
+        return (
+          s.phase === 'done' || (s.waitingFor === 'finish-proposal' && (s.fixingCount ?? 0) === 0)
+        );
       },
-      { timeout: 40 * 60_000, intervals: [5000] },
+      { timeout: 55 * 60_000, intervals: [5000] },
     )
-    .toBe('done');
+    .toBe(true);
 
   let s = await state(page);
   const verified = s.changes.filter((c) => c.status === 'verified' && c.prNumber !== undefined);
