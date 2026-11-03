@@ -22,7 +22,7 @@ https://github.com/AllenZheng-05/heldout-app (answer key sealed outside the repo
 4. **The real portfolio run** (replaces item 2 below): run Fitts on your real portfolio as it is
    today, review and merge its PR, let it deploy, and screen-record the before, the after and
    the merged PR.
-5. **Release:** when U10 is committed and CI is green on all three platforms, tag `v0.9.0-beta`
+5. **Release:** when U10 is committed and CI is green on all three platforms, tag `v0.1.0`
    (item 5 below). Then install it fresh on Windows.
 6. **A Mac test** (P4-3 and item 7): ask someone with a Mac to install the dmg. Until then the
    site says macOS is beta.
@@ -255,7 +255,7 @@ locally: `pnpm --filter @fitts/desktop dist:dir`, then `tests/bench/packaged.ben
 launches `Fitts.exe` and plays the replay.
 
 ```
-git tag v0.9.0-beta && git push origin v0.9.0-beta
+git tag v0.1.0 && git push origin v0.1.0
 ```
 
 CI then builds Windows, macOS and Linux, and publishes them to Releases. Then:
