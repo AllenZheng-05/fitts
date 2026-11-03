@@ -9,6 +9,9 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  # Package all three platforms without publishing (the "package" job), to check the release
+  # builds before tagging: gh workflow run build.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -38,6 +41,44 @@ jobs:
         env:
           FITTS_OFFLINE: '1'
           FITTS_NO_DEV_KEYS: '1'
+
+  # The same packaging as a release, published nowhere: each platform's installer is uploaded as
+  # a workflow artifact, named as the site's download links expect.
+  package:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fitts/desktop build
+      - run: node scripts/check-release-bundle.mjs
+      - run: pnpm --filter @fitts/desktop exec electron-builder ${{ matrix.target }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fitts-${{ matrix.os }}
+          path: |
+            apps/desktop/release/Fitts-Setup.exe
+            apps/desktop/release/Fitts-*.dmg
+            apps/desktop/release/Fitts.AppImage
+          if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
