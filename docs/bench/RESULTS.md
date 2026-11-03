@@ -14,6 +14,7 @@ ledger; wall time is the run's own.
 | — | — | (b) Lighthouse | — | skipped: not installed, and PLAN.md allows no new install | | | | | | | |
 | probes-1 | 2026-11-03 09:17 | (c) Fitts, probes only | 596f9b2 | 25/33 | 18/19 | 7/14 | 69% (25/36) | 93% | 2 | $0 | 399 s |
 | econ-1 | 2026-11-03 09:30 | (d) Fitts Economy | 46ea654 | 28/33 | 19/19 | 9/14 | 68% (28/41) | 88% | 4 | $0.17 | 787 s |
+| econ-2 | 2026-11-03 09:45 | (d) Fitts Economy | af7561f | 28/33 | 19/19 | 9/14 | 72% (28/39) | 88% | 4 | $0.15 | 845 s |
 
 ## The held-out app (sealed answer key)
 
@@ -39,3 +40,6 @@ Qualitative: what each arm found.
 - **econ-1.** Missed #6, #14, #15, #18, #25. Unplanted at sev ≥ 2: the 200% text and text-spacing
   checks, "Search dumps dozens of identical results" (the 20,000-item list, matched to no planted
   wording), and the Rate-us pop-up finding that the matcher didn't join to #29.
+- **econ-2.** Missed #6, #14, #15, #16, #18 (it found #25 this time, and lost #16). Unplanted:
+  the 200% text and spacing checks, the Rate-us pop-up, and "Tapping a contact does nothing" on
+  Grandma's row (sev 4).
