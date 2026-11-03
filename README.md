@@ -113,13 +113,19 @@ Fitts during the run. These are single runs; reviewers vary from run to run.
 | Benchmark | Run | Found | Precision |
 |---|---|---|---|
 | `demo/chat`, 33 planted (19 structure-detectable, 14 judgment) | Economy, Nov 2, $0.14 | 27/33 (structure 18/19, judgment 9/14) | 84% of findings at severity 2+ were planted (27/32); 5 weren't, over the bench's bar of 2 |
-| Basil & Ember's Android app, 10 planted | Economy, Nov 2, $2.10 | 8/10 | 6 unplanted at severity 2+ |
+| Basil & Ember's Android app, 10 planted | Economy, Nov 3, $2.49 | 9/10 | 3 unplanted at severity 2+ |
 
-On the Android run, Fitts also fixed three findings and checked each fix. One of them was the
-brand drift: restored from the app's own brand cues, every color came within the bench's
+On an earlier Android run (Nov 2), Fitts also fixed three findings and checked each fix. One of
+them was the brand drift: restored from the app's own brand cues, every color came within the bench's
 distance of the answer key, with the same fonts. Every run, with its id and the bad numbers, is
-in `docs/PROGRESS.md`. A comparison against axe alone and each model profile is pre-registered in
-`docs/bench/PLAN.md`.
+in `docs/PROGRESS.md`.
+
+Against other approaches on `demo/chat` (pre-registered in `docs/bench/PLAN.md`, every run in
+`docs/bench/RESULTS.md`): axe alone found 4/33; Fitts's own probes with no models found 25/33
+(structure 18/19, judgment 7/14) for free; Fitts Economy found 28/33 in both of its runs
+(structure 19/19, judgment 9/14) for about $0.16. Quality and Economy without the judge also found
+28/33, so on this app the bigger models didn't add recall. The probes carry the structural
+issues; the models add the judgment ones.
 
 ## Check the results yourself (offline)
 
