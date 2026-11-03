@@ -55,7 +55,34 @@ hidden and journeys on the model:
 - The emulator "after" switch fell back ("dev-client") and is off. The web imitation is the
   "after".
 
-**Next:** U10 steps 2–8 (bench:chat, p9.bench, README, spend, release, Muse label), then Allen's
+**U10 step 2, bench:chat (not green).** The number for the README, the site and the video is
+one run: **run 4, Nov 2 22:00 CST** (`2026-11-03T04:00:19Z`, commit `fa98f3c`, Economy,
+contributor pricing, answer key hidden, $0.14):
+- **Recall 27/33 (82%):** S1 18/19, S2 9/14.
+- **Precision 66% strict (27/41), 84% at severity ≥ 2 (27/32).**
+- **5 unplanted findings at severity ≥ 2,** over the bar of 2. The bench fails on that line.
+
+The four runs that night (one per round of fixes), each its own result:
+
+| Run | Recall | Unplanted at sev ≥ 2 | Cost |
+|---|---|---|---|
+| 1 (`5248cb8`) | 27/33 | 9 | $0.27 |
+| 2 (`6cd00fe`) | 27/33 | 11 | $0.25 |
+| 3 (`34da49b`) | 28/33 | 7 | $0.14 |
+| 4 (`fa98f3c`) | 27/33 | 5 | $0.14 |
+
+What's left in run 4's five:
+- 200% text cutting off the Send button: planted #7's fixed size.
+- A text-spacing overlap on /compose that isn't traced yet.
+- A reviewer's "empty inbox" opinion.
+- Two taps logged "nothing changed on screen" (Grandma on /contacts, a search result) that
+  navigate correctly in a browser. That's a Fitts measurement bug, not found yet.
+
+**The earlier numbers below were scored by a matcher that was too generous.** It read the
+finding's evidence, which paired findings with the wrong issues. Re-scoring the 06:55 run with
+the strict matcher gives 26/33, not 29/33. Read them as history, not results.
+
+**Next:** U10 steps 3–8 (p9.bench, README, spend, release, Muse label), then Allen's
 added work below.
 
 **Status across sessions (Allen, Nov 2 evening):**
