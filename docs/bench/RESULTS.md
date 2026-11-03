@@ -15,6 +15,7 @@ ledger; wall time is the run's own.
 | probes-1 | 2026-11-03 09:17 | (c) Fitts, probes only | 596f9b2 | 25/33 | 18/19 | 7/14 | 69% (25/36) | 93% | 2 | $0 | 399 s |
 | econ-1 | 2026-11-03 09:30 | (d) Fitts Economy | 46ea654 | 28/33 | 19/19 | 9/14 | 68% (28/41) | 88% | 4 | $0.17 | 787 s |
 | econ-2 | 2026-11-03 09:45 | (d) Fitts Economy | af7561f | 28/33 | 19/19 | 9/14 | 72% (28/39) | 88% | 4 | $0.15 | 845 s |
+| qual-1 | 2026-11-03 10:11 | (e) Fitts Quality | 76aca50 | stopped | | | | | | $1.31 | 1500 s (limit) |
 
 ## The held-out app (sealed answer key)
 
@@ -43,3 +44,6 @@ Qualitative: what each arm found.
 - **econ-2.** Missed #6, #14, #15, #16, #18 (it found #25 this time, and lost #16). Unplanted:
   the 200% text and spacing checks, the Rate-us pop-up, and "Tapping a contact does nothing" on
   Grandma's row (sev 4).
+- **qual-1, stopped.** Hit the bench's 25-minute wait while still reviewing /search and /settings.
+  Fitts paused three times on "I can't reach Meta's models" (the Wonder calls failing), so the
+  run never reached its findings proposal. Not scored; $1.31 spent.
