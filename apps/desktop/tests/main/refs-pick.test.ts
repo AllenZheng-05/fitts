@@ -77,3 +77,41 @@ describe('F.pick', () => {
     expect(events).toEqual([]);
   });
 });
+
+describe('F.options and F.hours', () => {
+  type G = F & {
+    options(el: Element): string[] | undefined;
+    hours(text: string): string[];
+  };
+  const G = () => helper() as G;
+
+  it("reads a select's and a datalist's choices without opening them", () => {
+    document.body.innerHTML = `
+      <select id="t"><option>As soon as possible</option><option>2:30 AM</option><option>2:45 AM</option></select>
+      <input id="c" list="cities"><datalist id="cities"><option value="Austin"></option><option value="Boston"></option></datalist>
+      <input id="n">`;
+    expect(G().options(document.getElementById('t')!)).toEqual([
+      'As soon as possible',
+      '2:30 AM',
+      '2:45 AM',
+    ]);
+    expect(G().options(document.getElementById('c')!)).toEqual(['Austin', 'Boston']);
+    expect(G().options(document.getElementById('n')!)).toBeUndefined();
+  });
+
+  it('finds the lines that state hours, and nothing else', () => {
+    const text = [
+      'Hours',
+      'Tuesday\t4:00 PM – 10:00 PM',
+      'Mon–Fri 09:00-17:30',
+      'Saturday 11am to 11pm',
+      'Call 555-0100 or order 2 - 3 pizzas',
+      'Tuesday\t4:00 PM – 10:00 PM',
+    ].join('\n');
+    expect(G().hours(text)).toEqual([
+      'Tuesday 4:00 PM – 10:00 PM',
+      'Mon–Fri 09:00-17:30',
+      'Saturday 11am to 11pm',
+    ]);
+  });
+});
