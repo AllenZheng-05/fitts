@@ -24,6 +24,8 @@ test.afterAll(async () => {
 
 interface Run {
   phase: string;
+  waitingFor?: string;
+  fixingCount?: number;
   gate?: { id: string };
   findings: { id: string; title: string; status: string; prNumber?: number }[];
   changes: {
@@ -123,11 +125,15 @@ test('real fixes: ≥5 verified PRs, a rollback then retry, undo and a revert PR
       async () => {
         const s = await state(page);
         if (s.gate) await page.getByRole('button', { name: "Don't do it" }).click();
-        return s.phase;
+        // SPEC-phase4 §4.1: only the owner ends a run; Fitts proposes finishing and waits, and
+        // retry and undo work from there.
+        return (
+          s.phase === 'done' || (s.waitingFor === 'finish-proposal' && (s.fixingCount ?? 0) === 0)
+        );
       },
       { timeout: 40 * 60_000, intervals: [5000] },
     )
-    .toBe('done');
+    .toBe(true);
 
   let s = await state(page);
   const verified = s.changes.filter((c) => c.status === 'verified' && c.prNumber !== undefined);

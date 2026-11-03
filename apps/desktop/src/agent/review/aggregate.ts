@@ -766,13 +766,22 @@ export function aggregateWithChecks({ runId, probes, reviews, stepOf, cells }: A
       } else if (!c.routes.has(c.route)) c.route = [...c.routes][0] ?? c.route;
     }
 
-  // 3c. A dialog that pops up and traps the keyboard is one problem with two measurements: the
-  //     surprise probe's pop-up joins the keyboard finding on the same element (bench:chat, Nov 2:
-  //     #29's "Rate us" came out twice).
+  // 3c. A dialog that pops up and traps the keyboard is one problem: the judge's "pops up" finding
+  //     (judge-only, no probe) joins the keyboard *dialog* finding on the same element (bench:chat,
+  //     Nov 2: #29's "Rate us" came out twice). Only those two: a keyboard finding across pages
+  //     collects many refs, and a broader rule merged #30's moved button into "focus gets stuck".
   for (const c of [...merged]) {
-    if (c.probe !== 'surprise' || c.refs.length === 0) continue;
+    const judgedPopUp =
+      !c.probe &&
+      c.drafts.length > 0 &&
+      c.drafts.every((d) => d.persona === JUDGE_PERSONA) &&
+      c.drafts.some((d) => /pops up/i.test(d.draft.title));
+    if (!judgedPopUp || c.refs.length === 0) continue;
     const kb = merged.find(
-      (x) => x !== c && x.probe === 'keyboard' && x.refs.some((r) => c.refs.includes(r)),
+      (x) =>
+        x !== c &&
+        x.probe === 'keyboard' &&
+        x.items.some((i) => keyboardKind(i.measured) === 'dialog' && c.refs.includes(i.ref)),
     );
     if (!kb) continue;
     for (const r of c.routes) kb.routes.add(r);
