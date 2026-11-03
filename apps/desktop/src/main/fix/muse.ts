@@ -91,6 +91,8 @@ export interface MuseTally {
   summary: string;
   /** The last message in full (with --output-schema, the JSON answer). */
   final: string;
+  /** The model Muse Code reported using (its run.usage), for the ledger's label. */
+  model?: string;
 }
 
 /**
@@ -106,6 +108,10 @@ export function readMuseEvent(t: MuseTally, e: Record<string, unknown>): void {
   if (e['payload_type'] === 'run.usage' && Array.isArray(models)) {
     const sum = (k: string) =>
       (models as Record<string, unknown>[]).reduce((n, m) => n + (Number(m[k]) || 0), 0);
+    const named = (models as Record<string, unknown>[])
+      .map((m) => m['model'])
+      .find((m): m is string => typeof m === 'string' && m !== '');
+    if (named) t.model = named;
     t.usage = {
       input: sum('input_tokens'),
       output: sum('output_tokens'),

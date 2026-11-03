@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ BrowserWindow: class {}, session: {} }));
 vi.mock('@fitts/probes/page.js?raw', () => ({ default: '' }));
 
-const { FixHost, keepGitLink, staticDir, verifyCommand } =
+const { FixHost, hideWhile, hiddenFiles, keepGitLink, staticDir, verifyCommand } =
   await import('../../src/main/fix/fix-host');
 const { DryRunPrs, dryRunRegistry } = await import('../../src/main/fix/pr');
 
@@ -558,5 +558,32 @@ describe('keepGitLink', () => {
     const root = mkdtempSync(join(tmpdir(), 'fitts-link-'));
     expect(() => keepGitLink(root)()).not.toThrow();
     rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('a benchmark’s answer keys stay hidden from the fixer (FITTS_HIDE_FILES)', () => {
+  it('moves them out of the worktree while Muse Code works, and puts them back', () => {
+    const root = mkdtempSync(join(tmpdir(), 'fitts-hide-'));
+    const wt = join(root, 'run');
+    mkdirSync(join(wt, 'docs'), { recursive: true });
+    writeFileSync(join(wt, 'PLANTED.md'), 'answer key');
+    writeFileSync(join(wt, 'docs', 'prompt.md'), 'the planted issues');
+    writeFileSync(join(wt, 'theme.ts'), 'export {}');
+    process.env['FITTS_HIDE_FILES'] = 'PLANTED.md, ./docs/prompt.md';
+    expect(hiddenFiles()).toEqual(['PLANTED.md', 'docs/prompt.md']);
+    const unhide = hideWhile(wt);
+    expect(existsSync(join(wt, 'PLANTED.md'))).toBe(false);
+    expect(existsSync(join(wt, 'docs', 'prompt.md'))).toBe(false);
+    expect(existsSync(join(wt, 'theme.ts'))).toBe(true);
+    unhide();
+    expect(readFileSync(join(wt, 'PLANTED.md'), 'utf8')).toBe('answer key');
+    expect(readFileSync(join(wt, 'docs', 'prompt.md'), 'utf8')).toBe('the planted issues');
+    delete process.env['FITTS_HIDE_FILES'];
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('nothing is hidden without the setting', () => {
+    delete process.env['FITTS_HIDE_FILES'];
+    expect(hiddenFiles()).toEqual([]);
   });
 });

@@ -3611,3 +3611,118 @@ cuts.
   keeps its local history, and the fetch can't open a sign-in prompt.
 - Files an export never writes (`*.tsbuildinfo`, build output) are left alone when they're already
   in the repo, like the website's committed tsconfig.tsbuildinfo.
+
+## Phase 4 — the fixed Android app on the emulator (Allen, Nov 2)
+
+- **The emulator is now the default for "after".** When a run's fixes are applied and checked
+  and the agent is waiting on the owner (or the run is done), main switches the one emulator to
+  the run branch: Metro from the branch's view worktree on a free port, `adb reverse`, and the dev
+  client reopened on it. The site view keeps streaming the device, labeled "Fixed version ·
+  <branch>", and it stays interactive like the live app. The web imitation (360×800, labeled an
+  imitation) is the fallback when there's no emulator, when the dev client can't be reopened or
+  its Metro doesn't start, or when the agent is still using the phone mid-run.
+- **The live app always comes back** (Metro 8081, the worktree's Metro stopped, its reverse
+  removed):
+  - switching back from the toggle;
+  - a new run;
+  - closing the project;
+  - quitting Fitts (quit waits until the phone is back);
+  - any agent action on the device;
+  - an on-device fix check (FixHost asks for the live app before it uses the phone).
+  A failed switch cleans up the same way. One `PhoneSwitch` serializes every switch, so two never
+  interleave. The user's working tree is never touched: the fixed version runs from Fitts's own
+  view worktree, and the checks' own reverses are removed too.
+- **One toggle, one phone.** The Done page and See it yourself for Android show "Live app / Fixed
+  version" (toggle buttons with `aria-pressed`, keyboard-reachable, and a status line saying what
+  the phone shows or why the imitation stands in). Both toggles share one choice per project,
+  because they move the same device. A web project's Before/After switches keep their own state.
+- **When it switches** is a pure function of the run's state before and after each batch
+  (`phoneFor`), tested on its own: a new run gets live, and a newly verified branch with the agent
+  idle gets fixed, once per branch.
+- **The fixed version waits for its own bundle.** A fresh Metro in the view worktree takes a
+  minute or more for its first bundle, and until then the device keeps showing the app it had.
+  The first emulator check shot the live app under a "Fixed version" label. The switch now
+  waits until that Metro has printed "Bundled", then for the old screen to clear, then for
+  controls. FixHost's on-device checks wait the same way.
+
+## Phase 4 — U10: benchmarks that can be trusted (Nov 2)
+
+- **The answer keys are hidden from Fitts in the benchmarks** (`FITTS_HIDE_FILES`). The fixer's
+  read, list and search tools can't see the listed files, and they're moved out of the worktree
+  while Muse Code runs and put back before anything is checked or committed. bench:android hides
+  PLANTED.md and prompt.md; bench:chat hides PLANTED.md. Before this, a brand fix read
+  PLANTED.md's tokens, so the earlier "12/12 colors" result didn't count. With the key hidden,
+  the fix still matched 12/12 on color distance: ink, ember and cream exact, the rest close.
+- **The bench:chat matcher was too generous.** It matched a planted issue's words anywhere in a
+  finding's evidence, which quotes the page and other probes, so findings were paired with the
+  wrong issues (a spacing finding counted as one action's three labels; #25 and #28 swapped).
+  It now matches the title and the finding text, and four word lists are specific (#2, #6,
+  #16, #20). Re-scoring the last saved run lowered it from 29/33 to 26/33. The 29/33 recorded
+  earlier in PROGRESS was inflated, and PROGRESS says so.
+- **demo/chat had problems nobody planted.** Compose's contact picker had no loading, error or
+  empty state, and the benchmark counted those real findings as false positives. The picker now
+  has them, so the benchmark measures only what PLANTED.md lists. The Contacts page's own blank
+  failure (#33) is untouched.
+- **A device cell doesn't repeat what the main pass found.** It compares the element (selector,
+  source) as well as the measurement: a cell measures the same control differently (a 28 px
+  target at wider text spacing), which isn't a new problem.
+- **The keyboard sweep counts a control as reached by its selector too.** Refs can be re-issued
+  between the snapshot and the sweep, and demo/chat's ordinary contacts filter read as
+  unreachable.
+- **Journeys use the model whenever Fitts is online.** `FITTS_CRAWL_BRAIN=explorer` (the
+  benches) made the journeys read their plan literally too; they skipped every step they couldn't
+  match, so no order was ever placed on Android. `FITTS_JOURNEY_BRAIN=plan` forces the old way.
+- **Filling in a form is progress.** A journey's "nothing changed" check now includes field
+  values and control names, so typing three fields on one screen isn't "stuck".
+- **The audit waits for a read of the code under way** (at most 3 minutes, saying so). Once Fitts
+  read Muse Code's answers, Understand's second pass succeeded and took minutes, and a run
+  started before it had no App Model, so no journeys.
+- **An Android screen without a title is named by its testIDs.** The item and order screens show
+  their content in the header, so every such screen was "/screen". Now Fitts names a screen after
+  the App Model route whose first segment begins two or more of its testIDs (`/item/:id` for
+  `item-add`).
+- **Expo's floating Tools button** (shown by the dev client after a cold boot) covers the screen in
+  uiautomator's dump and hid the header. It's listed in the README's known limits, with how to
+  turn it off.
+
+## Phase 4 — SAM outlines in page coordinates (Allen, Nov 2)
+
+- **The convention:** an outline asset (a finding's `assets.mask`, and a moment's
+  `outlines.first`/`last`) is an SVG the size of the shot it belongs to (`viewBox="0 0 W H"`),
+  with its path in that shot's pixels, the same coordinates as the element's box. The UI draws it
+  over the whole shot, never at the box.
+- **Before:** SAM's mask raster covers only the record's box, so the decoded path started at 0,0
+  there, and the outline was drawn at the page's top-left. The Finding panel hid this by drawing the
+  DOM box. `placeOutline` now scales each point to the box and moves it there before the SVG is
+  saved, so every view is right: the Finding panel (whole page and zoom, which now draws the
+  outline too), See it yourself's before/after strip for the Wonder judge's moments, and Android
+  frames (their boxes come from the dump, in screencap pixels).
+- Runs recorded before this have box-relative outlines; the site's run report corrects for those.
+  The format of new runs changed in this commit.
+
+## Phase 4 — the emulator switch is off; the web imitation is the "after" (Allen, Nov 2)
+
+Allen's call after two failed bench checks: stop working on it; the video switches branches by
+hand. What's built stays (PhoneSwitch, its cleanup on every exit path, the tests), behind
+`FITTS_PHONE_SWITCH=1`; without it, "Fixed version" on Android is the web imitation and says so,
+and the phone only ever returns to the live app (a new run, closing, quitting, the agent's
+actions, an on-device check).
+
+What the bench runs taught:
+
+- By hand, the same steps work in seconds: Metro from the run branch's view worktree on a free
+  port, `adb reverse`, reopen the dev client on it; Metro was up in 4 s and served its bundle 6 s
+  after the reopen.
+- Inside Fitts, right after the last fix's on-device check, it didn't:
+  1. First, the label showed while the screen was still the live app: the readiness check
+     accepted the old app's controls before the new bundle arrived. Fixed by waiting for the
+     worktree Metro to print "Bundled".
+  2. Then the switch fell back with "dev-client": no bundle was served in 120 s. A likely
+     cause, fixed but not proven: the check's Metro had just stopped and released the port the
+     switch then took, so the new Metro failed or a dying one answered. Ports now cool down
+     15 s, and a worktree Metro never reuses a running server.
+  3. The last run still fell back with "dev-client", so something else is in the way: likely
+     the dev client ignoring a second reopen intent seconds after the check's own reopen to
+     8081 ("intent has been delivered to currently running top-most instance"), or the app
+     still reloading from that. Next step, if it's picked up again: force-stop the app
+     (`am force-stop`) before the reopen, and log the dev client's own state.

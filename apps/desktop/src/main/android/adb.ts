@@ -206,6 +206,17 @@ export class Adb {
     return (await this.run(['reverse', `tcp:${port}`, `tcp:${port}`])).code === 0;
   }
 
+  /** Whether the soft keyboard is up (it covers the bottom of the screen). */
+  async keyboardShown(): Promise<boolean> {
+    const r = await this.run(['shell', 'dumpsys', 'input_method']);
+    return /mInputShown=true/.test(r.stdout.toString());
+  }
+
+  /** Takes a reverse back (the device can no longer reach that port). */
+  async unreverse(port: number): Promise<boolean> {
+    return (await this.run(['reverse', '--remove', `tcp:${port}`])).code === 0;
+  }
+
   /** Opens a URL in the app that handles it (the Expo dev client). */
   async open(url: string): Promise<boolean> {
     // adb joins shell arguments into one remote command: the URL is quoted for the device's shell.

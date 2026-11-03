@@ -219,14 +219,21 @@ export class ProbeRunner {
    */
   async onCell(route: string, cell: DeviceCell): Promise<void> {
     if (!this.site.cellProbes) return;
+    // Matched on what was measured, or on the element itself (its selector or source): refs are
+    // re-issued when the page reloads, and a cell measures the same control differently (a 28 px
+    // target is 31 px at wider text spacing), which isn't a new problem (Nov 2, bench:chat).
+    const keys = (probe: ProbeName, i: ProbeItem) => [
+      `${probe}|${i.measured}`,
+      ...(i.selector ? [`${probe}|sel:${i.selector}`] : []),
+      ...(i.src ? [`${probe}|src:${i.src}`] : []),
+    ];
     const seen = new Set(
       this.results
         .filter((r) => r.route === route)
-        .flatMap((r) => r.items.map((i) => `${r.probe}|${i.measured}`)),
+        .flatMap((r) => r.items.flatMap((i) => keys(r.probe, i))),
     );
-    // Matched on what was measured: element refs are re-issued when the page reloads.
     const fresh = (probe: ProbeName, items: ProbeItem[]) =>
-      items.filter((i) => !seen.has(`${probe}|${i.measured}`));
+      items.filter((i) => !keys(probe, i).some((k) => seen.has(k)));
     try {
       for (const r of await this.site.cellProbes(cell)) {
         const items = fresh(r.probe, r.items);

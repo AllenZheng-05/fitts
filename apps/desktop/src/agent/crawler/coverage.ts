@@ -5,8 +5,10 @@ import type { RunState } from '@fitts/schema';
 import type { AxNode, AxSnapshot } from '../protocol';
 
 /** Names that put a click through the permission gate (§13): its writes are held. */
+// "Cancel" alone usually dismisses a dialog; cancelling an order, a booking or a plan can't be
+// undone (Nov 2: the Android order was cancelled with nothing held at the gate).
 export const DESTRUCTIVE =
-  /\b(delete|remove|pay|purchase|buy|checkout|transfer|unsubscribe|cancel plan|close account)\b/i;
+  /\b(delete|remove|pay|purchase|buy|checkout|transfer|unsubscribe|close account|cancel (?:my |the |this |your )?(?:order|plan|subscription|booking|reservation|appointment|membership))\b/i;
 
 interface Control {
   /** The element it was last seen as (refs change when the page re-renders). */

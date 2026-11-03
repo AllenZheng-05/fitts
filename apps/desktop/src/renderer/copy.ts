@@ -885,6 +885,24 @@ export const copy = {
     offsite: 'You’re on {host}, not your site. Fitts doesn’t test here.',
     backToSite: 'Back to your site',
     beforeAfter: 'Before / after',
+    /** An Android app's toggle: what the emulator shows (Allen, Nov 2). */
+    phoneToggle: 'What the phone shows',
+    liveApp: 'Live app',
+    fixedVersion: 'Fixed version',
+    /** The site view's label while the emulator shows the run branch. */
+    fixedOnPhone: 'Fixed version · {branch}',
+    phoneState: {
+      live: 'The phone shows the live app.',
+      switching: 'Switching the phone to the fixed version. The first time takes a minute.',
+      imitation: 'Showing the web imitation instead: {why}',
+      webOnly: 'The fixed version is shown as a web imitation. The phone stays on the live app.',
+    },
+    imitationWhy: {
+      'no-emulator': 'no emulator is running.',
+      'dev-client': 'the phone’s app didn’t reopen on the fixed version.',
+      metro: 'the fixed version’s Metro didn’t start.',
+      busy: 'I’m still using the phone for this run.',
+    },
     wheelAsk: 'Take the wheel to use your site?',
     wheelAskBody:
       'Scrolling is always fine. To click or type, take the wheel: I pause while you drive and note what you do, then you hand back.',
@@ -1306,6 +1324,8 @@ export const copy = {
     // SPEC-phase4 §6C.
     modelsPausedNow: 'Paused: waiting for Meta’s models to answer',
     modelsRetrying: 'Checking whether Meta’s models answer now.',
+    /** The audit waits for a read of the code that's under way (its journeys come from it). */
+    stillReading: 'I’m still reading your code. The audit starts as soon as I’m done.',
     modelsNotAnswering:
       'I can’t reach Meta’s models right now, so I haven’t started the audit. I need them to look at your site. Try again in a moment.',
     reviewerUnreadable:

@@ -21,12 +21,15 @@ test.afterAll(async () => {
 });
 
 test('bench:android', async () => {
-  test.setTimeout(40 * 60_000);
+  test.setTimeout(75 * 60_000);
   launched = await launchApp({
     env: {
       FITTS_E2E_PICK_FOLDER: FOLDER,
       FITTS_SITE_PORT: '8081',
       FITTS_CRAWL_BRAIN: 'explorer',
+      // The answer keys are the bench's, never Fitts's to read.
+      FITTS_HIDE_FILES: 'PLANTED.md,prompt.md',
+      FITTS_PHONE_SWITCH: process.env['FITTS_PHONE_SWITCH'] ?? '0',
       FITTS_OFFLINE: '0',
       FITTS_NO_DEV_KEYS: '0',
     },
@@ -45,6 +48,16 @@ test('bench:android', async () => {
     localStorage.setItem('fitts.settings', JSON.stringify(saved));
   }, capUsd);
   await page.reload();
+  // Every site status main sends for the project, the last one kept (read on a failure).
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      fitts: { site: { onStatus(fn: (s: { projectId: string }) => void): void } };
+      __siteStatus?: unknown;
+    };
+    w.fitts.site.onStatus((s) => {
+      if (!s.projectId.includes('.v.')) w.__siteStatus = s;
+    });
+  });
 
   await page.getByRole('button', { name: 'Browse' }).click();
   await expect(page.getByText(/Expo/)).toBeVisible();
@@ -194,4 +207,49 @@ test('bench:android', async () => {
   for (const [, name, want] of key.matchAll(/^\| (\w+) \| (\w+)_\w+ \| sans-serif \|$/gm)) {
     expect(theme, `${name} uses ${want}`).toMatch(new RegExp(`\\b${name}: '${want}_`));
   }
+
+  // The phone switch is off (Allen, Nov 2: the web imitation is the "after"); FITTS_PHONE_SWITCH=1
+  // turns it on, and then this checks it.
+  if (process.env['FITTS_PHONE_SWITCH'] !== '1') return;
+  // Allen, Nov 2: with the fixes checked and Fitts waiting on the owner, the emulator itself
+  // shows the fixed version, labeled in the site view; its screen carries the brand, not stock.
+  await expect(page.getByText(`Fixed version · ${brand?.branch ?? ''}`))
+    .toBeVisible({ timeout: 5 * 60_000 })
+    .catch(async (e: unknown) => {
+      // Why not: the site status main last sent (fixedBranch, phoneFallback).
+      const last = await page.evaluate(
+        () => (window as unknown as { __siteStatus?: unknown }).__siteStatus,
+      );
+      console.log(`Last site status: ${JSON.stringify(last)}`);
+      throw e;
+    });
+  await page.waitForTimeout(3000);
+  const adb = join(
+    process.env['ANDROID_HOME'] ?? join(process.env['LOCALAPPDATA'] ?? '', 'Android', 'Sdk'),
+    'platform-tools',
+    'adb',
+  );
+  const png = execFileSync(adb, ['exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 });
+  writeFileSync(join(out, 'android-fixed.png'), png);
+  const bitmap = await launched.app.evaluate(({ nativeImage }, b64) => {
+    const img = nativeImage.createFromBuffer(Buffer.from(b64, 'base64'));
+    return img.toBitmap().toString('base64');
+  }, png.toString('base64'));
+  const px = Buffer.from(bitmap, 'base64');
+  // Ink and white are all but the same in both themes; every other token is told apart.
+  const pairs = colorRows
+    .map(([row]) => /\| (\w+) \| (#[0-9a-f]{6}) \| (#[0-9A-Fa-f]{6}) \|/i.exec(row))
+    .filter((m): m is RegExpExecArray => Boolean(m) && !/^(ink|ink2|white)$/.test(m?.[1] ?? ''))
+    .map((m) => [rgb((m[2] ?? '').toLowerCase()), rgb((m[3] ?? '').toLowerCase())] as const);
+  let onBrand = 0;
+  let onStock = 0;
+  for (let i = 0; i + 3 < px.length; i += 4 * 7) {
+    // BGRA
+    const c = [px[i + 2] ?? 0, px[i + 1] ?? 0, px[i] ?? 0];
+    const near = (t: number[]) => Math.hypot(...c.map((v, k) => v - (t[k] ?? 0))) <= 12;
+    if (pairs.some(([b]) => near(b))) onBrand++;
+    else if (pairs.some(([, s]) => near(s))) onStock++;
+  }
+  console.log(`Fixed version on the emulator: ${onBrand} brand pixels, ${onStock} stock`);
+  expect(onBrand).toBeGreaterThan(10 * Math.max(1, onStock));
 });

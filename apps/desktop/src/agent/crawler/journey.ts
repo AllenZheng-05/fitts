@@ -136,7 +136,10 @@ export async function runJourney(deps: JourneyDeps, journey: Journey): Promise<J
       return result('failed', 'the page stopped answering');
     }
     route = routeOf(snap.path);
-    const key = `${route}|${snap.title}|${snap.nodes.length}|${snap.headings.join('|')}`;
+    // Field values and control names count as change: filling in a form changes nothing else on
+    // its screen (Nov 2: the Android order journey "stuck" on checkout after typing two fields).
+    const controls = snap.nodes.map((x) => `${x.name}=${x.value ?? ''}`).join('\u0001');
+    const key = `${route}|${snap.title}|${snap.headings.join('|')}|${controls}`;
     unchanged = key === lastKey ? unchanged + 1 : 0;
     lastKey = key;
     if (unchanged >= STUCK_AFTER)

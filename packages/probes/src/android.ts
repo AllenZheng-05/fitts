@@ -16,6 +16,8 @@ export interface AndroidNode {
   focusable: boolean;
   enabled: boolean;
   checked?: boolean;
+  /** A list or page that scrolls (more of it may be below the fold). */
+  scrollable?: boolean;
   children: AndroidNode[];
 }
 

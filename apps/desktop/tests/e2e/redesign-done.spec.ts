@@ -239,3 +239,27 @@ test('Done: the App Map shows every page as a tree; a page opens its drawer', as
   await views.getByRole('button', { name: 'Summary' }).click();
   await expect(stat(page, 'Found')).toContainText('31');
 });
+
+test('Done · Android: Live app / Fixed version says what it shows, works from the keyboard, and passes axe', async () => {
+  const { page } = launched;
+  await loadScenario(page, 'Done · Android');
+  const toggle = page.getByRole('group', { name: 'What the phone shows' }).first();
+  const fixed = toggle.getByRole('button', { name: 'Fixed version' });
+  const liveApp = toggle.getByRole('button', { name: 'Live app' });
+  // After a run, "Fixed version" is the web imitation (Allen, Nov 2), and it says so.
+  await expect(fixed).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page
+      .getByText('The fixed version is shown as a web imitation. The phone stays on the live app.')
+      .first(),
+  ).toBeVisible();
+  // Keyboard only: back from "Fixed version" to "Live app", and Space.
+  await fixed.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(liveApp).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(liveApp).toHaveAttribute('aria-pressed', 'true');
+  await expect(fixed).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByText('The phone shows the live app.').first()).toBeVisible();
+  await expectNoSeriousA11yViolations(page);
+});

@@ -135,6 +135,9 @@ const online = () => Boolean(keys.meta) && process.env['FITTS_OFFLINE'] !== '1';
 const realRuns = new Map<string, RealRun>();
 /** What Fitts understands of each project (SPEC-phase4 §3), once main has asked. */
 const models = new Map<string, { model: AppModel; modeled: boolean }>();
+/** A read of a project's code under way: the audit waits for it, so its journeys are planned. */
+const reading = new Map<string, Promise<void>>();
+const READ_WAIT_MS = 3 * 60_000;
 /** What the owner told Fitts about each project on earlier runs (SPEC-phase4 §4.3), from main. */
 const memories = new Map<string, ProjectMemory>();
 /** The card's "Change the map: " prefix (copy.items.understanding.changePrefill). */
@@ -342,13 +345,14 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
         task: 'fix',
         phase: PHASE_OF.fix,
         provider: 'meta',
-        model: WONDER,
+        model: res.model ?? WONDER,
         contributor,
         inputTokens: res.usage.input,
         cachedTokens: res.usage.cached,
         outputTokens: res.usage.output,
         reasoningTokens: res.usage.reasoning,
-        usd: tokenUsd(WONDER, res.usage),
+        // A name the price table doesn't know is priced as the model Fitts asked for.
+        usd: tokenUsd(res.model ?? WONDER, res.usage) || tokenUsd(WONDER, res.usage),
         latencyMs: 0,
         findingId: opts.findingId,
         priceTable: PRICE_TABLE,
@@ -390,7 +394,11 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
       )
     : new ExplorerBrain();
   // SPEC-phase4 §6.1: journeys see the screenshot each step; without a model, the plan itself.
-  const journeyBrain = useModel
+  // FITTS_CRAWL_BRAIN=explorer (the benches) makes the crawl deterministic, not the journeys: a
+  // plan read literally skips every step it can't match and never places an order (Nov 2: the
+  // Android order status screen, A5 and A8, was never reached). FITTS_JOURNEY_BRAIN=plan forces it.
+  const journeyModel = online() && process.env['FITTS_JOURNEY_BRAIN'] !== 'plan';
+  const journeyBrain = journeyModel
     ? () =>
         new SparkJourneyBrain(
           runCaller,
@@ -861,8 +869,15 @@ function call({ projectId, method, args, brief, lastRunId, settings: set }: Engi
   }
   // SPEC-phase4 §6C: an audit starts only when Meta's models answer; else Fitts says why.
   if (method === 'startAudit' && online()) {
-    void reach.answers('meta').then((ok) => {
+    void reach.answers('meta').then(async (ok) => {
       if (!ok) return engine.note(projectId, copy.fitts.modelsNotAnswering);
+      // Nov 2: Understand's second pass (Muse Code) can take minutes; a run started before it
+      // lands has no App Model, so no journeys. It waits, at most READ_WAIT_MS.
+      const read = reading.get(projectId);
+      if (read) {
+        engine.note(projectId, copy.fitts.stillReading);
+        await Promise.race([read, new Promise((r) => setTimeout(r, READ_WAIT_MS))]);
+      }
       if (startRealAudit(projectId, set)) return;
       // A real run never falls back to Phase 1's scripted audit: it waits for the site.
       engine.note(projectId, copy.fitts.siteNotReady);
@@ -906,9 +921,14 @@ port.on('message', (e: { data: MainMessage }) => {
     if (message.kind === 'call') call(message.call);
     else if (message.kind === 'memory') memories.set(message.projectId, message.memory);
     else if (message.kind === 'understand') {
-      void understandProject(message.ask).catch((e: unknown) =>
+      const id = message.ask.projectId;
+      const read = understandProject(message.ask).catch((e: unknown) =>
         send({ kind: 'error', message: e instanceof Error ? e.message : String(e) }),
       );
+      reading.set(id, read);
+      void read.finally(() => {
+        if (reading.get(id) === read) reading.delete(id);
+      });
     } else if (message.kind === 'keys') {
       for (const k of Object.keys(keys) as KeyName[]) delete keys[k];
       Object.assign(keys, message.keys);

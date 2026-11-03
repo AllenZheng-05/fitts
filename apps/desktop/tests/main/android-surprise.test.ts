@@ -217,3 +217,102 @@ describe('AndroidWindow.ready (fake adb)', () => {
     }
   });
 });
+
+describe('AndroidWindow.screenOf', () => {
+  const win = new AndroidWindow(
+    new Adb(() => Promise.resolve({ code: 0, stdout: Buffer.from(''), stderr: '' })),
+    () => undefined,
+    () => undefined,
+    undefined,
+    {
+      screens: [
+        { route: '/', title: 'Menu' },
+        { route: '/item/:id', title: 'Item details' },
+        { route: '/order/:id', title: 'Your order' },
+      ],
+    },
+  );
+  const xml = (ids: string[], text = '') =>
+    `<?xml version='1.0' ?><hierarchy rotation="0">${node(
+      { bounds: '[0,0][1080,2400]' },
+      [
+        text ? node({ class: 'android.widget.TextView', text, bounds: '[42,175][600,257]' }) : '',
+        ...ids.map((id, i) =>
+          node({ id, clickable: 'true', bounds: `[42,${600 + i * 200}][1038,${760 + i * 200}]` }),
+        ),
+      ].join(''),
+    )}</hierarchy>`;
+
+  it('a header showing content, not the title: the route its testIDs begin with', () => {
+    const root = parseDump(xml(['item-size-small', 'item-size-large', 'item-add'], 'Margherita'));
+    expect(win.screenOf(root).path).toBe('/item/:id');
+    expect(win.screenOf(parseDump(xml(['order-cancel', 'order-pickup-line']))).path).toBe(
+      '/order/:id',
+    );
+  });
+
+  it('one matching testID isn’t enough; the title still wins when it shows', () => {
+    expect(win.screenOf(parseDump(xml(['item-add'], 'Specials'))).path).toBe('/specials');
+    expect(win.screenOf(parseDump(xml(['item-add', 'item-x'], 'Menu'))).path).toBe('/');
+  });
+});
+
+describe('controls below the fold (fake adb)', () => {
+  const screen = (scrolled: boolean) =>
+    `<?xml version='1.0' ?><hierarchy rotation="0">${node(
+      { bounds: '[0,0][1080,2400]' },
+      [
+        node({
+          class: 'android.widget.TextView',
+          text: 'Pickup details',
+          bounds: '[42,175][600,257]',
+        }),
+        `<node text="" resource-id="checkout-scroll" class="android.widget.ScrollView" content-desc="" clickable="false" scrollable="true" enabled="true" focusable="false" bounds="[0,300][1080,2300]">${
+          scrolled
+            ? node({ id: 'checkout-place', clickable: 'true', bounds: '[42,1900][1038,2050]' })
+            : node({
+                id: 'checkout-name',
+                class: 'android.widget.EditText',
+                clickable: 'true',
+                bounds: '[42,400][1038,520]',
+              })
+        }</node>`,
+      ].join(''),
+    )}</hierarchy>`;
+
+  it('a journey sees "Place order" below the fold, and tapping it scrolls it into view', async () => {
+    let scrolled = false;
+    const calls: string[] = [];
+    const run: AdbRunner = (args) => {
+      const s = args.join(' ');
+      if (s.includes('input swipe')) {
+        const [, , , , y1, , y2] = args;
+        scrolled = Number(y1) > Number(y2);
+        calls.push(scrolled ? 'swipe down' : 'swipe up');
+      }
+      if (s.includes('input tap')) calls.push(`tap ${args.slice(-2).join(',')}`);
+      const out = s.startsWith('exec-out uiautomator') ? screen(scrolled) : '';
+      return Promise.resolve({ code: 0, stdout: Buffer.from(out), stderr: '' });
+    };
+    const win = new AndroidWindow(
+      new Adb(run),
+      () => undefined,
+      () => undefined,
+      undefined,
+      {
+        screens: [{ route: '/checkout', title: 'Pickup details' }],
+      },
+    );
+    const snap = await win.snapshot();
+    expect(snap.nodes.map((n) => n.ref)).toEqual(
+      expect.arrayContaining(['checkout-name', 'checkout-place']),
+    );
+    expect(scrolled).toBe(false);
+    // Cached: a second look doesn't swipe again.
+    const before = calls.length;
+    await win.snapshot();
+    expect(calls.length).toBe(before);
+    await win.click('checkout-place', false);
+    expect(calls.slice(before)).toEqual(['swipe down', 'tap 540,1975']);
+  });
+});

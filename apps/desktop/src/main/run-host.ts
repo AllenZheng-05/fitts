@@ -247,12 +247,22 @@ export class RunHost {
     }
   }
 
+  /** A project's run state after each batch of events, with the one before. */
+  onState: ((projectId: string, prev: RunState | undefined, next: RunState) => void) | undefined;
+
+  /** A project's latest run state (main's own copy of what the renderer shows). */
+  state(projectId: string): RunState | undefined {
+    return this.states.get(projectId);
+  }
+
   private onEvents(batch: EngineEvents): void {
     const { projectId, runId, events } = batch;
     if (!SAFE_ID.test(projectId) || !SAFE_ID.test(runId)) return;
-    let state = this.states.get(projectId);
+    const prev = this.states.get(projectId);
+    let state = prev;
     for (const event of events) state = reduce(state, event);
     if (state) this.states.set(projectId, state);
+    if (state) this.onState?.(projectId, prev, state);
 
     const key = `${projectId}/${runId}`;
     let log = this.logs.get(key);

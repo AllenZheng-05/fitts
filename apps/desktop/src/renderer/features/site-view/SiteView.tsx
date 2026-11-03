@@ -241,6 +241,15 @@ export function SiteView({
           {toolbarEnd}
         </div>
         {header}
+        {android && live?.fixedBranch && (
+          // The emulator is on the run branch, not the live app (Allen, Nov 2).
+          <p
+            role="status"
+            className="rounded-row bg-mint-tint px-2.5 py-1.5 text-[13px] font-semibold text-mint-ink"
+          >
+            {format(copy.site.fixedOnPhone, { branch: live.fixedBranch })}
+          </p>
+        )}
         {live?.androidWeb === 'imitation' && (
           <p role="note" className="rounded-row bg-sun-tint px-2.5 py-1.5 text-[13px] text-sun-ink">
             {copy.site.webImitation}

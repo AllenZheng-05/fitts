@@ -143,6 +143,41 @@ describe('runJourney', () => {
     expect(s.performed.length).toBe(3);
   });
 
+  it('filling in a form on one screen is progress, not stuck', async () => {
+    const values: Record<string, string> = {};
+    const fields = ['name', 'phone', 'notes', 'email'];
+    const snap = (): AxSnapshot =>
+      page(
+        '/checkout',
+        fields.map((ref) => ({ ref, role: 'textbox', name: ref, value: values[ref] ?? '' })),
+      );
+    const s = site({});
+    const base = s.deps(
+      scripted([
+        ...fields.map((ref): JourneyAction => ({
+          kind: 'type',
+          ref,
+          name: ref,
+          text: 'x',
+          why: 'Filling',
+        })),
+        { kind: 'goal_met', why: 'Filled in' },
+      ]),
+    );
+    const r = await runJourney(
+      {
+        ...base,
+        snapshot: () => Promise.resolve(snap()),
+        perform: (action) => {
+          if (action.kind === 'type') values[action.ref] = action.text;
+          return Promise.resolve('/checkout');
+        },
+      },
+      { ...journey, start: '/checkout' },
+    );
+    expect(r.status).toBe('done');
+  });
+
   it('skips a ref the page doesn’t have and refuses a destructive control outside the plan', async () => {
     const s = site({
       '/compose': page('/compose', [{ ref: 'del', role: 'button', name: 'Delete conversation' }]),

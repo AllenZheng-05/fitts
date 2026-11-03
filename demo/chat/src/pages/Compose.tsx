@@ -14,22 +14,49 @@ function StepTitle({ step }: { step: number }) {
   );
 }
 
-function useContacts(): Contact[] {
+// The picker says when contacts are loading, failed or empty. These aren't planted issues (the
+// Contacts page's own blank failure is #33), so the bench measures only what PLANTED.md lists.
+function useContacts(): { contacts: Contact[]; state: 'loading' | 'failed' | 'ready' } {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [state, setState] = useState<'loading' | 'failed' | 'ready'>('loading');
   useEffect(() => {
-    void api.contacts().then(setContacts);
+    api
+      .contacts()
+      .then((list) => {
+        // An error answer (a 500 with a JSON body) isn't a list.
+        if (!Array.isArray(list)) return setState('failed');
+        setContacts(list);
+        setState('ready');
+      })
+      .catch(() => setState('failed'));
   }, []);
-  return contacts;
+  return { contacts, state };
 }
 
 /** Step 1: who is it for? */
 export function Compose() {
-  const contacts = useContacts();
+  const { contacts, state } = useContacts();
   const [picked, setPicked] = useState<number | null>(null);
   return (
     <>
       <StepTitle step={1} />
       <span className="muted">Who is it for?</span>
+      {state === 'loading' && (
+        <p role="status" className="muted">
+          Loading your contacts…
+        </p>
+      )}
+      {state === 'failed' && (
+        <p role="alert" className="muted">
+          Your contacts didn’t load. Check your connection, then reload the page.
+        </p>
+      )}
+      {state === 'ready' && contacts.length === 0 && (
+        <p className="muted">
+          You don’t have any contacts yet. Add someone on the <a href="/contacts">Contacts</a> page
+          first.
+        </p>
+      )}
       <div className="chips">
         {contacts.map((c) => (
           <button

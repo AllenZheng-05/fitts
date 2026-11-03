@@ -26,6 +26,8 @@ test('bench:chat', async () => {
       FITTS_E2E_PICK_FOLDER: DEMO,
       FITTS_SITE_PORT: PORT,
       FITTS_CRAWL_BRAIN: 'explorer',
+      // The answer key is the bench's, never Fitts's to read.
+      FITTS_HIDE_FILES: 'PLANTED.md',
       FITTS_OFFLINE: OFFLINE ? '1' : '0',
       FITTS_NO_DEV_KEYS: OFFLINE ? '1' : '0',
     },

@@ -19,7 +19,7 @@ import {
 import type { ProbeItem, SiteInput, SiteRect, SiteStatus } from '@fitts/schema';
 import type { AxSnapshot, HeldRequest, SiteOp, SiteOpResult } from '../../agent/protocol';
 import type { Adb } from './adb';
-import { parseDump, toSnapshot } from './dump';
+import { parseDump, roleOf, toSnapshot } from './dump';
 import { diffDumps, type Dump } from './surprise';
 import { EVENT_SIDE_MS, FrameRing } from '../site/frames';
 
@@ -59,6 +59,8 @@ export const slugify = (s: string) =>
 
 export class AndroidWindow {
   private last: { root: AndroidNode; at: number } | undefined;
+  /** Per screen: the controls below the fold, with the swipes each took (see belowFold). */
+  private readonly below = new Map<string, Map<string, { node: AndroidNode; swipes: number }>>();
   private density = 420;
   private size = { width: 1080, height: 2400 };
   private pending = new Map<string, (allow: boolean) => void>();
@@ -225,10 +227,28 @@ export class AndroidWindow {
       .sort((a, b) => a.bounds.y - b.bounds.y || a.bounds.x - b.bounds.x)
       .map((n) => n.text.trim());
     const title = texts[0] ?? '';
-    const known = this.screen.screens?.find(
-      (s) => s.title && texts.some((t) => t.toLowerCase() === s.title?.toLowerCase()),
-    );
+    const known =
+      this.screen.screens?.find(
+        (s) => s.title && texts.some((t) => t.toLowerCase() === s.title?.toLowerCase()),
+      ) ?? this.byTestIds(root);
     return { path: known?.route ?? `/${slugify(title) || 'screen'}`, title };
+  }
+
+  /**
+   * A screen whose header shows its content (an item's name) rather than its title: the App
+   * Model's route whose first segment begins two or more of the screen's testIDs ("/item/:id"
+   * for item-add and item-size-small). Nov 2: every such screen was "/screen".
+   */
+  private byTestIds(root: AndroidNode): { route: string } | undefined {
+    const ids = flatten(root).map((n) => n.ref);
+    let best: { route: string; n: number } | undefined;
+    for (const s of this.screen.screens ?? []) {
+      const seg = s.route.split('/').find((p) => p && !p.startsWith(':') && !p.startsWith('['));
+      if (!seg) continue;
+      const n = ids.filter((id) => id.startsWith(`${seg}-`)).length;
+      if (n >= 2 && n > (best?.n ?? 0)) best = { route: s.route, n };
+    }
+    return best;
   }
 
   async snapshot(): Promise<AxSnapshot> {
@@ -236,7 +256,80 @@ export class AndroidWindow {
     const screen = this.screenOf(root);
     const appId = this.screen.appId ?? 'app';
     this.onStatus({ url: `android://${appId}${screen.path}` });
-    return toSnapshot(root, screen, appId);
+    const below = await this.belowFold(root, screen.path);
+    return toSnapshot(
+      below.length ? { ...root, children: [...root.children, ...below] } : root,
+      screen,
+      appId,
+    );
+  }
+
+  /**
+   * The controls below the fold of a scrolling screen (checkout's "Place order", the order's
+   * "Cancel order"): a dump shows only what's on screen, so a journey never saw them (Nov 2).
+   * The screen is swiped down up to twice, controls with a testID that weren't showing are
+   * kept (with the swipes it took), and it's swiped back up. Once per screen.
+   */
+  private async belowFold(root: AndroidNode, path: string): Promise<AndroidNode[]> {
+    const cached = this.below.get(path);
+    const showing = new Set(flatten(root).map((n) => n.ref));
+    if (cached) return [...cached.values()].map((b) => b.node).filter((n) => !showing.has(n.ref));
+    const found = new Map<string, { node: AndroidNode; swipes: number }>();
+    this.below.set(path, found);
+    const list = flatten(root)
+      .filter((n) => n.scrollable && n.bounds.h > 400)
+      .sort((a, b) => b.bounds.h - a.bounds.h)[0];
+    if (!list) return [];
+    const x = Math.round(list.bounds.x + list.bounds.w / 2);
+    const from = Math.round(list.bounds.y + list.bounds.h * 0.8);
+    const to = Math.round(list.bounds.y + list.bounds.h * 0.25);
+    // The swipes are Fitts's own input: whatever moves is not a surprise.
+    this.acting();
+    let swipes = 0;
+    for (; swipes < 2;) {
+      await this.adb.swipe(x, from, x, to, 350);
+      swipes += 1;
+      await new Promise((r) => setTimeout(r, 600));
+      const after = parseDump(await this.adb.dump());
+      let fresh = 0;
+      for (const n of flatten(after))
+        if (
+          !/^a\d+$/.test(n.ref) &&
+          !showing.has(n.ref) &&
+          !found.has(n.ref) &&
+          (n.clickable || roleOf(n) === 'textbox')
+        ) {
+          found.set(n.ref, { node: n, swipes });
+          fresh += 1;
+        }
+      if (fresh === 0) break;
+    }
+    for (let i = 0; i <= swipes; i++) await this.adb.swipe(x, to, x, from, 250);
+    await new Promise((r) => setTimeout(r, 500));
+    return [...found.values()].map((b) => b.node);
+  }
+
+  /** A control below the fold, scrolled into view: the node as it is now, or undefined. */
+  private async reveal(ref: string): Promise<AndroidNode | undefined> {
+    const path = this.last ? this.screenOf(this.last.root).path : '';
+    const b = this.below.get(path)?.get(ref);
+    const list = this.last
+      ? flatten(this.last.root)
+          .filter((n) => n.scrollable && n.bounds.h > 400)
+          .sort((a, c) => c.bounds.h - a.bounds.h)[0]
+      : undefined;
+    if (!b || !list) return undefined;
+    const x = Math.round(list.bounds.x + list.bounds.w / 2);
+    for (let i = 0; i < b.swipes; i++)
+      await this.adb.swipe(
+        x,
+        Math.round(list.bounds.y + list.bounds.h * 0.8),
+        x,
+        Math.round(list.bounds.y + list.bounds.h * 0.25),
+        350,
+      );
+    await new Promise((r) => setTimeout(r, 600));
+    return flatten(await this.tree()).find((n) => n.ref === ref);
   }
 
   private find(ref: string): AndroidNode | undefined {
@@ -288,7 +381,10 @@ export class AndroidWindow {
 
   async click(ref: string, destructive: boolean) {
     const before = this.last ? this.screenOf(this.last.root).path : '';
-    const n = this.find(ref) ?? flatten(await this.tree()).find((x) => x.ref === ref);
+    const n =
+      this.find(ref) ??
+      flatten(await this.tree()).find((x) => x.ref === ref) ??
+      (await this.reveal(ref));
     if (!n) throw new Error(`No element ${ref} on ${before}`);
     if (destructive && !(await this.ask(n.text || n.desc || ref)))
       return { path: before, navigated: false };
@@ -300,12 +396,17 @@ export class AndroidWindow {
 
   async type(ref: string, text: string) {
     const before = this.last ? this.screenOf(this.last.root).path : '';
-    const n = this.find(ref) ?? flatten(await this.tree()).find((x) => x.ref === ref);
+    const n =
+      this.find(ref) ??
+      flatten(await this.tree()).find((x) => x.ref === ref) ??
+      (await this.reveal(ref));
     if (!n) throw new Error(`No field ${ref}`);
     this.acting();
     const c = this.center(n);
     await this.adb.tap(c.x, c.y);
     await this.adb.text(text);
+    // The keyboard covers the bottom of the screen (checkout's "Place order"): put it away.
+    if (await this.adb.keyboardShown().catch(() => false)) await this.adb.key('KEYCODE_BACK');
     return this.afterAction(before);
   }
 
