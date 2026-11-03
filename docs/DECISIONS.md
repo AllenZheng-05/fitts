@@ -3770,3 +3770,6 @@ What the bench runs taught:
 - Not changed: a multi-page Vite site without `appType: 'mpa'` serves the home page for unknown
   addresses in dev, so its "refresh breaks it" findings can be the dev server's. The site fixed its
   own dev server; Fitts doesn't change a project's config.
+- **"Don't do it" sticks for the run.** A control the owner refused at the gate, on that page, is
+  never tapped again (p9.bench, Nov 2: a journey whose plan said "Delete conversation" tapped it
+  272 times, one gate per tap, and the run never moved on).

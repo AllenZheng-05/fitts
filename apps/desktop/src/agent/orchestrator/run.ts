@@ -334,6 +334,11 @@ export class RealRun {
   /** The request the gate modal is holding, and the action that sent it (§13). */
   private heldReq: { held: HeldRequest; gateId: string } | undefined;
   private acting: { name: string; route: string } | undefined;
+  /**
+   * Controls the owner said "Don't do it" to, by page and name: never tapped again this run
+   * (p9.bench, Nov 2: a journey whose plan said "Delete conversation" tapped it 272 times).
+   */
+  private readonly refused = new Set<string>();
   private planSaid = false;
   private directions: Direction[] = [];
   /** Theme-fit's reason, the direction picked (§8.3), and the mockups as PNG for the redesigner. */
@@ -1835,6 +1840,8 @@ export class RealRun {
     const h = this.heldReq;
     if (!h || h.gateId !== gateId) return;
     this.heldReq = undefined;
+    const asked = this.state.gate;
+    if (decision !== 'allow' && asked) this.refused.add(`${asked.route}|${asked.action}`);
     void this.deps.site.release(h.held.id, decision === 'allow');
     this.emit([{ type: 'gate.decided', gateId, decision }]);
     this.say(
@@ -2989,6 +2996,11 @@ export class RealRun {
     await new Promise((r) => setTimeout(r, this.deps.actionDelayMs ?? 350));
     // The user took the wheel (or paused) while the action was being shown: don't act.
     if (this.blocked() || this.finished) {
+      this.emit([{ type: 'step.finished', step }]);
+      return;
+    }
+    // The owner already said no to this control on this page: not again.
+    if (action.kind === 'click' && this.refused.has(`${routeOf(from)}|${action.name}`)) {
       this.emit([{ type: 'step.finished', step }]);
       return;
     }

@@ -691,6 +691,24 @@ describe('the permission gate and modes (§13)', () => {
     run.dispose();
   });
 
+  it('after Don’t do it, that control on that page is never tapped again', async () => {
+    const { run, site, state } = setup();
+    let asked = 0;
+    site.onHeld = () => {
+      asked += 1;
+      run.held({ id: `h${asked}`, method: 'DELETE', url: 'http://x/api/items/1' });
+    };
+    run.start();
+    await until(() => Boolean(state()?.gate));
+    run.respondGate(state()?.gate?.id ?? '', 'deny');
+    const step = state()?.step ?? 0;
+    await until(() => (state()?.step ?? 0) > step);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(asked).toBe(1);
+    expect(state()?.gate).toBeUndefined();
+    run.dispose();
+  });
+
   it('Allow once sends it; Dangerous mode on localhost sends it without asking', async () => {
     const allow = setup();
     withGate(allow.run, allow.site);
