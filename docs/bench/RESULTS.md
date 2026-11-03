@@ -20,6 +20,7 @@ ledger; wall time is the run's own.
 | qual-2 | 2026-11-03 10:42 | (e) Fitts Quality | 90df544 | 28/33 | 19/19 | 9/14 | 68% (28/41) | 88% | 4 | $1.79 | 842 s |
 | open-2 | 2026-11-03 10:56 | (f) Fitts Open | deac895 | 27/33 | 19/19 | 8/14 | 71% (27/38) | 87% | 4 | $1.42 | 802 s |
 | nojudge-1 | 2026-11-03 11:11 | (g) Economy, no judge | 2365e70 | 28/33 | 19/19 | 9/14 | 74% (28/38) | 90% | 3 | $0.09 | 939 s |
+| nojudge-2 | 2026-11-03 11:28 | (g) Economy, no judge | bf796c1 | 28/33 | 19/19 | 9/14 | 70% (28/40) | 90% | 3 | $0.08 | 980 s |
 
 ## The held-out app (sealed answer key)
 
@@ -59,3 +60,4 @@ Qualitative: what each arm found.
   the same four as open-1.
 - **nojudge-1.** Missed #6, #14, #15, #18, #25. Without the Wonder judge there's no Rate-us pop-up
   finding (the judge's), so one fewer unplanted; recall is the same as Economy with the judge.
+- **nojudge-2.** The same misses and unplanted findings as nojudge-1.
