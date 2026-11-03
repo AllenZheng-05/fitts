@@ -493,7 +493,8 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
         : {}),
       // SPEC-phase4 §6B.5: the surprise judge (Muse Wonder). Offline tests answer it from the
       // recorded fixture (FITTS_JUDGE_FIXTURE), never the network.
-      ...(online()
+      // FITTS_JUDGE=0 turns it off (the baseline comparison's ablation arm, docs/bench/PLAN.md).
+      ...(online() && process.env['FITTS_JUDGE'] !== '0'
         ? { judge: (input: JudgeInput) => judgeSurprise(runCaller, callCtx(), WONDER, input) }
         : process.env['FITTS_OFFLINE'] === '1' && process.env['FITTS_JUDGE_FIXTURE']
           ? {

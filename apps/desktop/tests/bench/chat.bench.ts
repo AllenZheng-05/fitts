@@ -30,20 +30,24 @@ test('bench:chat', async () => {
       FITTS_HIDE_FILES: 'PLANTED.md',
       FITTS_OFFLINE: OFFLINE ? '1' : '0',
       FITTS_NO_DEV_KEYS: OFFLINE ? '1' : '0',
+      // The baseline comparison's ablation arm (docs/bench/PLAN.md): BENCH_JUDGE=0.
+      FITTS_JUDGE: process.env['BENCH_JUDGE'] ?? '1',
     },
   });
   const { page } = launched;
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Economy (5× Spark), contributor pricing on demo projects, a $2 cap.
-  await page.evaluate(() => {
+  // Economy (5× Spark) unless BENCH_PROFILE says quality or open; contributor pricing on demo
+  // projects; a $2 cap.
+  const profile = process.env['BENCH_PROFILE'] ?? 'economy';
+  await page.evaluate((profile) => {
     const raw = localStorage.getItem('fitts.settings');
     const saved = raw
       ? (JSON.parse(raw) as { state: Record<string, unknown>; version: number })
       : { state: {}, version: 1 };
-    saved.state = { ...saved.state, modelProfile: 'economy', contributorMode: true, capUsd: 2 };
+    saved.state = { ...saved.state, modelProfile: profile, contributorMode: true, capUsd: 2 };
     localStorage.setItem('fitts.settings', JSON.stringify(saved));
-  });
+  }, profile);
   await page.reload();
 
   if (OFFLINE) await page.getByLabel('Meta Model API key').fill('meta-key-12345');
