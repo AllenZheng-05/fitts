@@ -144,8 +144,27 @@ Three jobs, in order: a shareable run report, real open-source apps, the README 
 | #   | Job                                                          | Status                            |
 | --- | ------------------------------------------------------------ | --------------------------------- |
 | E1  | Run report: packages/run-report, the CLI, /runs/ on the site | done                              |
-| E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | picked; runs after the other paid run |
+| E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | on hold until Allen is back       |
 | E3  | README for judges                                            | Wednesday, once the numbers exist |
+
+**Status, Nov 3, ~00:30.**
+- **E2 is on hold** (Allen): the open-source runs wait until he's back and the other session's
+  paid runs are done; one paid run at a time on this machine.
+  - The first TodoMVC run (Nov 2, 20:58) was cut off at 20:59:18 after 4 model calls ($0.24),
+    with no findings saved. The log stops mid-tick with no error, and the other session's next
+    bench started at 20:59:25, so its startup cleanup most likely killed the app. The harness
+    then hung and was stopped. Its findings don't count; the run starts over.
+  - Ready to go: `C:\Users\Plasm\Projects\oss\todomvc-react` (TodoMVC `examples/react` split into
+    its own repo at upstream ff43b02, deps installed). Its `origin` is a local bare repo
+    (`oss\todomvc-react.git`), so even Fitts's dry-run push stays on this machine. The harness
+    is an untracked copy, `apps/desktop/tests/bench/oss.bench.ts` (Economy, autonomous with
+    dry-run PRs, $3 cap); delete it after the runs. Bootstrap v5.3.8 (25aa8cc) gets the same
+    setup, and is cloned only after TodoMVC's run.
+- **E3 revises the other session's README** (56557e3 on main) with the final numbers and links,
+  instead of rewriting it, so the branches merge cleanly. Merge main into `evidence` first. A
+  dry merge (Nov 3) conflicts in two places: README.md (keep main's; carry over only "Try it
+  without keys" → /runs/) and package.json's `test` script (keep main's, add
+  `&& pnpm --filter @fitts/run-report test`).
 
 ## E1 — The run report
 
