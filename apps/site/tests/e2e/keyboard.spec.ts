@@ -1,10 +1,19 @@
 // Full keyboard use: the skip link first, the menu, the loop's steps and the catalog's filters.
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
+/**
+ * Pages render on the client, and `goto` can return before React has: a Tab pressed then focuses
+ * nothing (CI on Linux, Nov 3: the first Tab on /download/ stayed on the body). Wait for the nav.
+ */
+async function open(page: Page, path: string) {
+  await page.goto(path);
+  await expect(page.getByRole('link', { name: 'Skip to content' })).toBeAttached();
+}
+
 test('Tab reaches the skip link first, and it moves to the content', async ({ page }) => {
-  await page.goto('/');
+  await open(page, '/');
   await page.keyboard.press('Tab');
   const skip = page.getByRole('link', { name: 'Skip to content' });
   await expect(skip).toBeFocused();
@@ -15,7 +24,7 @@ test('Tab reaches the skip link first, and it moves to the content', async ({ pa
 
 for (const path of ['/download/', '/checks/'])
   test(`Tab reaches the skip link and the whole nav on ${path}, in order`, async ({ page }) => {
-    await page.goto(path);
+    await open(page, path);
     const names: string[] = [];
     for (let i = 0; i < 7; i++) {
       await page.keyboard.press('Tab');

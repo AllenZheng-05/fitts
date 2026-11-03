@@ -3858,3 +3858,8 @@ What the bench runs taught:
 - **Docs use relative paths (Nov 3).** The repo is public; paths to other folders on the dev
   machine in DECISIONS, NEEDS-ALLEN and PROGRESS are relative to the repo root
   (`../../be-site`, `../AllenZheng`).
+- **Linux CI: the site's keyboard test waits for the page (Nov 3).** The merge's ubuntu run
+  failed one site e2e: on /download/ the first Tab stayed on the body. The site renders on the
+  client and `goto` can return before React has drawn the nav; a Tab then focuses nothing. The
+  two tests that Tab from page load now wait for the skip link first. Not a page bug: a person
+  can't press Tab inside those milliseconds.
