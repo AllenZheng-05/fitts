@@ -44,11 +44,45 @@ Spend cap for this phase: $15 (benches and fixture captures only; tests stay off
     - The $2 cap.
   - Allen's change (Nov 2): an Android app's fixed version shows as its web build at phone width, marked as an imitation. The emulator stays on the live app. demo/basil-ember-android got a web build for it (`bd9f313`).
 
-**Next:** U10, release polish. Then the after-U10 items (a) and (c) if time allows.
+**U10 step 1 (Nov 2, 20:30 CST):** bench:android with `BENCH_ANDROID_FIX=1`, the answer keys
+hidden and journeys on the model:
+- **8/10** planted issues found (A5 and A6 missed), with 6 unplanted findings at severity ≥ 2.
+- 3 of 3 fixes verified. The brand fix scored 12/12 colors close to the key without seeing it.
+- Cost: $2.10 for the audit, $4.23 in all.
+- The order journey placed an order and reached the order status screen, so A8 was found.
+- A5 was missed because "Cancel order" wasn't treated as destructive. That's fixed in `5248cb8`
+  but not re-run yet (one paid run at a time).
+- The emulator "after" switch fell back ("dev-client") and is off. The web imitation is the
+  "after".
+
+**Next:** U10 steps 2–8 (bench:chat, p9.bench, README, spend, release, Muse label), then Allen's
+added work below.
+
+**Status across sessions (Allen, Nov 2 evening):**
+- **Pushed:** `main` through `fb5873a` (the CI fixture fix). fitts.allenzheng.com is live on
+  Cloudflare Pages from `main`. Both Basil & Ember repos are on GitHub with their wiring.
+- **The site session** (worktree `C:/Users/Plasm/Projects/fitts-site`): the redesign is done on
+  `site-redesign` (7 commits). `evidence` (off it) adds packages/run-report and /runs/ (the run
+  report viewable in the browser; written, not yet committed), then the open-source runs
+  (Allen picked Bootstrap's examples and TodoMVC's React app) and the README for judges on
+  Wednesday. Allen merges after U10.
+- **The held-out app:** https://github.com/AllenZheng-05/heldout-app (Loopline Bikes,
+  `8c193cf`, port 5180), built by a separate session that never saw Fitts. 16 planted (8 S1,
+  8 S2) and 3 traps. The key is sealed outside the repo
+  (SHA-256 `61376c3a5dc6ec4dd8c6b097d35dac7231e425affbda8c8bb4d39f510ab33469`). Run Fitts
+  Economy and the axe-only arm blind; never open `../heldout-key` until Allen says.
+- **Baseline comparison:** pre-registered in `docs/bench/PLAN.md` (uncommitted); budget $25;
+  results go in `docs/bench/RESULTS.md`, one run per row.
+- **Replay:** the keyless replay was removed earlier and isn't coming back; the site's /runs/
+  replaces it for judges.
+- **The emulator "after" switch:** one more paid run, then stop if it still fails and keep the
+  web imitation; the video switches branches by hand.
+- **One paid Fitts run at a time:** the machine is short on memory (background shells were
+  killed twice on Nov 2).
 
   Still owed: p9.bench (U6, on purpose).
 
-**Spend (Allen, Nov 2):** Allen has $129 of free Meta credits, so paid runs and paid tests are fine when they give real evidence (the original $15 cap is superseded). About $0.11 spent so far in Phase 4. Plan: the judge, then the bench noise fixes, one paid bench for both, then p9.bench.
+**Spend (Allen, Nov 2):** Allen has $129 of free Meta credits, so paid runs and paid tests are fine when they give real evidence (the original $15 cap is superseded). Phase 4 spend so far is several dollars across the paid benches (bench:android alone at least $3.70); U10 corrects the total from the recorded runs. Plan: the judge, then the bench noise fixes, one paid bench for both, then p9.bench.
 
 **bench:chat, Nov 2 03:57 (paid, alone, Economy, contributor pricing, $2 cap): spent $0.076.** Recall **30/33 (91%)**, missing #15 (a validation error clears the whole form), #18 (three date formats) and #33 (Contacts goes blank when its request fails). Shown 57, plus 5 suggestions. Precision: 30 of 57 shown are planted (**53%** strict). Counting only severity ≥ 2, 30 of 44 (**68%**): 14 unplanted findings at severity ≥ 2, over the bench's bar of 2, so the test fails on that line. The 14:
   - 4 on /help, the planted broken link's 404 page: no lang, landmarks, and sideways scroll counted twice. That page shouldn't be audited as a page.

@@ -4,12 +4,36 @@ These things need you: anything that publishes to GitHub, installs software, use
 speakers or eyes, or spends beyond the session cap. They're in priority order for the
 demo deadline. Each says why, the exact steps, and roughly how long it takes.
 
-You pushed `main` once; everything since (CI fixes, the redesign, release builds without
-stand-ins, device sizes, the test gate, the website) is committed locally and not pushed.
+**Status (Nov 2, evening).** `main` is pushed (through `fb5873a`) and CI's fixture problem is
+fixed. fitts.allenzheng.com is live on Cloudflare Pages from `main`, with the pages.dev address
+redirected and previews behind Cloudflare Access. GitHub sign-in works (Device Flow enabled).
+Both Basil & Ember repos are on GitHub with their wiring, and the held-out app is public at
+https://github.com/AllenZheng-05/heldout-app (answer key sealed outside the repo).
+
+**Left for Allen, in order (deadline Wed Nov 4, 9:00 PM EST; feature freeze Tue Nov 3, 6 PM ET):**
+
+1. **Tell the benchmark session when the held-out key is revealed**, only after its blind Fitts
+   and axe-only runs on the held-out app are recorded. Then add `PLANTED.md` to the heldout-app
+   repo (with `PLANTED.md -text` in `.gitattributes`) and check its SHA-256 matches the README.
+2. **Pick the open-source apps**: done (Bootstrap's examples and TodoMVC's React app). Decide on
+   Wednesday whether to file the drafted upstream issues yourself.
+3. **Merge the site** (`site-redesign`, then `evidence`, or `evidence` alone) into `main` once U10
+   is committed; the commands are in the site branch's SITE-PROGRESS.
+4. **The real portfolio run** (replaces item 2 below): run Fitts on your real portfolio as it is
+   today, review and merge its PR, let it deploy, and screen-record the before, the after and
+   the merged PR.
+5. **Release:** when U10 is committed and CI is green on all three platforms, tag `v0.9.0-beta`
+   (item 5 below). Then install it fresh on Windows.
+6. **A Mac test** (P4-3 and item 7): ask someone with a Mac to install the dmg. Until then the
+   site says macOS is beta.
+7. **Record and submit:** the on-camera shoot, the recorded runs after the freeze, narration,
+   edit (end by 2:55), upload, `links.video`, the run report swap, the final README, and the
+   submission form (GitHub URL, video URL, Indie track, problem statement, "Use of Meta
+   products" with the bonus categories; draft in `docs/SUBMISSION.md`).
 
 # Phase 4 (do these first; they're in priority order)
 
-## P4-0. Push the website's wiring commit, then clone it for the demo run (2 min)
+## P4-0. ✓ Done (Nov 2): the website's wiring commit is pushed and installed in C:/Users/Plasm/be-site
 
 demo/basil-ember is the AI-generated restaurant site (Muse Code, one prompt, untouched; Nov 2).
 Fitts audits it as a standalone project, so the demo run uses a clone outside the monorepo.
@@ -78,7 +102,7 @@ is built against a fake adb and fixture dumps, and the live emulator bench waits
    the dev client on the AVD (takes minutes). Without it Fitts falls back to Expo Go.
 6. Then run the bench: `pnpm bench:android` (spends about $0.50).
 
-## P4-2. Muse Code installed and current (5 min)
+## P4-2. ✓ Done (Nov 1): Muse Code 1.4.14 in WSL, key on stdin
 
 **Why:** installing software. No `muse login` is needed any more: Fitts passes your Meta key on
 stdin with `--api-key-stdin`. Check `muse --version` (native Windows, or inside WSL) is at least
@@ -92,13 +116,13 @@ macOS should show its own prompt ("Fitts listens when you talk to it."), and the
 mint only after you allow it. Blocked, it should say "Microphone blocked" with "Open settings".
 On Windows the same button reads the system setting and opens the mic for a second.
 
-## P4-4. Register the Fitts GitHub App — done (Nov 1)
+## P4-4. ✓ Done: the Fitts GitHub App (Device Flow enabled Nov 2; signed in)
 
 The Client ID (`Iv23liD21TTmPmSLjqPW`) and the app name (`fitts-by-allen`) are in
 `src/main/github/auth.ts`. What's left is yours: Settings › Keys › GitHub › **Sign in with
 GitHub**, then **Choose which repositories Fitts may use**.
 
-## P4-5. Push (2 min)
+## P4-5. ✓ Done (Nov 2): `main` and the demo repos are pushed
 
 `git push origin main`, then the demo mirrors (`pnpm demo:mirror --push`), including the new
 `fitts-demo-android-chat` once U8 has made it.
@@ -107,7 +131,7 @@ GitHub**, then **Choose which repositories Fitts may use**.
 
 # Phase 2 and 3 items
 
-## 1. Push Fitts (2 min) — unblocks CI, the release and the site
+## 1. ✓ Done (Nov 2): Fitts is pushed
 
 ```
 git push origin main
@@ -116,7 +140,7 @@ git push origin main
 CI runs typecheck, lint and unit tests on all three platforms; the CI failures you saw are
 fixed (`2385cdb`).
 
-## 2. The portfolio demo (15 min)
+## 2. Obsolete: the 2007 portfolio demo (replaced by the real portfolio run, item 4 above)
 
 **Why:** it publishes your site. Everything is on local branches in
 `C:\Users\Plasm\Projects\AllenZheng`; `main` is untouched, and `PLAN.md` was left alone.
@@ -140,7 +164,7 @@ For the demo:
    fallback). To get your old design back afterwards: `git revert` the merge, or restore
    `src/themes/default` from `aeab71f`.
 
-## 3. Publish fitts.allenzheng.com (15 min)
+## 3. ✓ Done (Nov 2): fitts.allenzheng.com is live (Cloudflare Pages)
 
 **Why:** it publishes, in your Cloudflare account. The site is `apps/site` (static).
 1. Cloudflare › Workers & Pages › Create › Pages › connect `AllenZheng-05/fitts`.
@@ -152,7 +176,7 @@ For the demo:
 
 The download buttons point at `releases/latest/download/Fitts-Setup.exe` (and
 `Fitts-arm64.dmg`, `Fitts-x64.dmg`, `Fitts.AppImage`), so they work once a release exists (5).
-## Later: the demo mirror repos (optional)
+## Later: the demo mirror repos (✓ basil-ember and basil-ember-android are published)
 
 **Why:** these steps publish to GitHub.
 
@@ -191,7 +215,7 @@ paste it in Settings › Voice & appearance › ElevenLabs voice ID. Listening n
 1. Optional: `pnpm tsx scripts/verify/p11-tts.ts` should print `ok: true` (one short line).
 4. Follow `scripts/voice-check.md`: mic, speakers, barge-in, always listening, fallback.
 
-## 4b. Register the Fitts GitHub App — done (see P4-4)
+## 4b. ✓ Done (see P4-4)
 
 **Why:** Fitts now signs you in to GitHub itself (Settings › Keys › GitHub) instead of quietly
 using `gh`. That needs a GitHub App, which only you can register. Until then Settings says
@@ -238,7 +262,8 @@ CI then builds Windows, macOS and Linux, and publishes them to Releases. Then:
 
 1. Download `Fitts-Setup.exe` from Releases and install it (SmartScreen: More info
    → Run anyway).
-2. Open it, then **Watch a recorded run** (no keys).
+2. Open it. (The recorded-run replay was removed; judges see a real run at
+   fitts.allenzheng.com/runs/ instead.)
 3. Add your key and open the demo/chat clone.
 
 Check that the macOS job's first-launch e2e passed (the hiddenInset title bar, traffic
@@ -259,7 +284,7 @@ lights and ⌘ labels are otherwise unverified).
 **Why:** the macOS UI has only been checked by CI, if that. Install the dmg ("Open Anyway"),
 then check the title bar, the ⌘ shortcuts, mic permission, and a demo run.
 
-## 8. Log Muse Code in inside WSL (5 min) — optional
+## 8. Not needed: Muse Code takes the key on stdin (P4-2)
 
 **Why:** fixes currently run on the in-process fixer fallback, which works: 8 of 9 verified in
 the P9 bench. Muse Code is the spec's primary path, and this session must not pass keys to it.
