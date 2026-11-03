@@ -147,6 +147,14 @@ Three jobs, in order: a shareable run report, real open-source apps, the README 
 | E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | done (Nov 3)                      |
 | E3  | README for judges                                            | Wednesday, once the numbers exist |
 
+**Status, Nov 3, evening. Ready to merge into main.**
+- Main is merged into `evidence` twice: at 5858790 (README is main's, with "Try it without keys";
+  the test script adds the run-report tests), then at 0b86975 (the Phase 4 session's crawl and
+  journey fixes, no conflicts). Main's 7725020 caps repeat taps, Bootstrap's follow-up 1.
+- `pnpm install`, `typecheck`, `lint`, `test` and the site's `test:e2e` (42 tests) all pass.
+- The release is `v0.1.0` (Latest). The site's four `releases/latest/download/` links return
+  200 by hand. The `v0.9.0-beta` tag is on the same commit; its mentions now say v0.1.0.
+
 **Status, Nov 3, afternoon. E2 is done.** Both paid runs ran one at a time, taking turns with the
 Phase 4 session's runs (agreed over messages):
 
@@ -175,7 +183,7 @@ Phase 4 session's runs (agreed over messages):
     with no findings saved. The log stops mid-tick with no error, and the other session's next
     bench started at 20:59:25, so its startup cleanup most likely killed the app. The harness
     then hung and was stopped. Its findings don't count; the run starts over.
-  - Ready to go: `C:\Users\Plasm\Projects\oss\todomvc-react` (TodoMVC `examples/react` split into
+  - Ready to go: `oss/todomvc-react`, a folder beside the repo (TodoMVC `examples/react` split into
     its own repo at upstream ff43b02, deps installed). Its `origin` is a local bare repo
     (`oss\todomvc-react.git`), so even Fitts's dry-run push stays on this machine. The harness
     is an untracked copy, `apps/desktop/tests/bench/oss.bench.ts` (Economy, autonomous with
