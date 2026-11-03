@@ -35,9 +35,13 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # Only launch.spec.ts: through `test:e2e -- <file>` Playwright took the `--` literally and
+      # ran every spec on macOS (Nov 2), so the build and the one spec run directly.
       - name: First-launch e2e on macOS (the macOS-only UI)
         if: matrix.os == 'macos-latest'
-        run: pnpm --filter @fitts/desktop test:e2e -- tests/e2e/launch.spec.ts
+        run: |
+          pnpm --filter @fitts/desktop exec cross-env FITTS_DEV_TOOLS=1 electron-vite build
+          pnpm --filter @fitts/desktop exec playwright test tests/e2e/launch.spec.ts
         env:
           FITTS_OFFLINE: '1'
           FITTS_NO_DEV_KEYS: '1'
