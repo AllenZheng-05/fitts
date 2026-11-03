@@ -31,6 +31,7 @@ const MOBILE_UA =
 import type { AxSnapshot, HeldRequest, OpTrace } from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 import { cleanFrames, selectorFor, SOURCE_CHAIN_FN } from './source-chain';
+import { REFS } from './refs';
 
 /** What "Point at something" picks when the pointer is inside one: a control, as a whole. */
 const CONTROLS =
@@ -41,25 +42,6 @@ const WORLD = 1001;
 /** WCAG 1.4.12's text spacing, as a sheet the page gets in the text-spacing cell. */
 const TEXT_SPACING_CSS =
   '* { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; } p { margin-bottom: 2em !important; }';
-
-/** Assigns `e<n>` to elements without a data-ref/data-testid, stable for the page load. */
-const REFS = `(() => {
-  const w = window;
-  w.__fitts = w.__fitts || { n: 0 };
-  const own = (el) => el.getAttribute('data-ref') || el.getAttribute('data-testid') || el.getAttribute('data-fitts-ref');
-  const refOf = (el) => {
-    const r = own(el);
-    if (r) return r;
-    const id = 'e' + (++w.__fitts.n);
-    el.setAttribute('data-fitts-ref', id);
-    return id;
-  };
-  const find = (ref) => {
-    const q = CSS.escape(ref);
-    return document.querySelector('[data-ref="' + q + '"],[data-testid="' + q + '"],[data-fitts-ref="' + q + '"]');
-  };
-  return { own, refOf, find };
-})()`;
 
 export class SiteWindow {
   readonly win: BrowserWindow;
@@ -1218,14 +1200,17 @@ export class SiteWindow {
     const before = this.path();
     this.noteInput();
     this.focus();
-    const ok = await this.evaluate<boolean>(`
+    const how = await this.evaluate<'set' | 'keys' | null>(`
       const el = F.find(${JSON.stringify(ref)});
-      if (!el) return false;
+      if (!el) return null;
       el.scrollIntoView({ block: 'center' });
       el.focus();
+      if (F.pick(el, ${JSON.stringify(text)})) return 'set';
       if ('select' in el) el.select();
-      return true;`);
-    if (!ok) throw new Error(`No field ${ref} on ${before}`);
+      return 'keys';`);
+    if (!how) throw new Error(`No field ${ref} on ${before}`);
+    // A select or a date, time or month field takes a choice, not keystrokes: F.pick made one.
+    if (how === 'set') return null;
     this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
     this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
     for (const ch of text) {

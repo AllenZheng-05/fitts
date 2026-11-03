@@ -83,7 +83,8 @@ export function formValue(
   if (t === 'number') return '42';
   if (t === 'tel') return '5550100';
   if (t === 'url') return 'https://example.com';
-  if (t === 'date') return '2026-01-15';
+  // The site window picks the date (a week out, each later date field a day after the last).
+  if (t === 'date') return '';
   if (t === 'password') return `${MARKER}-Pass1!`;
   return `${MARKER} ${field.name}`.slice(0, 80);
 }
@@ -182,6 +183,12 @@ export async function runJourney(deps: JourneyDeps, journey: Journey): Promise<J
       ) {
         trace.push(`refused: ${node.name} is destructive and not in the plan`);
         return result('blocked', `the plan would need "${node.name}", which deletes or pays`);
+      }
+      // A journey that needs a payment runs up to it: the control that pays is never tapped,
+      // even when the plan names it.
+      if (action.kind === 'click' && journey.needs?.includes('payment') && PAYS.test(node.name)) {
+        trace.push(`stopped: ${node.name} pays`);
+        return result('blocked', `it got to "${node.name}", and I never pay on a run`);
       }
       if (action.kind === 'type') {
         const match = fieldFor(deps.forms?.(route), node.name);
@@ -357,9 +364,19 @@ export class SparkJourneyBrain implements JourneyBrain {
   }
 }
 
-/** The journeys a run tries, in order: enabled, by priority, 1 and 2 before the crawl, 3 after. */
+/** The control that pays (a checkout button only opens the form, so it isn't one). */
+export const PAYS =
+  /\b(pay|purchase|buy|place (?:my |the |your )?order|complete (?:my |the |your )?(?:order|purchase))\b/i;
+
+/**
+ * The journeys a run tries, in order: enabled, by priority, 1 and 2 before the crawl, 3 after.
+ * One that needs a payment runs up to the control that pays (runJourney stops there); one that
+ * needs a login or an email can't be run.
+ */
 export function journeyOrder(journeys: Journey[]): { first: Journey[]; later: Journey[] } {
-  const on = journeys.filter((j) => j.enabled !== false && !j.needs?.some((n) => n !== 'data'));
+  const on = journeys.filter(
+    (j) => j.enabled !== false && !j.needs?.some((n) => n !== 'data' && n !== 'payment'),
+  );
   const by = (p: Journey['priority']) => on.filter((j) => j.priority === p);
   return { first: [...by(1), ...by(2)], later: by(3) };
 }

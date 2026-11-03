@@ -127,19 +127,28 @@ structural issues. Meta's models add the judgment issues, S2 from 7 to 9 of 14. 
 Quality and the Wonder judge added no recall over Economy. A third Quality run stalled when Meta's
 models stopped answering and is recorded as stopped.
 
-**A held-out app** (Loopline Bikes, 16 planted, 8 S1 and 8 S2, plus 3 traps that look wrong but
-are right), which Fitts was never tuned on. Both runs were made blind and
-committed before the key was revealed, and the key matched the SHA-256 sealed in the app's README:
+**A held-out app it never saw** (Loopline Bikes, a bike-rental site: 16 planted, 8 S1 and 8 S2,
+plus 3 traps that look wrong but are right). Both runs were blind, and their findings were
+committed before the key was revealed; the key matched the SHA-256 sealed in the app's README.
 
 | Approach | Found | S1 | S2 | Traps tripped | Precision | Cost |
 |---|---|---|---|---|---|---|
 | axe alone | 2/16 | 2/8 | 0/8 | 0/3 | 100% (2/2) | free |
 | Fitts Economy | 6/16 | 4/8 | 2/8 | 1/3 | 30% (6/20) | $1.55 |
 
-Fitts found three times what axe did, but most of the judgment issues got past it. The ones
-about the shop's own rules (hourly prices with daily-only booking, "free cancellation" with a
-fee) and the last checkout step were never judged or never reached: the crawl didn't complete a
-booking. It also flagged the skip link (a trap), and 14 of its findings match nothing planted.
+On an app it never saw, Fitts found 6 of 16 against axe's 2: the missing labels and names, the
+removed focus outline, the frame sizes a keyboard can't choose, the faint hint text, the silent
+Save and the promo banner that shifts the grid. What it missed, it mostly never reached: the crawl
+didn't complete a booking, so the checkout's later steps, the confirmation page and the shop's own
+rules (hourly prices with daily-only booking, "free cancellation" with a 50% fee, a kids' bike
+with an adult height minimum) went unchecked. Its date and time fields were typed into instead of
+picked, and the booking journey was skipped because it ends in a payment; both are fixed since.
+
+Precision was low, and the false alarms are Fitts's own. Each of the 14 findings that match
+nothing planted was checked against the running app: 9 are false, including all four at
+severity 4 (a Rent button "opening a different bike", focus "stuck" on Settings), 2 are real but
+unplanted (Back resets the bike filter; a focused button pushed off-screen by the promo banner),
+and 3 are measured right but are style calls. It also flagged the skip link, one of the traps.
 
 **Basil & Ember's Android app, 10 planted:** 9/10 on Economy (Nov 3, $2.49), with 3 unplanted
 findings at severity 2+. On an earlier run Fitts also fixed three findings and checked each fix;

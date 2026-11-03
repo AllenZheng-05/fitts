@@ -3787,3 +3787,20 @@ What the bench runs taught:
   with the budget card up. What's left: a Muse run already going when the cap is reached finishes
   and bills, so a run can still pass its cap by about the cost of the fixes in flight. Stopping
   those mid-run would mean billing Muse's usage while it runs; Fitts reads it once, at the end.
+- **Fields that take a choice, and journeys up to a payment (Nov 3).** Why the held-out run
+  never completed a booking, found from its own log after the key was revealed (nothing was
+  tuned on the app; the fix is generic and validated on Basil & Ember and demo/chat). Two causes:
+  1. The site window typed every field with key presses, so the explorer's "fitts message" went
+     into date inputs and selects and nothing took: the dates step's Continue stayed put. Now a
+     select or a date, time or month input gets a choice the way a person's picker sets it
+     (`F.pick` in `main/site/refs.ts`, through the native setter with input and change events):
+     the option or value the text names, else the first real option (or the next one, if one is
+     already chosen); dates a week out, each later date field a day after the one before (a
+     return after a pickup), within the field's min and max. The journey's form value for a date
+     is left to it (the fixed 2026-01-15 was in the past).
+  2. The App Model planned "Book a bike to rent", but `journeyOrder` dropped every journey that
+     needs a payment. Now such a journey runs up to the control that pays and ends there as
+     blocked ("it got to Pay, and I never pay on a run"), even when its plan names that control:
+     the guarantee is in `runJourney`, not the plan. `PAYS` is narrower than DESTRUCTIVE so a
+     "Checkout" button that opens the form is still tapped. Login and email journeys still don't
+     run.
