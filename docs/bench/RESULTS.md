@@ -13,6 +13,7 @@ ledger; wall time is the run's own.
 | axe-1 | 2026-11-03 09:09 | (a) axe alone | 596f9b2 | 4/33 | 4/19 | 0/14 | 50% (4/8) | 50% (4/8) | 4 | $0 | 66 s |
 | — | — | (b) Lighthouse | — | skipped: not installed, and PLAN.md allows no new install | | | | | | | |
 | probes-1 | 2026-11-03 09:17 | (c) Fitts, probes only | 596f9b2 | 25/33 | 18/19 | 7/14 | 69% (25/36) | 93% | 2 | $0 | 399 s |
+| econ-1 | 2026-11-03 09:30 | (d) Fitts Economy | 46ea654 | 28/33 | 19/19 | 9/14 | 68% (28/41) | 88% | 4 | $0.17 | 787 s |
 
 ## The held-out app (sealed answer key)
 
@@ -35,3 +36,6 @@ Qualitative: what each arm found.
 - **probes-1.** Missed #6, #15, #16, #18, #21, #22, #25 and #33: the ones that need reading the
   page's meaning (jargon, grouping, a missing empty state, dates) or a fault the crawl didn't
   inject. Its two unplanted sev ≥ 2 findings are the 200% text and text-spacing checks.
+- **econ-1.** Missed #6, #14, #15, #18, #25. Unplanted at sev ≥ 2: the 200% text and text-spacing
+  checks, "Search dumps dozens of identical results" (the 20,000-item list, matched to no planted
+  wording), and the Rate-us pop-up finding that the matcher didn't join to #29.

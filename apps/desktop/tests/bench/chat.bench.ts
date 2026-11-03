@@ -128,7 +128,7 @@ test('bench:chat', async () => {
   const sev2 = shown.filter((f) => f.severity >= 2);
   const hit = new Set(s.matched.map((m) => m.finding.id));
   console.log(
-    `BENCH-CHAT profile=${process.env['BENCH_PROFILE'] ?? 'default'} judge=${process.env['BENCH_JUDGE'] ?? '1'} at=${new Date().toISOString()} recall=${s.matched.length}/33 S1=${m1}/19 S2=${s.matched.length - m1}/14 shown=${shown.length} precisionStrict=${(shown.filter((f) => hit.has(f.id)).length / Math.max(1, shown.length)).toFixed(3)} precisionSev2=${(sev2.filter((f) => hit.has(f.id)).length / Math.max(1, sev2.length)).toFixed(3)} unplannedSev2=${s.falsePositives.length} cost=${spent.toFixed(4)} wall=${Math.round((Date.now() - started) / 1000)}s`,
+    `BENCH-CHAT profile=${profile} judge=${process.env['BENCH_JUDGE'] ?? '1'} at=${new Date().toISOString()} recall=${s.matched.length}/33 S1=${m1}/19 S2=${s.matched.length - m1}/14 shown=${shown.length} precisionStrict=${(shown.filter((f) => hit.has(f.id)).length / Math.max(1, shown.length)).toFixed(3)} precisionSev2=${(sev2.filter((f) => hit.has(f.id)).length / Math.max(1, sev2.length)).toFixed(3)} unplannedSev2=${s.falsePositives.length} cost=${spent.toFixed(4)} wall=${Math.round((Date.now() - started) / 1000)}s`,
   );
 
   // Keep the findings for tuning, next to the dev spend log (gitignored).
