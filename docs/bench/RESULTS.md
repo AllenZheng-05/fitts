@@ -17,6 +17,7 @@ ledger; wall time is the run's own.
 | econ-2 | 2026-11-03 09:45 | (d) Fitts Economy | af7561f | 28/33 | 19/19 | 9/14 | 72% (28/39) | 88% | 4 | $0.15 | 845 s |
 | qual-1 | 2026-11-03 10:11 | (e) Fitts Quality | 76aca50 | stopped | | | | | | $1.31 | 1500 s (limit) |
 | open-1 | 2026-11-03 10:28 | (f) Fitts Open | 9d3e22d | 26/33 | 19/19 | 7/14 | 70% (26/37) | 87% | 4 | $1.56 | 1026 s |
+| qual-2 | 2026-11-03 10:42 | (e) Fitts Quality | 90df544 | 28/33 | 19/19 | 9/14 | 68% (28/41) | 88% | 4 | $1.79 | 842 s |
 
 ## The held-out app (sealed answer key)
 
@@ -50,3 +51,5 @@ Qualitative: what each arm found.
   run never reached its findings proposal. Not scored; $1.31 spent.
 - **open-1.** Missed #6, #14, #15, #18, #21, #22, #25. Unplanted: the 200% text and spacing
   checks, the Rate-us pop-up, and "Privacy page shows no settings" (sev 4).
+- **qual-2.** Missed #6, #14, #15, #18, #25, the same five as econ-1. Unplanted: the 200% text and
+  spacing checks, the Rate-us pop-up, and "Same contact tap leads different places" (sev 3).
