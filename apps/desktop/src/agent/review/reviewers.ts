@@ -45,6 +45,8 @@ export interface RouteEvidence {
     dialog?: boolean;
     error?: boolean;
   }[];
+  /** Hours the site states on any page Fitts saw (the About page's), to check times offered here. */
+  siteHours?: string[];
 }
 
 export const stateId = (route: string, n: number) => `${route}#state-${n + 1}`;
@@ -91,12 +93,18 @@ export function reviewInput(ev: RouteEvidence, brief: Brief): string {
       role: n.role,
       name: n.name,
       ...(n.value ? { value: n.value } : {}),
+      ...(n.options?.length ? { options: n.options } : {}),
       ...(n.href ? { href: n.href } : {}),
     })),
   };
   return [
     `Brief: ${JSON.stringify(brief)}`,
     `Route: ${ev.route}`,
+    ...(ev.siteHours?.length
+      ? [
+          `Hours the site states (on its pages): ${JSON.stringify(ev.siteHours)}. Check any times this page offers against them.`,
+        ]
+      : []),
     `Evidence ids you may cite: ${validIds(ev).join(', ')}`,
     `Probes: ${JSON.stringify(probes)}`,
     `What Fitts did here (${traceId(ev.route)}): ${ev.trace.slice(-20).join(' | ') || 'only looked'}`,

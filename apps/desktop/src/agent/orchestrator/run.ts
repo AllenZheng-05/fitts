@@ -2556,6 +2556,11 @@ export class RealRun {
     const reviews = [];
     if (panel) {
       const pages = [...this.pages.values()];
+      // What the site says its hours are, from any page, so a page offering times can be checked.
+      const siteHours = [...new Set(pages.flatMap((p) => p.evidence.snapshot.hours ?? []))].slice(
+        0,
+        10,
+      );
       for (let i = 0; i < pages.length; i += ROUTES_IN_FLIGHT) {
         if (this.finished) return;
         const batch = pages.slice(i, i + ROUTES_IN_FLIGHT);
@@ -2571,6 +2576,7 @@ export class RealRun {
               panel.review(
                 {
                   ...p.evidence,
+                  ...(siteHours.length ? { siteHours } : {}),
                   probes: this.probes.results.filter((r) => r.route === p.evidence.route),
                   observations: this.observations.filter((o) => o.route === p.evidence.route),
                   states: chooseStates(

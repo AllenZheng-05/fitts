@@ -11,6 +11,7 @@ import {
   fieldFor,
   formValue,
   journeyOrder,
+  PAYS,
   runJourney,
   type JourneyAction,
   type JourneyBrain,
@@ -203,12 +204,14 @@ describe('runJourney', () => {
       id: 'book',
       name: 'Book a bike',
       start: '/checkout',
-      steps: ['Tap Checkout', 'Tap Continue', 'Tap Pay $24'],
+      steps: ['Open the cart and check out', 'Tap Continue', 'Tap Pay $24'],
       needs: ['payment'],
     };
     const s = site(
       {
-        '/checkout': page('/checkout', [{ ref: 'go->/details', role: 'button', name: 'Checkout' }]),
+        '/checkout': page('/checkout', [
+          { ref: 'go->/details', role: 'button', name: 'View cart & checkout' },
+        ]),
         '/details': page('/details', [{ ref: 'next->/pay', role: 'button', name: 'Continue' }]),
         '/pay': page('/pay', [{ ref: 'pay', role: 'button', name: 'Pay $24' }]),
       },
@@ -217,7 +220,12 @@ describe('runJourney', () => {
     const r = await runJourney(
       s.deps(
         scripted([
-          { kind: 'click', ref: 'go->/details', name: 'Checkout', why: 'Opening checkout' },
+          {
+            kind: 'click',
+            ref: 'go->/details',
+            name: 'View cart & checkout',
+            why: 'Opening checkout',
+          },
           { kind: 'click', ref: 'next->/pay', name: 'Continue', why: 'Next step' },
           { kind: 'click', ref: 'pay', name: 'Pay $24', why: 'Paying' },
         ]),
@@ -322,6 +330,29 @@ describe('formValue and fieldFor', () => {
     expect(fieldFor(forms, 'Your email address')?.field.type).toBe('email');
     expect(fieldFor(forms, 'Phone')).toBeUndefined();
     expect(fieldFor(undefined, 'Email')).toBeUndefined();
+  });
+});
+
+describe('PAYS', () => {
+  it('names the controls that pay or commit an order, not the ones that open checkout', () => {
+    for (const name of [
+      'Pay $24.00',
+      'Place pickup order',
+      'Place my order',
+      'Complete purchase',
+      'Confirm and pay',
+      'Buy now',
+      'Confirm booking',
+    ])
+      expect(PAYS.test(name), name).toBe(true);
+    for (const name of [
+      'View cart & checkout',
+      'Continue to pickup details',
+      'Checkout',
+      'Order pickup',
+      'Payment options',
+    ])
+      expect(PAYS.test(name), name).toBe(false);
   });
 });
 

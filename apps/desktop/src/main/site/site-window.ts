@@ -1008,6 +1008,7 @@ export class SiteWindow {
           key: keyOf(el, role, name).slice(0, 300),
           ...(el.type ? { type: el.type } : {}),
           ...(el.value !== undefined && el.type !== 'password' && typeof el.value === 'string' && el.value ? { value: el.value.slice(0, 60) } : {}),
+          ...(F.options(el) ? { options: F.options(el) } : {}),
           ...(el.disabled ? { disabled: true } : {}),
           ...(href ? { href } : {}),
           ...(region ? { region: region.tagName.toLowerCase() } : {}),
@@ -1021,6 +1022,7 @@ export class SiteWindow {
         headings: [...document.querySelectorAll('h1,h2,h3')].map(text).filter(Boolean).slice(0, 10),
         nodes,
         hasPassword: !!document.querySelector('input[type=password]'),
+        hours: F.hours(document.body.innerText),
       };`);
   }
 

@@ -29,7 +29,7 @@ test.afterAll(async () => {
 
 test('bench:audit', async () => {
   test.skip(!FOLDER || !BRIEF, 'set BENCH_FOLDER and BENCH_BRIEF');
-  test.setTimeout(30 * 60_000);
+  test.setTimeout(50 * 60_000);
   launched = await launchApp({
     env: {
       FITTS_E2E_PICK_FOLDER: FOLDER,
@@ -124,7 +124,7 @@ test('bench:audit', async () => {
           s.chat.some((c) => c.type === 'state' && c.stateKind === 'nothing-found')
         );
       },
-      { timeout: 25 * 60_000, intervals: [5000] },
+      { timeout: 45 * 60_000, intervals: [5000] },
     )
     .toBe(true);
 

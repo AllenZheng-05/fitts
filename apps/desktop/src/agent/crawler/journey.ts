@@ -176,9 +176,12 @@ export async function runJourney(deps: JourneyDeps, journey: Journey): Promise<J
         history.push(`tried a control that wasn't there`);
         continue;
       }
+      // On the way to a payment, "checkout" only opens the form (the control that pays stops it).
+      const payment = journey.needs?.includes('payment') === true;
+      const risky = payment ? node.name.replace(/\bcheck ?out\b/gi, '') : node.name;
       if (
         action.kind === 'click' &&
-        DESTRUCTIVE.test(node.name) &&
+        DESTRUCTIVE.test(risky) &&
         !journey.steps.some((s) => s.toLowerCase().includes(node.name.toLowerCase()))
       ) {
         trace.push(`refused: ${node.name} is destructive and not in the plan`);
@@ -186,7 +189,7 @@ export async function runJourney(deps: JourneyDeps, journey: Journey): Promise<J
       }
       // A journey that needs a payment runs up to it: the control that pays is never tapped,
       // even when the plan names it.
-      if (action.kind === 'click' && journey.needs?.includes('payment') && PAYS.test(node.name)) {
+      if (action.kind === 'click' && payment && PAYS.test(node.name)) {
         trace.push(`stopped: ${node.name} pays`);
         return result('blocked', `it got to "${node.name}", and I never pay on a run`);
       }
@@ -364,9 +367,9 @@ export class SparkJourneyBrain implements JourneyBrain {
   }
 }
 
-/** The control that pays (a checkout button only opens the form, so it isn't one). */
+/** The control that pays or commits the order ("Place pickup order"; a checkout button only opens the form). */
 export const PAYS =
-  /\b(pay|purchase|buy|place (?:my |the |your )?order|complete (?:my |the |your )?(?:order|purchase))\b/i;
+  /\b(pay|purchase|buy|(?:place|complete|submit|confirm) (?:\w+ ){0,2}(?:order|purchase|booking))\b/i;
 
 /**
  * The journeys a run tries, in order: enabled, by priority, 1 and 2 before the crawl, 3 after.

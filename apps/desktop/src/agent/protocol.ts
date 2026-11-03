@@ -77,6 +77,8 @@ export interface AxNode {
   /** Input type, for fields. */
   type?: string;
   value?: string;
+  /** A select's (or a datalist's) choices, as shown: they're in the DOM without opening the list. */
+  options?: string[];
   disabled?: boolean;
   /** Same-origin link target. */
   href?: string;
@@ -97,6 +99,8 @@ export interface AxSnapshot {
   nodes: AxNode[];
   /** A password field is on the page (login-wall detection). */
   hasPassword: boolean;
+  /** Lines where the page states hours ("Tuesday 4:00 PM – 10:00 PM"), to check times it offers. */
+  hours?: string[];
 }
 
 /** Browser actions the agent asks main to run on a project's site window (§1: RPC). */

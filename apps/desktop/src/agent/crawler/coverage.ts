@@ -16,6 +16,8 @@ interface Control {
   name: string;
   role: string;
   type?: string;
+  /** A same-page anchor link's href. */
+  anchor?: string;
   tried: boolean;
   skipped?: string;
 }
@@ -69,10 +71,32 @@ export const SAME_TEMPLATE_PAGES = 2;
 const isChrome = (n: AxNode) =>
   Boolean(n.href) && (n.region === 'nav' || n.region === 'header' || n.region === 'footer');
 
+/** One control (by route, role and name) is tapped at most this often in a run, whatever its key. */
+export const MAX_SAME_CONTROL = 3;
+
+/** A control's tap count id: its route, role and name (its key, when it has no name). */
+const tapId = (path: string, role: string, name: string, key: string) =>
+  name ? `${routeOf(path)}|${role}|${name}` : `${routeOf(path)}|key|${key}`;
+
+/** A link to a spot on the same page ("#main": a skip link): one try per run is enough. */
+const isAnchor = (n: AxNode, path: string) => {
+  if (!n.href || n.role !== 'link') return false;
+  if (n.href.startsWith('#')) return true;
+  const hash = n.href.indexOf('#');
+  return hash > 0 && routeOf(n.href.slice(0, hash)) === routeOf(path);
+};
+
 export class Coverage {
   private readonly routes = new Map<string, Route>();
   /** A repeated card's controls, tried once anywhere: key → the route they were tried on. */
   private readonly triedCards = new Map<string, string>();
+  /**
+   * Taps per control by route, role and name: a key can change between snapshots (a skip link
+   * whose classes change on focus), and Bootstrap's examples got 991 of 1,000 taps on one.
+   */
+  private readonly taps = new Map<string, number>();
+  /** Same-page anchor links by name and href, tried once anywhere: → the route they were tried on. */
+  private readonly triedAnchors = new Map<string, string>();
 
   constructor(private readonly origin: string) {}
 
@@ -134,18 +158,26 @@ export class Coverage {
         known.ref = n.ref;
         continue;
       }
-      const elsewhere = key.startsWith('card:') ? this.triedCards.get(key) : undefined;
+      const elsewhere = key.startsWith('card:')
+        ? this.triedCards.get(key)
+        : isAnchor(n, path)
+          ? this.triedAnchors.get(`${n.name}|${n.href}`)
+          : undefined;
+      const worn = (this.taps.get(tapId(path, n.role, n.name, key)) ?? 0) >= MAX_SAME_CONTROL;
       route.controls.set(key, {
         ref: n.ref,
         name: n.name,
         role: n.role,
         ...(n.type ? { type: n.type } : {}),
+        ...(isAnchor(n, path) && n.href ? { anchor: n.href } : {}),
         tried: false,
         ...(route.skipped
           ? { skipped: route.skipped }
           : elsewhere
             ? { skipped: `same as on ${elsewhere}` }
-            : {}),
+            : worn
+              ? { skipped: `tapped ${MAX_SAME_CONTROL} times already` }
+              : {}),
       });
     }
   }
@@ -169,6 +201,10 @@ export class Coverage {
     if (!c) return;
     c.tried = true;
     const key = this.routes.get(routeOf(path))?.refs.get(ref);
+    const id = tapId(path, c.role, c.name, key ?? ref);
+    this.taps.set(id, (this.taps.get(id) ?? 0) + 1);
+    if (c.anchor && !this.triedAnchors.has(`${c.name}|${c.anchor}`))
+      this.triedAnchors.set(`${c.name}|${c.anchor}`, routeOf(path));
     if (key?.startsWith('card:') && !this.triedCards.has(key))
       this.triedCards.set(key, routeOf(path));
   }
@@ -178,6 +214,8 @@ export class Coverage {
     const route = this.routes.get(routeOf(path));
     const c = this.control(path, ref);
     if (!route || !c) return;
+    const id = tapId(path, c.role, c.name, route.refs.get(ref) ?? ref);
+    if ((this.taps.get(id) ?? 0) >= MAX_SAME_CONTROL) return;
     c.tried = false;
     if (route.status === 'done') {
       route.status = 'queued';

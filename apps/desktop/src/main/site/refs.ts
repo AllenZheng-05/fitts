@@ -58,5 +58,25 @@ export const REFS = `(() => {
     if (el.max && v > el.max) v = el.max;
     return setValue(el, v);
   };
-  return { own, refOf, find, pick };
+  // A select's (or an input's datalist's) choices as shown, at most 24.
+  const options = (el) => {
+    const list = el.tagName === 'SELECT' ? el.options : el.list ? el.list.options : null;
+    if (!list) return undefined;
+    return [...list].map((o) => (o.label || o.textContent || o.value || '').trim().slice(0, 40)).filter(Boolean).slice(0, 24);
+  };
+  // Lines that state a time range ("Tuesday 4:00 PM – 10:00 PM", "Mon–Fri 09:00-17:30").
+  const TIME = '\\\\d{1,2}(?::\\\\d{2})?\\\\s*(?:[ap]\\\\.?m\\\\.?)?';
+  const RANGE = new RegExp(TIME + '\\\\s*(?:–|—|-|to|until)\\\\s*' + TIME, 'i');
+  const CLOCK = /[ap]\\.?m\\b|\\d:\\d{2}/i;
+  const hours = (text) => {
+    const out = [];
+    for (const raw of String(text).split(/\\n+/)) {
+      const line = raw.replace(/\\s+/g, ' ').trim();
+      if (line.length > 120 || !RANGE.test(line) || !CLOCK.test(line)) continue;
+      if (!out.includes(line)) out.push(line);
+      if (out.length >= 10) break;
+    }
+    return out;
+  };
+  return { own, refOf, find, pick, options, hours };
 })()`;

@@ -3804,3 +3804,24 @@ What the bench runs taught:
      the guarantee is in `runJourney`, not the plan. `PAYS` is narrower than DESTRUCTIVE so a
      "Checkout" button that opens the form is still tapped. Login and email journeys still don't
      run.
+  Validated on Basil & Ember (Nov 3, $0.62): "Reserve a table" (a date with min=today, time and
+  party selects) finished in 6 steps, but "Order pizza for pickup" stopped at "View cart &
+  checkout": DESTRUCTIVE matches "checkout", and the plan's words ("check out") didn't match the
+  button's. On a journey that needs a payment, "checkout" alone no longer counts as destructive
+  (it opens the form); deletes and cancels still do, and the control that pays still stops it.
+  bench:audit waits 45 minutes now (the payment journeys add steps).
+- **The reviewers see a select's choices and the site's stated hours (Nov 3).** Basil & Ember's
+  pickup list (`pickupSlots`) is always now + 30 minutes for two hours, whatever the opening hours
+  (4–10 PM on About), so the video's 2:45 AM and the noon run's 12:15–2:15 PM are the same bug,
+  visible at any hour outside about 3:30–8 PM. The run missed it because the reviewers saw the
+  select's current value, never its options, and on /checkout never saw About's hours. Now a
+  snapshot node carries a select's (or a datalist's) options from the DOM, without opening the
+  list, and every line where the site states a time range ("Tuesday 4:00 PM – 10:00 PM") on any
+  page is given to every reviewer as the hours the site states. The App Model has no hours field;
+  the crawled pages are the evidence. No clock is faked anywhere.
+- **Repeat taps are capped (Nov 3).** Bootstrap's examples got 991 of 1,000 taps on "Skip to main
+  content": a control's key holds its classes and its ancestors', so a control that changes class
+  on focus came back as a new, untried one. Now one control (by route, role and name; by key when
+  it has no name) is tapped at most 3 times a run whatever its key, a retry doesn't untry it past
+  that, and a same-page anchor link ("#main", or the page's own path with a hash) is tried once a
+  run, on the first page that has it.

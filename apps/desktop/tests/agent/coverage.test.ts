@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { Coverage, patternOf } from '../../src/agent/crawler/coverage';
+import { Coverage, MAX_SAME_CONTROL, patternOf } from '../../src/agent/crawler/coverage';
 import type { AxNode, AxSnapshot } from '../../src/agent/protocol';
 
 const snap = (path: string, nodes: AxNode[]): AxSnapshot => ({
@@ -108,5 +108,61 @@ describe('Coverage: routes from the code (SPEC-phase4 §6.2)', () => {
     c.discover('/admin', 'code');
     c.skipRoute('/admin', 'you skipped it');
     expect(c.codeRoutes()[0]).toMatchObject({ path: '/admin', skipped: 'you skipped it' });
+  });
+});
+
+describe('Coverage: repeat taps (Bootstrap examples: 991 of 1,000 taps on one skip link)', () => {
+  it('taps one control at most MAX_SAME_CONTROL times a run, even when its key keeps changing', () => {
+    const c = new Coverage('http://localhost:5173');
+    let taps = 0;
+    for (let i = 0; i < 10; i++) {
+      // A new key each snapshot, as when a control's classes change on focus.
+      c.observe(
+        snap('/', [
+          { ref: `e${i}`, role: 'button', name: 'Show more', key: `button|Show more|k${i}` },
+        ]),
+      );
+      const next = c.untried('/').find((u) => u.name === 'Show more');
+      if (!next) break;
+      c.markTried('/', next.ref);
+      taps++;
+    }
+    expect(taps).toBe(MAX_SAME_CONTROL);
+  });
+
+  it('counts unnamed controls apart (by key), so three icon buttons tapped leave the fourth', () => {
+    const c = new Coverage('http://localhost:5173');
+    const icons = [1, 2, 3, 4].map((i) => ({
+      ref: `i${i}`,
+      role: 'button',
+      name: '',
+      key: `button||icon${i}`,
+    }));
+    c.observe(snap('/', icons));
+    for (const i of [1, 2, 3]) c.markTried('/', `i${i}`);
+    expect(c.untried('/').map((u) => u.ref)).toEqual(['i4']);
+  });
+
+  it('tries a same-page anchor link (a skip link) once a run, not once a page', () => {
+    const c = new Coverage('http://localhost:5173');
+    const skip = (path: string): AxNode => ({
+      ref: `skip${path}`,
+      role: 'link',
+      name: 'Skip to main content',
+      href: '#main',
+      key: `link|Skip|${path}`,
+    });
+    c.observe(snap('/', [skip('/')]));
+    c.markTried('/', 'skip/');
+    c.observe(
+      snap('/settings', [skip('/settings'), { ref: 'save', role: 'button', name: 'Save' }]),
+    );
+    expect(c.untried('/settings').map((u) => u.ref)).toEqual(['save']);
+    // A same-page link written with its path counts too.
+    c.observe(
+      snap('/rentals', [{ ref: 'top', role: 'link', name: 'Back to top', href: '/rentals#top' }]),
+    );
+    c.markTried('/rentals', 'top');
+    expect(c.untried('/rentals')).toEqual([]);
   });
 });

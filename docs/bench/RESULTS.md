@@ -100,6 +100,20 @@ something it didn't do (a Rent tap "opening a different bike", a checkbox "going
 another page); one is the keyboard sweep reporting focus stuck where Tab moves on; one is a
 reviewer judging the Rent button without following it into checkout.
 
+### After the held-out run: the crawl fixes, validated elsewhere
+
+The held-out run never completed a booking (its date and time fields were typed into, and the
+booking journey was dropped because it ends in a payment; DECISIONS, Nov 3). The fixes were
+validated on Basil & Ember and demo/chat only. The held-out app was not rerun, so the blind row
+above stays the result.
+
+| Run id | Date (UTC) | App | Commit | What it checked | Result | Cost |
+|---|---|---|---|---|---|---|
+| be-val-1 | 2026-11-03 17:00 | Basil & Ember web | 5858790 | journeys with dates, selects and a checkout | Reserve a table done (date, time and party picked); Order pizza stopped at "View cart & checkout" (fixed in cdde420); bench wait reached | $0.62 |
+| be-val-2 | 2026-11-03 18:26 | Basil & Ember web | cdde420 | the same, after the checkout fix | Order pizza went through the cart and pickup details to /confirmation, then ran out of actions (15) before calling its goal met; 3 of 5 journeys done; paused at the bench's $2 cap. The pickup times on offer weren't checked (the reviewers never saw the options; fixed next) | $2.26 |
+| chat-val-1 | 2026-11-03 18:43 | demo/chat | cdde420 + PAYS | no regression on the scored app | 28/33 (S1 19/19, S2 9/14), 90% at sev ≥ 2, 3 unplanted | $0.16 |
+| be-val-3 | 2026-11-03 19:27 | Basil & Ember web | 7725020 | the pickup times on offer, with the options and the site's hours given to the reviewers (real clock, $4 cap) | **"Pickup times offered when shop is closed"** (sev 4, /checkout): "offers early-afternoon times like 1:45–3:30 PM even though the site says it opens at 4pm Tue–Thu". Also a suggestion that "All day" contradicts the posted hours. 21 shown, 9 suggestions, 25 pages | $2.19 |
+
 ## Basil & Ember web (no answer key)
 
 Qualitative: what each arm found.
