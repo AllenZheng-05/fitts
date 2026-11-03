@@ -67,9 +67,17 @@ test('bench:audit', async () => {
   await expect(page.getByLabel('Address')).toHaveValue(new RegExp(`localhost:${PORT}`), {
     timeout: 120_000,
   });
-  await page.getByLabel('Message Fitts').fill(BRIEF);
-  await page.getByLabel('Message Fitts').press('Enter');
-  await page.getByRole('button', { name: 'Start the audit' }).click();
+  // The interview can ask follow-ups: BENCH_BRIEF's parts, split on "|", answer them in turn,
+  // then "go ahead" until the Start button shows.
+  const answers = [...BRIEF.split('|').map((a) => a.trim()), "That's all. Go ahead and look."];
+  const start = page.getByRole('button', { name: 'Start the audit' });
+  for (const answer of answers) {
+    if (await start.isVisible()) break;
+    await page.getByLabel('Message Fitts').fill(answer);
+    await page.getByLabel('Message Fitts').press('Enter');
+    await start.waitFor({ timeout: 30_000 }).catch(() => undefined);
+  }
+  await start.click();
 
   const states = () =>
     page.evaluate(async () => {

@@ -30,6 +30,8 @@ SHA-256 is in the app's README.
 
 | Run id | Date (UTC) | Arm | Commit | Findings | Scored after reveal | Cost | Wall |
 |---|---|---|---|---|---|---|---|
+| heldout-fitts-1 | 2026-11-03 11:59 | Fitts Economy (blind) | 9729478 | 20 shown (sev 4: 6, 3: 8, 2: 1, 1: 5) + 4 suggestions, 16 pages | pending the key | $1.55 | 12.1 min |
+| heldout-axe-1 | 2026-11-03 12:01 | axe alone (blind) | 9729478 | 2 (sev 4: 1, 3: 1), on the 15 routes Fitts reached | pending the key | $0 | 123 s |
 
 ## Basil & Ember web (no answer key)
 
@@ -77,3 +79,17 @@ models add the judgment and visual ones (S2: 7 → 9 of 14). On this app the big
 judge didn't add recall over Economy, and the judge cost one extra unplanted finding (the Rate-us
 pop-up, which the matcher doesn't join to #29). Five planted issues no arm found: #6, #14, #15,
 #18 and #25 (Economy found #25 once).
+
+### Notes on the held-out runs
+
+- Both runs were made with the key sealed: `heldout-key/` was never opened, listed or searched.
+  The findings are kept as run output (`.fitts-dev/bench/audit-heldout-app.json`,
+  `axe-heldout.json`) and will be scored against the key, after its SHA-256 is checked, once it's
+  revealed.
+- **heldout-fitts-1.** The brief, answered as an owner would and with nothing from the key: "It's a
+  bike rental shop. People should be able to find a bike and book it quickly, on a phone or a
+  laptop." / "Mostly commuters and tourists, a lot of them on their phones." / "Booking a bike
+  should take a couple of minutes, start to finish." The first try stopped at the interview
+  (it asked a follow-up the bench didn't answer); the bench now answers follow-ups. That try spent
+  nothing.
+- **heldout-axe-1.** The routes Fitts reached, without the `/*` pattern from the App Model.
