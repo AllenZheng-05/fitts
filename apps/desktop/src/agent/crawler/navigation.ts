@@ -25,11 +25,18 @@ export function wrongPlace(click: {
   arrived: string;
   /** The hops the click caused: a redirect to the expected page's own login isn't "wrong". */
   redirects?: string[];
+  /**
+   * The page it was clicked on: a click that stayed there went nowhere, not somewhere wrong (a
+   * click that missed a control that moved; "does nothing visible" covers a dead link).
+   * Basil & Ember, Nov 3: "Hours & directions" "went to" the page it was on.
+   */
+  from?: string;
 }): ProbeItem | null {
   if (!click.expected) return null;
   const want = routeOf(click.expected);
   const got = routeOf(click.arrived);
   if (want === got) return null;
+  if (click.from !== undefined && routeOf(click.from) === got) return null;
   if (LOGIN.test(got) && (click.redirects ?? []).some((h) => routeOf(h) === want)) return null;
   return item(
     click.ref,

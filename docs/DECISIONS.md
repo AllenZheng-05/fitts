@@ -3863,3 +3863,10 @@ What the bench runs taught:
   client and `goto` can return before React has drawn the nav; a Tab then focuses nothing. The
   two tests that Tab from page load now wait for the skip link first. Not a page bug: a person
   can't press Tab inside those milliseconds.
+- **A click that stayed on its page isn't "a link to the wrong page" (Nov 3).** The Basil & Ember
+  validation after the two /reserve fixes (be-val-4) still showed "A link goes to the wrong page"
+  at sev 4: Home's "Hours & directions" (to /about) "went to /*", the page it was clicked on
+  (Basil & Ember's catch-all route renders Home). The first click missed, as the run's own sev-4
+  "A control moves just as you reach for it" on the same page suggests; a second click opened
+  /about. Wrong-place now needs the click to have left its page; a link that goes nowhere is
+  "does nothing visible", and a moved control is its own finding.

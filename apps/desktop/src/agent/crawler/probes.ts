@@ -341,6 +341,7 @@ export class ProbeRunner {
         ...(expected ? { expected: new URL(expected, 'http://x').pathname } : {}),
         arrived,
         redirects: hops,
+        from: route,
       });
       if (w) this.add('navigation', route, [w]);
       if (hops.length) {
