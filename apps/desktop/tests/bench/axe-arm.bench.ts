@@ -69,7 +69,8 @@ test('baseline arm (a): axe alone', async () => {
     );
     const byKey = new Map<string, Finding>();
     for (const vp of VIEWPORTS) {
-      const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+      const page = await context.newPage();
       for (const route of ROUTES) {
         await page.goto(`${base}${route}`);
         // demo/chat's lists load late; give them time, as Fitts's crawl does.
@@ -104,7 +105,7 @@ test('baseline arm (a): axe alone', async () => {
           } as unknown as Finding);
         }
       }
-      await page.close();
+      await context.close();
     }
     await browser.close();
     const findings = [...byKey.values()];

@@ -108,6 +108,7 @@ added work below.
   killed twice on Nov 2).
 
   Still owed: p9.bench (U6, on purpose).
+  **p9.bench, Nov 3 (build of 4566b16, in-process fixer):** failed by its 55-minute wait. 16 fixes queued: 13 fixed and verified on the run branch (each with Undo), the redesign rolled back ("I got stuck going over the same code"), and 3 still in progress at the deadline (one being checked: "Page scrolls sideways on small screens"). One gate, no repeat taps after "Don't do it". The retry, undo and revert-PR steps were not reached. $0.30. Bench timing, not a fix failure: each fix is verified by a recrawl, about 3 minutes apiece.
 
 **Spend (Allen, Nov 2):** Allen has $129 of free Meta credits, so paid runs and paid tests are fine when they give real evidence (the original $15 cap is superseded). **Phase 4 spend, corrected (U10 step 6):** **$28.86 recorded** in `.fitts-dev/agent-spend.ndjson` from U0 (Nov 1, 16:59 CST) through Nov 2, 22:02 CST: muse-wonder-1.0 $17.47, muse-spark-1.3 $11.09 (contributor $0.51 of it), SAM $0.30. That's a floor: **Muse Code's own runs before 12:37 CST Nov 2 weren't recorded.** Fitts didn't read Muse's usage until then (fixed in U9). Those runs include U6–U9's fixes, four bench:android fix phases and every Understand second pass. Meta's billing page has the exact figure. p9.bench, the baseline comparison and the held-out runs come after this. Plan: the judge, then the bench noise fixes, one paid bench for both, then p9.bench.
 
