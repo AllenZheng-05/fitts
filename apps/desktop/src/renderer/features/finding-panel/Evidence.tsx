@@ -69,6 +69,7 @@ export function Evidence({
           viewBox={`${x} ${y} ${w} ${h}`}
           size={shotSize}
           box={box}
+          mask={finding.assets?.mask}
           stroke={stroke}
           label={copy.finding.shotAlt}
           className="h-[340px]"
@@ -81,6 +82,7 @@ export function Evidence({
           viewBox={`0 0 ${shotSize.width} ${shotSize.height}`}
           size={shotSize}
           box={box}
+          mask={finding.assets?.mask}
           stroke={Math.max(3, shotSize.width / 160)}
           label={copy.finding.wholePageAlt}
           className="h-[340px]"
@@ -95,6 +97,7 @@ function Shot({
   viewBox,
   size,
   box,
+  mask,
   stroke,
   label,
   className,
@@ -103,6 +106,8 @@ function Shot({
   viewBox: string;
   size: { width: number; height: number };
   box: { left: number; top: number; width: number; height: number };
+  /** SAM's outline: an SVG in page coordinates, the shot's size (drawn over it, not at the box). */
+  mask?: string | undefined;
   stroke: number;
   label: string;
   className: string;
@@ -128,6 +133,7 @@ function Shot({
       className={`w-full rounded-control border border-ink bg-paper ${className}`}
     >
       <image href={shot} x={0} y={0} width={size.width} height={size.height} />
+      {mask && <image href={mask} x={0} y={0} width={size.width} height={size.height} />}
       <rect
         x={box.left - pad}
         y={box.top - pad}

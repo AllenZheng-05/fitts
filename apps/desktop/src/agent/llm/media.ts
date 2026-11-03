@@ -30,6 +30,28 @@ export interface Box {
 }
 
 /** The outline as a standalone SVG over the shot (stored as an asset, drawn over the shot). */
+/**
+ * SAM's outline in page coordinates. The mask's raster covers only the record's box (`bounds`),
+ * possibly at another resolution, so its path starts at 0,0 there: drawn as is, the outline
+ * sat at the page's top-left (Nov 2, found by the site session). Every point is scaled to the
+ * box and moved to it, so an outline is drawn over the whole shot, like the shot itself.
+ */
+export function placeOutline(
+  path: string,
+  bounds: { left: number; top: number; right: number; bottom: number },
+  raster: { width: number; height: number },
+): string {
+  const sx = (bounds.right - bounds.left) / Math.max(1, raster.width);
+  const sy = (bounds.bottom - bounds.top) / Math.max(1, raster.height);
+  const n = (v: number) => Math.round(v * 100) / 100;
+  return path.replace(
+    /([ML])\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/g,
+    (_, cmd: string, x: string, y: string) =>
+      `${cmd}${n(bounds.left + Number(x) * sx)} ${n(bounds.top + Number(y) * sy)}`,
+  );
+}
+
+/** An outline (page coordinates) as an SVG the size of the shot it's drawn over. */
 export function outlineSvg(path: string, width: number, height: number): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><path d="${path}" fill="rgba(255,111,89,0.18)" stroke="#e5533d" stroke-width="3" stroke-linejoin="round"/></svg>`;
 }
@@ -138,7 +160,7 @@ export class Media {
       const result = await parseImageStream(stream as never).finalResult;
       this.record(ctx, 'sam', SAM_MODEL, SAM_USD_PER_IMAGE, started);
       const mask = recordsOfKind(result.records, 'mask')[0];
-      return mask ? decodeMaskToSVGPath(mask.mask) : null;
+      return mask ? placeOutline(decodeMaskToSVGPath(mask.mask), mask.bounds, mask.mask) : null;
     } catch {
       return null;
     }
