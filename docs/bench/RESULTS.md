@@ -83,8 +83,8 @@ pop-up, which the matcher doesn't join to #29). Five planted issues no arm found
 ### Notes on the held-out runs
 
 - Both runs were made with the key sealed: `heldout-key/` was never opened, listed or searched.
-  The findings are kept as run output (`.fitts-dev/bench/audit-heldout-app.json`,
-  `axe-heldout.json`) and will be scored against the key, after its SHA-256 is checked, once it's
+  The findings are committed as they came out (`docs/bench/heldout/fitts-economy-1.json`,
+  `axe-1.json`), so their commit predates the reveal, and will be scored against the key, after its SHA-256 is checked, once it's
   revealed.
 - **heldout-fitts-1.** The brief, answered as an owner would and with nothing from the key: "It's a
   bike rental shop. People should be able to find a bike and book it quickly, on a phone or a
