@@ -109,7 +109,7 @@ export const META_MODELS = [
   'Muse Spark Open',
 ] as const;
 
-export type PageId = 'home' | 'how' | 'checks' | 'showcase' | 'download' | 'notfound';
+export type PageId = 'home' | 'how' | 'checks' | 'showcase' | 'download' | 'runs' | 'notfound';
 
 export interface PageMeta {
   path: string;
@@ -155,6 +155,13 @@ export const pages: Record<PageId, PageMeta> = {
     title: 'Download Fitts · Fitts',
     description:
       'Download Fitts for Windows, macOS or Linux. What you need, how to get started, what it works with, its known limits, what leaves your computer, and answers to common questions.',
+  },
+  runs: {
+    path: '/runs/',
+    nav: 'Runs',
+    title: 'Real runs · Fitts',
+    description:
+      'Whole Fitts runs as web pages: what it understood, the App Map, every finding with its screen and how to reproduce it, every fix with its evidence, and what each model call cost. No install, no keys.',
   },
   notfound: {
     path: '/404',

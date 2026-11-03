@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { PageHeader, Section } from '../components/Section';
 import { button, card, chip, chipBase, cx, link, size } from '../components/ui';
 import { download } from '../content/download';
+import { runsCopy } from '../content/runs';
 import { builds, flags, links, macBeta } from '../content/site';
 import { detectPlatform } from '../lib/platform';
 
@@ -53,6 +54,12 @@ export function Download() {
             </li>
           ))}
         </ul>
+        <p className="mt-4 leading-relaxed text-ink-2">
+          {runsCopy.noKeyLead}{' '}
+          <a href="/runs/" className={link}>
+            {runsCopy.see}
+          </a>
+        </p>
       </Section>
 
       <Section id="start" title={download.startTitle}>

@@ -7,9 +7,9 @@ while it works.
 
 ## Try it
 
-**Watch a recorded run (no keys needed).** On the Welcome screen, choose **Watch a recorded
-run**. It plays a real run on the demo messaging app at 4× speed: the interview, the crawl,
-findings with outlines and mockups, and verified fixes.
+**Try it without keys.** [See a real run](https://fitts.allenzheng.com/runs/) in your
+browser, with no install and no keys: what Fitts understood, the App Map, every finding with its
+screen and how to reproduce it, and what each model call cost.
 
 **Run it on your own project.** Add a Meta Model API key on Welcome, then choose your
 project's folder. Fitts starts your dev server, interviews you about who the site is for, and

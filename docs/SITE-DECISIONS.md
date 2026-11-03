@@ -172,3 +172,53 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
   them), the keyboard reach finding (doesn't reproduce; tested), the 11 font sizes (the app's type
   scale) and the shapes behind text (the design; the halo keeps contrast). Each is in
   SITE-PROGRESS with the reason.
+
+## Branch `evidence` — E1, the run report
+
+- **A package, not app code.** packages/run-report has no Electron or React; apps/desktop isn't
+  touched on this branch (the U10 session works there). An "Export as web page" item in the
+  app's Done menu is a small follow-up (SITE-PROGRESS, "For the app").
+- **Plain HTML strings, no framework, no scripts.** A report has to open from a zip or any static
+  host and keep working; every value is escaped in one place (`esc`).
+- **One page per run**, with an "On this page" list. 48 findings is long, but a single page is
+  what you send someone, and Ctrl+F works on it.
+- **Screens are inline SVG** (the shot as `<image>`, the outline or box drawn over it): a close
+  up around the element and the whole page, like the app's Evidence tab. Each SVG sits in a
+  clipping frame; without it the zoomed image widened the page at 320 px. Visually hidden text
+  inside the scrolling tables and code had the same effect until those got `position: relative`.
+- **SAM outlines are checked, not trusted.** Path data is validated (only path commands and
+  numbers) before it's inlined, and moved onto its box when it plainly sits in the box's own
+  pixels (the app bug in SITE-PROGRESS). Otherwise the DOM box is drawn.
+- **What "Verified" says** is what pipeline.ts checks: the finding's check ran again on the fix
+  branch's dev server and the finding is gone, no new problems at severity 2+ appeared, and the
+  project's tests and CI, where it has them, passed. "Checked by review" says it wasn't measured.
+  Rollbacks quote Fitts's reason.
+- **The repro's device is the run's own word** ("desktop"), not a device cell's label: matching
+  it to a cell showed "1440×900" beside an environment of 1536×960.
+- **Model names** come from the ledger's ids (words.ts); an unknown id shows as itself. Muse
+  Code's calls are logged as muse-wonder-1.0 with task "fix", so the report says "Muse Wonder
+  1.0 · writing fixes" rather than guessing which path ran.
+- **No chat transcript.** It isn't asked for, and it's where voice transcripts and anything the
+  owner typed would be. The brief (one paragraph the owner wrote for the run) is shown.
+- **A scrubbed route can look wrong**: a site route like `/home/<x>/<y>` would read as "[local
+  path]". Erring that way is the safe side.
+- **Tokens are a copy** (packages/run-report/src/tokens.css), held to the app's by a test, like
+  the site's; a second test keeps hex colors, rgb() and raw radii and shadows out of report.css.
+- **On the site** a published export gets a thin bar (the mark, "All runs") and may be indexed; a
+  plain export says `noindex`. The site has no "For judges" section, so the README's (E3) gets
+  that link; Home and Showcase link now.
+- **The featured run is the demo/chat run until Wednesday**, labeled "Our test app, planted
+  issues" everywhere it shows. "See a real run" still holds: real models on a real (planted) app,
+  and the report says the run ended before any fixes were approved.
+- **runs.json is written by the CLI**, never by hand; a unit test fails if it and the folders in
+  public/runs disagree.
+- **"Try it without keys" is /runs/** (Allen): the replay feature no longer exists. On the site
+  it sits on Download under What you need, where the Meta key is listed; Home and Showcase link
+  the featured run directly.
+- **Landmarks** (axe, on the published page): the site bar is a labelled <nav> ("Fitts site"), not a
+  second <header>; the brief's caption is a paragraph (a <footer> in a blockquote counts as a
+  page footer); each scrolling table region has its own name, apart from its section's heading.
+- **runs.json is imported `with { type: 'json' }`** so Playwright (plain Node ESM) can load the
+  content module the e2e tests share with the pages.
+- **A git-ignored fixture** (`apps/desktop/tests/fixtures/repos/next-app/.env.local`, a
+  placeholder the understand test expects) doesn't come with a worktree; it was copied in locally, not committed.

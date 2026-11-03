@@ -136,3 +136,124 @@ them in Fitts's own words.
 - Vite projects whose config doesn't set `appType: 'mpa'` serve the home page for unknown
   addresses in dev, so a multi-page Vite site's "refresh breaks it" findings can be the dev
   server's, not the site's.
+
+# Branch `evidence` (off site-redesign)
+
+Three jobs, in order: a shareable run report, real open-source apps, the README for judges.
+
+| #   | Job                                                          | Status                            |
+| --- | ------------------------------------------------------------ | --------------------------------- |
+| E1  | Run report: packages/run-report, the CLI, /runs/ on the site | done                              |
+| E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | picked; runs after the other paid run |
+| E3  | README for judges                                            | Wednesday, once the numbers exist |
+
+## E1 — The run report
+
+- **packages/run-report** reads a run folder (events.ndjson, shots/, assets/) through the shared
+  reducer (`replay` from @fitts/schema) and writes a static folder: index.html, report.css (the
+  app's tokens plus the report's styles), the three fonts, the screens it shows, and meta.json.
+  No scripts, nothing loaded from outside the folder.
+- **What it shows**: a summary (found, fixed and verified, rolled back, spent, the math line, the
+  owner's brief); what Fitts understood (the App Model summary and commit, journeys, the screens
+  checked); the App Map as a static tree (each page's features, its findings linked, what was
+  fixed); every shown finding with its screen and outline (close up and whole page), who flagged
+  it, the Noticed lines that led to it, the evidence, the repro (start, steps with step shots,
+  expected, actual, environment, WCAG, "Replayed and seen again"), the generated Playwright test,
+  and the fix (Verified / Checked by review / Rolled back, with the evidence, attempts, branch,
+  PR and diff); suggestions and "You said this is fine" separately; which models did what; and
+  the cost of every model call.
+- **Privacy**: every string goes through one scrubber (keys and tokens of the providers Fitts
+  touches, labelled secrets, opaque key-like strings, absolute paths on Windows, macOS and Linux,
+  file: URLs). Only the project's name, framework and brief are read from project.json (it also
+  holds the folder path and could hold a saved login). The chat transcript isn't in the report.
+  After writing, the folder is scanned again; any hit deletes the folder and fails the export.
+  Tests plant keys, a saved login and paths in the brief, a diff, the Playwright test, a rollback
+  reason, an observation, the chat and project.json, then scan every output file
+  (packages/run-report/tests/export.test.ts). The site's unit tests scan every published run
+  again (apps/site/tests/unit/runs.test.ts). Screenshots are images and can't be scanned: a key
+  visible on the page itself would show.
+- **CLI**:
+  - `pnpm --filter @fitts/run-report export <run dir> <out dir> [--label "…"]`
+  - `pnpm --filter @fitts/run-report site (<run dir> | --latest <project id>) --id <id> [--label "…"] [--featured]`
+    exports into apps/site/public/runs/<id>/ and updates apps/site/src/content/runs.json.
+- **Built against** the paid `bench:chat` run of Nov 2 (~06:55 CST, $0.193, recall 29/33),
+  copied from its e2e temp profile into `.fitts-dev/runs/demo-chat/` (git-ignored, laid out like
+  Fitts's data folder so the App Model and project name are found). It stopped before fixes, so
+  the fix sections were also checked against Allen's Nov 1 portfolio run, exported to a scratch
+  folder only (5 verified, 4 rolled back, a redesign, real diffs). That one isn't published.
+- **On the site**: /runs/ lists published runs; /runs/demo-chat-nov-2/ is the export, labeled
+  "Our test app, planted issues", with a bar back to the site. Home (beside the GitHub button)
+  and Showcase link to the featured run: "See a real run. No install, no keys." The dev and
+  preview servers serve run folders like Cloudflare Pages (308 to the slash; unknown ids 404),
+  and the sitemap lists them. E2E: /runs/ and each run at 1440, 390 and 320 px, axe clean, no
+  sideways scroll, no request outside the run's folder; links back; the redirect and the 404.
+- **Wednesday's swap, one command** (after Allen records the Basil & Ember run on Tuesday):
+
+  ```
+  pnpm --filter @fitts/run-report site --latest basil-ember --id basil-ember --label "Real AI-built site, untouched" --featured
+  ```
+
+  `--latest` takes the project's newest run from Fitts's data folder (%APPDATA%\Fitts on
+  Windows). Then `pnpm --filter @fitts/site test && pnpm --filter @fitts/site test:e2e`, look at
+  /runs/basil-ember/ once, and commit. The demo run stays listed. If the project id isn't
+  `basil-ember`, the folder names are under %APPDATA%\Fitts\projects\.
+
+### For the app (found while building the report; not changed here, apps/desktop is off limits)
+
+- **SAM outlines are saved in the box's own pixels.** Every mask in the Nov 2 run starts at 0,0
+  with the box's size (f4: the box is at 571,126; the outline spans 0–80 × 0–32), so
+  `outlineSvg` draws it at the page's top-left. The Finding panel hides this because it draws
+  the DOM box when there is one and the mask only when there isn't. The report moves an outline
+  onto its box when it fits the box but sits at the corner (`outlinePath`, tested). The fix in
+  the app: offset `decodeMaskToSVGPath`'s path by the prompt box (or the mask's own origin).
+- **"Export as web page"** in the Done screen's menu is a small follow-up: call `exportRun` from
+  main with the run folder and a folder the user picks.
+- **The bundled replay is gone** (removed in "Walkthrough feedback, round 1"). Allen: "Try it
+  without keys" points at /runs/, not a replay. The README's Try it section now does, and
+  Download links to /runs/ under What you need ("No key yet? See a real run."), with an e2e check.
+
+## E2 — Open-source apps: candidates for Allen
+
+Checked Nov 2, 2026 (GitHub API for stars, license and last push; each repo's CONTRIBUTING and
+AI-related files read for an AI policy). **No paid run until Allen picks two.**
+
+1. **Bootstrap's examples** (twbs/bootstrap, the docs site's examples: checkout, sign-in,
+   sign-up, dashboard and more).
+   - 175k stars, MIT, pushed Nov 2, 2026 (v6 alpha on `main`, v5 on `v5-dev`).
+   - One dev server: `npm start` (watch + Astro on port 9001). No secrets or accounts. The
+     install is heavy (the whole docs toolchain).
+   - Real forms (checkout with validation, sign-in), but static demos: submitting does nothing
+     by design.
+   - AI policy: no ban. `.github/CONTRIBUTING.md` has no AI rule. The repo ships `AGENTS.md`,
+     "Guidance for AI coding agents working in this repository", which asks for "ASD-STE100
+     Simplified Technical English for all prose: … commit messages, and PR text" and "PR
+     descriptions: direct bulleted lists, minimal fluff". Bug reports: "isolate the problem",
+     check against the latest `main`, "a live example".
+2. **TodoMVC's React app** (tastejs/todomvc, `examples/react`).
+   - 29k stars, MIT ("Everything in this repo is MIT License unless otherwise specified"); repo
+     pushed Jun 6, 2026, examples/react last changed May 3, 2026.
+   - One dev server: `npm install && npm run dev` in examples/react. localStorage, no backend.
+   - One input and a list: add, edit (double-click), toggle, filter, clear completed. Real
+     flows, thin forms.
+   - AI policy: no ban. `contributing.md`: "We're happy to accept contributions in the form of
+     new apps, bug fixes, issues and so on." Nothing on AI.
+3. **RealWorld Conduit, Angular** (realworld-apps/angular-realworld-example-app). The React
+   Conduit (gothinkster/react-redux-realworld-example-app) is archived.
+   - 5.6k stars, MIT, pushed Nov 2, 2026.
+   - **Fails "no external accounts", strictly.** One dev server (`bun run setup && bun run
+     start`, needs Bun), but it talks to the public demo API (api.realworld.show): signing up,
+     posting and commenting write to a shared public server and need an account there. Logged
+     out it's a read-only blog.
+   - The richest flows: sign up, sign in, settings, editor, comments, follow, favorite, pages.
+   - AI policy: no CONTRIBUTING in the repo and no AI rule; the org's realworld-apps/realworld
+     CONTRIBUTING has none either. Both repos ship a `CLAUDE.md`.
+
+**Allen's pick (Nov 2): Bootstrap's examples and TodoMVC's React app**, not RealWorld (it writes
+to a shared public API). Runs start only once the other session's paid run has ended and memory
+has room.
+
+**My recommendation was the same: Bootstrap's examples and TodoMVC's React app.** Both meet every criterion
+as written. Conduit has the best flows, but only with an account on a public server, and Fitts
+would be writing test content there (its gate holds writes, so the logged-in half would mostly go
+untested). If Allen wants Conduit anyway, I'd run it logged out and say so in the report. For
+Bootstrap I'd clone at the latest v5 tag (what people use) unless Allen prefers v6 `main`.

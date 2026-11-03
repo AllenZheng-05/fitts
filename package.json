@@ -14,7 +14,7 @@
     "typecheck": "pnpm -r typecheck && tsc --noEmit -p scripts",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "test": "pnpm --filter @fitts/desktop test && pnpm --filter @fitts/vite-plugin test && pnpm --filter @fitts/probes test && pnpm --filter @fitts/styles test",
+    "test": "pnpm --filter @fitts/desktop test && pnpm --filter @fitts/vite-plugin test && pnpm --filter @fitts/probes test && pnpm --filter @fitts/styles test && pnpm --filter @fitts/run-report test",
     "test:e2e": "pnpm --filter @fitts/desktop test:e2e",
     "bench:chat": "pnpm --filter @fitts/desktop bench:chat",
     "bench:android": "pnpm --filter @fitts/desktop bench:android",

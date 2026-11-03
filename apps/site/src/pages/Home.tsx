@@ -1,8 +1,9 @@
-import { ArrowRight, Download, Play } from 'lucide-react';
+import { ArrowRight, Download, FileSearch, Play } from 'lucide-react';
 import { useState } from 'react';
 import { FittsMark, GitHubMark } from '../components/brand';
 import { button, card, chip, chipBase, cx, link, size } from '../components/ui';
 import { home } from '../content/home';
+import { featuredRun, runPath, runsCopy } from '../content/runs';
 import { links, macBeta, flags, pages, platforms } from '../content/site';
 import { detectPlatform } from '../lib/platform';
 
@@ -102,10 +103,18 @@ function Hero() {
           {home.phone}
         </p>
       )}
-      <a href={links.github} className={cx(button.secondary, size.md, 'mt-8')}>
-        <GitHubMark />
-        {home.github}
-      </a>
+      <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+        {featuredRun && (
+          <a href={runPath(featuredRun.id)} className={cx(button.dark, size.md)}>
+            <FileSearch size={18} aria-hidden="true" />
+            {runsCopy.see}
+          </a>
+        )}
+        <a href={links.github} className={cx(button.secondary, size.md)}>
+          <GitHubMark />
+          {home.github}
+        </a>
+      </div>
     </section>
   );
 }

@@ -76,6 +76,7 @@ export default tseslint.config(
       'apps/desktop/tests/agent/**',
       'apps/desktop/src/agent/**',
       'scripts/**',
+      'packages/run-report/**',
     ],
     languageOptions: { globals: globals.node },
   },

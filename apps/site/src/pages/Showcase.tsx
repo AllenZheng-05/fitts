@@ -1,7 +1,9 @@
 import { BeforeAfter } from '../components/BeforeAfter';
 import { Clip, HonestyLabel } from '../components/Clip';
 import { PageHeader, Section } from '../components/Section';
-import { card, cx, link } from '../components/ui';
+import { button, card, cx, link, size } from '../components/ui';
+import { featuredRun, runPath, runsCopy } from '../content/runs';
+import { HONESTY, type Honesty } from '../media';
 import { showcase } from '../content/showcase';
 import { PORTFOLIO, SHOWCASE_MEDIA } from '../media';
 
@@ -25,6 +27,8 @@ export function Showcase() {
         </ul>
       </section>
 
+      <RealRun />
+
       <Portfolio />
 
       <section aria-label={showcase.title} className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
@@ -42,6 +46,34 @@ export function Showcase() {
         </ul>
       </section>
     </>
+  );
+}
+
+/** The featured run's report: the whole run, not a clip. */
+function RealRun() {
+  const run = featuredRun;
+  if (!run) return null;
+  const honesty = (Object.keys(HONESTY) as Honesty[]).find((h) => HONESTY[h] === run.label);
+  return (
+    <section aria-labelledby="real-run-title" className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
+      <div className={cx(card, 'flex flex-col gap-3 p-5 sm:p-6')}>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 id="real-run-title" className="font-display text-2xl font-bold">
+            {runsCopy.see}
+          </h2>
+          <HonestyLabel honesty={honesty} />
+        </div>
+        <p className="max-w-3xl leading-relaxed text-ink-2">{runsCopy.lead}</p>
+        <div className="flex flex-wrap gap-3">
+          <a href={runPath(run.id)} className={cx(button.primary, size.md)}>
+            {runsCopy.open}
+          </a>
+          <a href="/runs/" className={cx(button.secondary, size.md)}>
+            {runsCopy.listTitle}
+          </a>
+        </div>
+      </div>
+    </section>
   );
 }
 

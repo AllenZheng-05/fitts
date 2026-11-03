@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Connect, type Plugin } from 'vite';
+import { published } from './src/content/runs';
 import { pages, SITE_URL, type PageId } from './src/content/site';
 
 const root = import.meta.dirname;
@@ -15,6 +16,7 @@ const HTML: Record<PageId, string> = {
   checks: 'checks/index.html',
   showcase: 'showcase/index.html',
   download: 'download/index.html',
+  runs: 'runs/index.html',
   notfound: '404.html',
 };
 
@@ -72,7 +74,8 @@ function pageMeta(): Plugin {
     generateBundle() {
       const urls = (Object.keys(HTML) as PageId[])
         .filter((id) => id !== 'notfound' && existsSync(resolve(root, HTML[id])))
-        .map((id) => `  <url><loc>${SITE_URL}${pages[id].path}</loc></url>`);
+        .map((id) => `  <url><loc>${SITE_URL}${pages[id].path}</loc></url>`)
+        .concat(published.runs.map((r) => `  <url><loc>${SITE_URL}/runs/${r.id}/</loc></url>`));
       this.emitFile({
         type: 'asset',
         fileName: 'sitemap.xml',
@@ -93,6 +96,21 @@ function pagesLikeCloudflare(): Plugin {
     (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
       const url = new URL(req.url ?? '/', 'http://localhost');
       const path = url.pathname;
+      // A published run (public/runs/<id>/, a static export): its folder address serves its page.
+      const run = /^\/runs\/([a-z0-9-]+)(\/?)$/.exec(path);
+      if (
+        run &&
+        existsSync(resolve(root, built ? 'dist' : 'public', 'runs', run[1] ?? '', 'index.html'))
+      ) {
+        if (!run[2]) {
+          res.statusCode = 308;
+          res.setHeader('Location', `${path}/${url.search}`);
+          res.end();
+          return;
+        }
+        req.url = `${path}index.html`;
+        return next();
+      }
       if (PAGE_DIRS.includes(path)) {
         res.statusCode = 308;
         res.setHeader('Location', `${path}/${url.search}`);
