@@ -18,6 +18,7 @@ ledger; wall time is the run's own.
 | qual-1 | 2026-11-03 10:11 | (e) Fitts Quality | 76aca50 | stopped | | | | | | $1.31 | 1500 s (limit) |
 | open-1 | 2026-11-03 10:28 | (f) Fitts Open | 9d3e22d | 26/33 | 19/19 | 7/14 | 70% (26/37) | 87% | 4 | $1.56 | 1026 s |
 | qual-2 | 2026-11-03 10:42 | (e) Fitts Quality | 90df544 | 28/33 | 19/19 | 9/14 | 68% (28/41) | 88% | 4 | $1.79 | 842 s |
+| qual-3 | 2026-11-03 11:45 | (e) Fitts Quality | f5099c9 | 28/33 | 19/19 | 9/14 | 67% (28/42) | 85% | 5 | $1.84 | 980 s |
 | open-2 | 2026-11-03 10:56 | (f) Fitts Open | deac895 | 27/33 | 19/19 | 8/14 | 71% (27/38) | 87% | 4 | $1.42 | 802 s |
 | nojudge-1 | 2026-11-03 11:11 | (g) Economy, no judge | 2365e70 | 28/33 | 19/19 | 9/14 | 74% (28/38) | 90% | 3 | $0.09 | 939 s |
 | nojudge-2 | 2026-11-03 11:28 | (g) Economy, no judge | bf796c1 | 28/33 | 19/19 | 9/14 | 70% (28/40) | 90% | 3 | $0.08 | 980 s |
@@ -61,3 +62,18 @@ Qualitative: what each arm found.
 - **nojudge-1.** Missed #6, #14, #15, #18, #25. Without the Wonder judge there's no Rate-us pop-up
   finding (the judge's), so one fewer unplanted; recall is the same as Economy with the judge.
 - **nojudge-2.** The same misses and unplanted findings as nojudge-1.
+- **qual-3.** Missed #6, #14, #15, #18, #25. Unplanted: the 200% text and spacing checks, the
+  Rate-us pop-up, "Tapping contacts does nothing" and "Empty conversation shows blank page".
+
+### Summary (demo/chat)
+
+axe alone: 4/33 (S1 4/19, S2 0/14) · Fitts probes only: 25/33 (S1 18/19, S2 7/14), free ·
+Fitts Economy: 28/33 both runs (S1 19/19, S2 9/14), $0.15–0.17 · Quality: 28/33 both scored runs,
+$1.79–1.84 (one more run stopped on unreachable models) · Open: 26–27/33, $1.42–1.56 · Economy
+without the judge: 28/33 both runs, $0.08–0.09. Paid baseline spend: $8.41 of the $25 budget.
+
+What it says: Fitts's deterministic probes carry the structural issues (S1) almost alone; the
+models add the judgment and visual ones (S2: 7 → 9 of 14). On this app the bigger models and the
+judge didn't add recall over Economy, and the judge cost one extra unplanted finding (the Rate-us
+pop-up, which the matcher doesn't join to #29). Five planted issues no arm found: #6, #14, #15,
+#18 and #25 (Economy found #25 once).
