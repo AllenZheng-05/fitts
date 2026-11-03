@@ -11,6 +11,7 @@ import {
   fieldFor,
   formValue,
   journeyOrder,
+  PAYS,
   runJourney,
   type JourneyAction,
   type JourneyBrain,
@@ -329,6 +330,29 @@ describe('formValue and fieldFor', () => {
     expect(fieldFor(forms, 'Your email address')?.field.type).toBe('email');
     expect(fieldFor(forms, 'Phone')).toBeUndefined();
     expect(fieldFor(undefined, 'Email')).toBeUndefined();
+  });
+});
+
+describe('PAYS', () => {
+  it('names the controls that pay or commit an order, not the ones that open checkout', () => {
+    for (const name of [
+      'Pay $24.00',
+      'Place pickup order',
+      'Place my order',
+      'Complete purchase',
+      'Confirm and pay',
+      'Buy now',
+      'Confirm booking',
+    ])
+      expect(PAYS.test(name), name).toBe(true);
+    for (const name of [
+      'View cart & checkout',
+      'Continue to pickup details',
+      'Checkout',
+      'Order pickup',
+      'Payment options',
+    ])
+      expect(PAYS.test(name), name).toBe(false);
   });
 });
 

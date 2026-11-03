@@ -367,9 +367,9 @@ export class SparkJourneyBrain implements JourneyBrain {
   }
 }
 
-/** The control that pays (a checkout button only opens the form, so it isn't one). */
+/** The control that pays or commits the order ("Place pickup order"; a checkout button only opens the form). */
 export const PAYS =
-  /\b(pay|purchase|buy|place (?:my |the |your )?order|complete (?:my |the |your )?(?:order|purchase))\b/i;
+  /\b(pay|purchase|buy|(?:place|complete|submit|confirm) (?:\w+ ){0,2}(?:order|purchase|booking))\b/i;
 
 /**
  * The journeys a run tries, in order: enabled, by priority, 1 and 2 before the crawl, 3 after.
