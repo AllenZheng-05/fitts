@@ -107,25 +107,44 @@ and every model call goes into a cost ledger with a cap you set.
 
 ## Benchmarks
 
-Two demo apps with planted problems, each scored against its answer key. The key is hidden from
-Fitts during the run. These are single runs; reviewers vary from run to run.
+Apps with planted problems, each scored against its answer key, which is hidden from Fitts during
+the run. The comparison was pre-registered in `docs/bench/PLAN.md` before any run; every run,
+including the stopped one, is a row in `docs/bench/RESULTS.md`.
 
-| Benchmark | Run | Found | Precision |
-|---|---|---|---|
-| `demo/chat`, 33 planted (19 structure-detectable, 14 judgment) | Economy, Nov 2, $0.14 | 27/33 (structure 18/19, judgment 9/14) | 84% of findings at severity 2+ were planted (27/32); 5 weren't, over the bench's bar of 2 |
-| Basil & Ember's Android app, 10 planted | Economy, Nov 3, $2.49 | 9/10 | 3 unplanted at severity 2+ |
+**`demo/chat`, 33 planted** (19 structural, S1; 14 that need judgment, S2):
 
-On an earlier Android run (Nov 2), Fitts also fixed three findings and checked each fix. One of
-them was the brand drift: restored from the app's own brand cues, every color came within the bench's
-distance of the answer key, with the same fonts. Every run, with its id and the bad numbers, is
-in `docs/PROGRESS.md`.
+| Approach | Runs | Found | S1 | S2 | Precision, severity 2+ | Cost per run |
+|---|---|---|---|---|---|---|
+| axe alone | 1 | 4/33 | 4/19 | 0/14 | 50% | free |
+| Fitts, probes only (no models) | 1 | 25/33 | 18/19 | 7/14 | 93% | free |
+| Fitts Economy (Muse Spark) | 2 | 28/33 both | 19/19 | 9/14 | 88% | $0.15–0.17 |
+| Fitts Economy, no Wonder judge | 2 | 28/33 both | 19/19 | 9/14 | 90% | $0.08–0.09 |
+| Fitts Quality (Spark, Wonder, the Wonder judge) | 2 | 28/33 both | 19/19 | 9/14 | 85–88% | $1.79–1.84 |
+| Fitts Open (Spark Open on Baseten) | 2 | 26–27/33 | 19/19 | 7–8/14 | 87% | $1.42–1.56 |
 
-Against other approaches on `demo/chat` (pre-registered in `docs/bench/PLAN.md`, every run in
-`docs/bench/RESULTS.md`): axe alone found 4/33; Fitts's own probes with no models found 25/33
-(structure 18/19, judgment 7/14) for free; Fitts Economy found 28/33 in both of its runs
-(structure 19/19, judgment 9/14) for about $0.16. Quality and Economy without the judge also found
-28/33, so on this app the bigger models didn't add recall. The probes carry the structural
-issues; the models add the judgment ones.
+Fitts's probes catch what can be measured: with no model at all they find 18 of the 19
+structural issues. Meta's models add the judgment issues, S2 from 7 to 9 of 14. On this app,
+Quality and the Wonder judge added no recall over Economy. A third Quality run stalled when Meta's
+models stopped answering and is recorded as stopped.
+
+**A held-out app** (Loopline Bikes, 16 planted, 8 S1 and 8 S2, plus 3 traps that look wrong but
+are right), which Fitts was never tuned on. Both runs were made blind and
+committed before the key was revealed, and the key matched the SHA-256 sealed in the app's README:
+
+| Approach | Found | S1 | S2 | Traps tripped | Precision | Cost |
+|---|---|---|---|---|---|---|
+| axe alone | 2/16 | 2/8 | 0/8 | 0/3 | 100% (2/2) | free |
+| Fitts Economy | 6/16 | 4/8 | 2/8 | 1/3 | 30% (6/20) | $1.55 |
+
+Fitts found three times what axe did, but most of the judgment issues got past it. The ones
+about the shop's own rules (hourly prices with daily-only booking, "free cancellation" with a
+fee) and the last checkout step were never judged or never reached: the crawl didn't complete a
+booking. It also flagged the skip link (a trap), and 14 of its findings match nothing planted.
+
+**Basil & Ember's Android app, 10 planted:** 9/10 on Economy (Nov 3, $2.49), with 3 unplanted
+findings at severity 2+. On an earlier run Fitts also fixed three findings and checked each fix;
+one was the brand drift, restored from the app's own brand cues to within the bench's color
+distance of the answer key, with the same fonts.
 
 ## Check the results yourself (offline)
 

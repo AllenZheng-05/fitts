@@ -30,8 +30,47 @@ SHA-256 is in the app's README.
 
 | Run id | Date (UTC) | Arm | Commit | Findings | Scored after reveal | Cost | Wall |
 |---|---|---|---|---|---|---|---|
-| heldout-fitts-1 | 2026-11-03 11:59 | Fitts Economy (blind) | 9729478 | 20 shown (sev 4: 6, 3: 8, 2: 1, 1: 5) + 4 suggestions, 16 pages | pending the key | $1.55 | 12.1 min |
-| heldout-axe-1 | 2026-11-03 12:01 | axe alone (blind) | 9729478 | 2 (sev 4: 1, 3: 1), on the 15 routes Fitts reached | pending the key | $0 | 123 s |
+| heldout-fitts-1 | 2026-11-03 11:59 | Fitts Economy (blind) | 9729478 | 20 shown (sev 4: 6, 3: 8, 2: 1, 1: 5) + 4 suggestions, 16 pages | 6/16 (S1 4/8, S2 2/8); precision 30% (6/20), 33% at sev ≥ 2 (5/15); traps tripped 1/3 (T1, at sev 1) | $1.55 | 12.1 min |
+| heldout-axe-1 | 2026-11-03 12:01 | axe alone (blind) | 9729478 | 2 (sev 4: 1, 3: 1), on the 15 routes Fitts reached | 2/16 (S1 2/8, S2 0/8); precision 100% (2/2); traps tripped 0/3 | $0 | 123 s |
+
+### Scoring the held-out runs (after the reveal, Nov 3)
+
+The key (`heldout-key/PLANTED.md`, committed to the app's repo as `6d2fd7f`) hashes to
+`61376c3a5dc6ec4dd8c6b097d35dac7231e425affbda8c8bb4d39f510ab33469`, the SHA-256 sealed in the
+app's README before the runs. 16 planted problems (8 S1, 8 S2) and 3 traps.
+
+Scored by hand, since `planted.ts` is demo/chat's key, with its rule: a finding matches when it
+names the planted problem on its screen or element. Suggestions don't count either way.
+
+| Planted | Stratum | Fitts Economy | axe alone |
+|---|---|---|---|
+| P01 search field has no label | S1 | missed | missed |
+| P02 hint text at 1.9:1 | S1 | "Text is too faint to read" (1.9:1, /settings) | color contrast, /settings |
+| P03 heart button has no name | S1 | "Icon buttons have no accessible name" (`fav-…`) | "Buttons must have discernible text", / |
+| P04 no focus outline on buttons | S1 | "No visible focus when using the keyboard" (/rentals) | missed |
+| P05 frame sizes are clickable divs | S1 | "Frame size cannot be selected" | missed |
+| P06 22 px extras steppers | S1 | missed (its small-target finding is a /rentals control) | missed |
+| P07 rider errors name no field | S1 | missed | missed |
+| P08 "Cancel" means both things | S1 | missed | missed |
+| P09 pay bar hides the terms on phones | S2 | missed | missed |
+| P10 Save gives no sign it worked | S2 | "“Save changes” does nothing visible" (sev 1) | missed |
+| P11 Pay has no loading state, books twice | S2 | missed | missed |
+| P12 promo banner shifts the grid | S2 | "Page content jumps after loading" | missed |
+| P13 hourly prices, daily-only booking | S2 | missed | missed |
+| P14 "Free cancellation" vs a 50% fee | S2 | missed | missed |
+| P15 kids' bike, adult height minimum | S2 | missed | missed |
+| P16 confirmation is a dead end | S2 | missed (the run never paid, so it never saw it) | missed |
+| T1 skip link off-screen until focus | trap | **tripped**: "“Skip to main content” does nothing visible" (sev 1) | clear |
+| T2 decorative card images, `alt=""` | trap | clear | clear |
+| T3 delete account needs DELETE typed | trap | clear | clear |
+
+What it says: on an app nobody tuned Fitts for, it found 6 of 16 against axe's 2, the same
+probes-first pattern as demo/chat, but it missed most of the judgment issues. The ones about the
+app's purpose (P13–P16) and the checkout's last step (P09, P11) were never reached or never
+judged: the crawl didn't complete a booking. Precision was low. 14 shown findings match nothing
+planted, including four at sev 4 on things the key says work as intended ("Keyboard focus gets stuck" on
+Settings, "A link goes to the wrong page", "Rent button opens wrong bike", "Renting has no total
+or confirmation"). They're kept as they came out in `docs/bench/heldout/`.
 
 ## Basil & Ember web (no answer key)
 
