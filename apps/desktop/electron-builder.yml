@@ -56,6 +56,9 @@ linux:
   category: Development
   icon: resources/icon.png
   artifactName: Fitts.${ext}
+  # The package name (@fitts/desktop) is no file name; the .desktop file follows desktopName.
+  executableName: fitts
+  syncDesktopName: true
 publish:
   provider: github
   owner: AllenZheng-05
