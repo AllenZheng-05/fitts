@@ -3,6 +3,10 @@
 export const home = {
   name: 'Fitts',
   tagline: 'Making sure your design fits.',
+  emblemLabel:
+    'Fitts logo: a lowercase f selected in a design tool, its crossbar reaching a coral target as a cursor lands on it',
+  emblemTag: 'Fitts',
+  formula: 'ID = log₂(D/W + 1) = 1.58',
   line: 'Your UX expert: it uses your app like a person, then fixes what gets in the way.',
   download: 'Download for {os}',
   meta: 'Free · open source · beta',

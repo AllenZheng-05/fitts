@@ -245,3 +245,10 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
 - **One issue text, not two.** Only TodoMVC's placeholder contrast is confirmed, unreported and
   owned by the project. The keyboard gap is already tastejs/todomvc#1017, and Bootstrap's dark
   secondary color is twbs/bootstrap#39484 (fixed in v6).
+- **The homepage shows the app's large Welcome logo (Allen, Nov 3).** The hero had the small mark
+  beside the name; it now has the 300×300 emblem from the app's Welcome screen above it: the layer
+  tag, the mark on its hero card, the cursor flying in along the dotted path to the coral target
+  (once, on load; reduced motion shows the end state) and the Fitts's-law label. It's a copy of
+  FittsEmblem.tsx in src/components/Emblem.tsx, and the drift test compares the drawing. It's
+  drawn at 300 and scaled: 80% on phones and on screens under 900px tall, with the name a
+  little smaller (128px at lg), so the download buttons stay in view on a 1280×800 laptop.

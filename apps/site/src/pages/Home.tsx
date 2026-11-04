@@ -1,6 +1,7 @@
 import { ArrowRight, Download, FileSearch, Play } from 'lucide-react';
 import { useState } from 'react';
-import { FittsMark, GitHubMark } from '../components/brand';
+import { GitHubMark } from '../components/brand';
+import { FittsEmblem } from '../components/Emblem';
 import { button, card, chip, chipBase, cx, link, size } from '../components/ui';
 import { home } from '../content/home';
 import { featuredRun, runPath, runsCopy } from '../content/runs';
@@ -55,8 +56,10 @@ function Hero() {
   const onPhone = detected === null && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   return (
     <section className="mx-auto flex min-h-[calc(100svh-4rem)] max-w-6xl flex-col items-center justify-center px-4 py-16 text-center sm:px-6">
-      <h1 className="flex items-center justify-center gap-3 font-display text-[76px] leading-none font-extrabold tracking-[-0.04em] sm:gap-5 sm:text-[128px] lg:text-[168px]">
-        <FittsMark className="size-[72px] flex-none sm:size-[120px] lg:size-[160px]" />
+      {/* The app's Welcome emblem, full size on screens 900px tall and up; 80% below that, so the
+          download buttons stay in view on a 1280×800 laptop. */}
+      <FittsEmblem className="mb-6 size-[240px] [--emblem-scale:0.8] sm:[@media(min-height:900px)]:size-[300px] sm:[@media(min-height:900px)]:[--emblem-scale:1]" />
+      <h1 className="font-display text-[76px] leading-none font-extrabold tracking-[-0.04em] sm:text-[112px] lg:text-[128px]">
         {home.name}
       </h1>
       <p className="mt-6 font-display text-[28px] leading-tight font-bold text-balance sm:text-5xl">
