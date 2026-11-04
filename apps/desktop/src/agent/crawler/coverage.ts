@@ -30,6 +30,12 @@ interface Route {
   controls: Map<string, Control>;
   /** Ref → key, for the refs the crawler acts on. */
   refs: Map<string, string>;
+  /**
+   * The keys on the page as last seen. A control that's gone (a card a filter hid) waits until
+   * it shows again: its old ref now names another element (Basil & Ember, Nov 4: a hidden card's
+   * ref was the "Drinks" chip, tapped 892 times while the card stayed untried).
+   */
+  present?: Set<string>;
   seen: boolean;
   issues: number;
   /** The owner skipped it: controls found there later are skipped too, and it stays done. */
@@ -88,6 +94,7 @@ const isChrome = (n: AxNode) =>
 
 /** One control (by route, role and name) is tapped at most this often in a run, whatever its key. */
 export const MAX_SAME_CONTROL = 3;
+const GONE = 'gone from the page';
 
 /** A control's tap count id: its route, role and name (its key, when it has no name). */
 const tapId = (path: string, role: string, name: string, key: string) =>
@@ -217,10 +224,13 @@ export class Coverage {
       this.pages.set(page, path);
     }
     route.seen = true;
+    const present = new Set<string>();
+    route.present = present;
     for (const n of snap.nodes) {
       if (n.href && n.role === 'link') this.discover(n.href);
       if (isChrome(n)) continue;
       const key = n.key ?? n.ref;
+      if (!n.disabled) present.add(key);
       // A control that turned disabled (a stepper at its floor) waits until it's enabled again,
       // rather than being tapped to no effect (Basil & Ember's 0.1.0 crawl: 100+ taps).
       const known = route.controls.get(key);
@@ -255,6 +265,11 @@ export class Coverage {
               ? { skipped: `tapped ${MAX_SAME_CONTROL} times already` }
               : {}),
       });
+    }
+    // Gone from the page: skipped while it's gone (counted, not offered), back when it shows.
+    for (const [k, c] of route.controls) {
+      if (!present.has(k) && !c.tried && !c.skipped) c.skipped = GONE;
+      else if (present.has(k) && c.skipped === GONE) delete c.skipped;
     }
   }
 
@@ -320,16 +335,19 @@ export class Coverage {
   routeDone(path: string): boolean {
     const route = this.routes.get(routeOf(path));
     if (!route) return true;
-    return route.seen && [...route.controls.values()].every((c) => c.tried || c.skipped);
+    return (
+      route.seen &&
+      [...route.controls].every(([k, c]) => c.tried || c.skipped || !route.present?.has(k))
+    );
   }
 
   untried(path: string): { ref: string; name: string; role: string; type?: string }[] {
     const route = this.routes.get(routeOf(path));
     // Outside the owner's focus, nothing here is tried: the crawl heads back (`nextRoute`).
     if (!route || !this.inFocus(path)) return [];
-    return [...route.controls.values()]
-      .filter((c) => !c.tried && !c.skipped)
-      .map((c) => ({
+    return [...route.controls]
+      .filter(([k, c]) => !c.tried && !c.skipped && (route.present?.has(k) ?? true))
+      .map(([, c]) => ({
         ref: c.ref,
         name: c.name,
         role: c.role,

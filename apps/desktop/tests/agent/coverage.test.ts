@@ -186,3 +186,25 @@ describe('a control that turns disabled waits (Basil & Ember, Nov 4)', () => {
     expect(c.untried('/menu/margherita').map((u) => u.name)).toEqual(['Decrease quantity']);
   });
 });
+
+describe('a control that left the page waits for it to come back (Basil & Ember, Nov 4)', () => {
+  it("a hidden card isn't offered, so its old ref (now another control's) is never tapped", () => {
+    const c = new Coverage('http://localhost:5176');
+    const chip = (ref: string): AxNode => ({ ref, role: 'button', name: 'Drinks', key: 'chip' });
+    const card = (ref: string): AxNode => ({
+      ref,
+      role: 'link',
+      name: 'View Margherita',
+      key: 'margherita',
+    });
+    c.observe(snap('/menu', [chip('e10'), card('e14')]));
+    c.markTried('/menu', 'e10');
+    // A filter hides the card, and the re-render gives "Drinks" the card's old ref.
+    c.observe(snap('/menu', [chip('e14')]));
+    expect(c.untried('/menu')).toEqual([]);
+    expect(c.routeDone('/menu')).toBe(true);
+    // Shown again, it's offered again, under its new ref.
+    c.observe(snap('/menu', [chip('e20'), card('e21')]));
+    expect(c.untried('/menu').map((u) => u.ref)).toEqual(['e21']);
+  });
+});

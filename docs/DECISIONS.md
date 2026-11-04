@@ -3930,3 +3930,12 @@ The recorded run was on 0.1.0; these five were still in 0.1.1. Each is fixed at 
   "the whole site", "you can move on"… lift it, and a covered focus lifts itself with a line
   ("/checkout is covered. Back to the rest of the site."). A mention without a steering word
   ("the checkout button looks off, keep going") is no pivot. The decider still hears the message.
+- **A control that left the page isn't offered (the real cause of the circling).** Every Basil &
+  Ember run since Nov 3 spent most of its 1,000 steps on one control (/reserve "Time" 938–942,
+  /menu "All" 923, then "Drinks" 892 in the Nov 4 validation). The 3-taps cap didn't stop it,
+  because it wasn't one control: a filter hid the menu's cards, their controls stayed untried
+  with their old refs, and the re-render gave those refs to other elements. The explorer picked a
+  hidden card, tapped its ref and hit "Drinks"; markTried credited "Drinks", so the card stayed
+  untried forever, and the circling guard's skip landed on the wrong control the same way.
+  Coverage now keeps the keys on the page as last seen: only those are offered, and a gone
+  control doesn't hold a page open. It is offered again, under its new ref, when it shows again.
