@@ -144,3 +144,22 @@ describe('the App Map', () => {
     ).toEqual(['Inbox', 'settings', 'Profile']);
   });
 });
+
+describe('a catch-all route on the App Map (Allen, Nov 4)', () => {
+  it('“/*” isn’t a node, and nothing says it’s known from the code but not reached', () => {
+    const withCatchAll = {
+      ...run,
+      appModel: {
+        ...model,
+        pages: [
+          ...model.pages,
+          { route: '/*', title: 'Not found', source: 'code', features: [], forms: 0 },
+        ],
+      },
+    } as unknown as RunState;
+    render(<AppMap run={withCatchAll} />);
+    const tree = screen.getByRole('tree', { name: copy.done.map.title });
+    expect(within(tree).getAllByRole('treeitem')).toHaveLength(5);
+    expect(screen.queryByRole('button', { name: /Not found|\/\*/ })).not.toBeInTheDocument();
+  });
+});

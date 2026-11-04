@@ -23,6 +23,13 @@ const AUTONOMOUS = process.env['BENCH_AUTONOMOUS'] === '1';
 /** One pivot, said once BENCH_STEER_AFTER_S into the run ("Stay on checkout"); the log lists every page opened after it. */
 const STEER = process.env['BENCH_STEER'] ?? '';
 const STEER_AFTER_MS = Number(process.env['BENCH_STEER_AFTER_S'] ?? '300') * 1000;
+/**
+ * A task, asked once BENCH_ASK_AFTER_S in ("fill in … and place the order"); with
+ * BENCH_APPROVE_PAYS=1 the order's gate card is allowed. The log lists what followed.
+ */
+const ASK = process.env['BENCH_ASK'] ?? '';
+const ASK_AFTER_MS = Number(process.env['BENCH_ASK_AFTER_S'] ?? '420') * 1000;
+const APPROVE_PAYS = process.env['BENCH_APPROVE_PAYS'] === '1';
 
 let launched: LaunchedApp | undefined;
 
@@ -83,6 +90,8 @@ test('bench:audit', async () => {
   await start.click();
   const startedAt = Date.now();
   let steered = false;
+  let asked = false;
+  const approved = new Set<string>();
 
   const states = () =>
     page.evaluate(async () => {
@@ -102,6 +111,32 @@ test('bench:audit', async () => {
           steered = true;
           await page.getByLabel('Message Fitts').fill(STEER);
           await page.getByLabel('Message Fitts').press('Enter');
+        }
+        if (ASK && !asked && s.phase !== 'done' && Date.now() - startedAt > ASK_AFTER_MS) {
+          asked = true;
+          await page.getByLabel('Message Fitts').fill(ASK);
+          await page.getByLabel('Message Fitts').press('Enter');
+        }
+        const gate = s.gate;
+        if (APPROVE_PAYS && gate?.kind === 'pays' && !approved.has(gate.id)) {
+          approved.add(gate.id);
+          await page.evaluate(
+            ([p, id]) =>
+              (
+                window as unknown as {
+                  fitts: {
+                    engine: {
+                      call(c: { projectId: string; method: string; args: unknown[] }): void;
+                    };
+                  };
+                }
+              ).fitts.engine.call({
+                projectId: p ?? '',
+                method: 'respondGate',
+                args: [id, 'allow'],
+              }),
+            [projectId, gate.id],
+          );
         }
         const pick = s.chat.find(
           (c) =>
@@ -171,6 +206,33 @@ test('bench:audit', async () => {
       }
     }
   }
+  // After the ask: what Fitts said and did, the gate, and whether the order was placed.
+  const askLines: string[] = [];
+  if (ASK) {
+    let after = false;
+    for (const e of events) {
+      if (e.type === 'chat.item' && e.item.type === 'user.message' && e.item.text === ASK) {
+        after = true;
+        askLines.push(`Asked: "${ASK}"`);
+      } else if (!after) continue;
+      else if (e.type === 'chat.item' && e.item.type === 'fitts.message')
+        askLines.push(`  Fitts: ${e.item.text}`);
+      else if (e.type === 'gate.requested')
+        askLines.push(
+          `  gate${e.gate.kind === 'pays' ? ' (pays)' : ''}: ${e.gate.action} on ${e.gate.route}`,
+        );
+      else if (e.type === 'gate.decided') askLines.push(`  gate answered: ${e.decision ?? ''}`);
+      else if (e.type === 'ability.changed' && e.ability)
+        askLines.push(`  ability: ${e.ability.name}`);
+      else if (e.type === 'action.recorded')
+        askLines.push(
+          `  step ${e.record.step} ${e.record.kind} ${e.record.target?.name ?? ''} ${e.record.from} → ${e.record.to}`,
+        );
+    }
+    askLines.push(
+      `  reached /confirmation: ${events.some((e) => e.type === 'action.recorded' && e.record.to === '/confirmation') ? 'yes' : 'no'}`,
+    );
+  }
   const lookfeel = state?.chat.find((c) => c.type === 'lookfeel');
   const lines = findings
     .sort((a, b) => b.severity - a.severity)
@@ -200,6 +262,7 @@ test('bench:audit', async () => {
       `Spent $${(state?.cost.spentUsd ?? 0).toFixed(4)}`,
       `Took ${Math.round((Date.now() - startedAt) / 60_000)} min`,
       ...steerLines,
+      ...askLines,
       '',
     ].join('\n'),
   );

@@ -11,7 +11,7 @@ import {
   type CallContext,
   type LlmCaller,
 } from '../llm/call';
-import type { AxSnapshot } from '../protocol';
+import { PAYMENT_HOST, type AxSnapshot } from '../protocol';
 import { DESTRUCTIVE, routeOf } from './coverage';
 import { MARKER, type Action } from './brain';
 
@@ -62,6 +62,11 @@ export interface JourneyDeps {
   stopped(): boolean;
   /** Form rules from the App Model for the page the action is on. */
   forms?(route: string): AppPage['forms'];
+  /**
+   * The control that pays or places the order: the owner's yes on the gate card, or no. It
+   * waits as long as the owner takes (Allen, Nov 4). Without it, that control is never tapped.
+   */
+  confirm?(name: string, route: string): Promise<boolean>;
   signal?: AbortSignal;
 }
 
@@ -176,22 +181,41 @@ export async function runJourney(deps: JourneyDeps, journey: Journey): Promise<J
         history.push(`tried a control that wasn't there`);
         continue;
       }
+      // The control that pays or places the order goes to the owner first, on the gate card:
+      // their yes taps it, their no ends the journey there, and with no answer it waits. A page
+      // on a real payment provider is never paid, whatever they say (Allen, Nov 4).
+      const pays = action.kind === 'click' && PAYS.test(node.name);
+      if (pays) {
+        const real = realPayment(snap);
+        if (real) {
+          trace.push(`stopped: ${node.name} pays through ${real}`);
+          return result(
+            'blocked',
+            `"${node.name}" pays through ${real}, and I never pay a real payment provider`,
+          );
+        }
+        if (!deps.confirm) {
+          trace.push(`stopped: ${node.name} pays`);
+          return result('blocked', `it got to "${node.name}", and I never pay on a run`);
+        }
+        if (!(await deps.confirm(node.name, route))) {
+          trace.push(`stopped: the owner said not to tap ${node.name}`);
+          return result('blocked', `you said not to tap "${node.name}"`);
+        }
+        if (deps.stopped()) return result('blocked', 'the run stopped');
+        trace.push(`the owner allowed ${node.name}`);
+      }
       // On the way to a payment, "checkout" only opens the form (the control that pays stops it).
       const payment = journey.needs?.includes('payment') === true;
       const risky = payment ? node.name.replace(/\bcheck ?out\b/gi, '') : node.name;
       if (
         action.kind === 'click' &&
+        !pays &&
         DESTRUCTIVE.test(risky) &&
         !journey.steps.some((s) => s.toLowerCase().includes(node.name.toLowerCase()))
       ) {
         trace.push(`refused: ${node.name} is destructive and not in the plan`);
         return result('blocked', `the plan would need "${node.name}", which deletes or pays`);
-      }
-      // A journey that needs a payment runs up to it: the control that pays is never tapped,
-      // even when the plan names it.
-      if (action.kind === 'click' && payment && PAYS.test(node.name)) {
-        trace.push(`stopped: ${node.name} pays`);
-        return result('blocked', `it got to "${node.name}", and I never pay on a run`);
       }
       if (action.kind === 'type') {
         const match = fieldFor(deps.forms?.(route), node.name);
@@ -366,6 +390,32 @@ export class SparkJourneyBrain implements JourneyBrain {
     }
   }
 }
+
+/** Card fields and wallets: what a real payment form has on the page itself. */
+const CARD_FIELD =
+  /\b(card number|credit card|debit card|cvc|cvv|security code|expiration date|expiry date|apple pay|google pay|paypal|stripe|klarna|afterpay)\b/i;
+
+/**
+ * The real payment on a page, when there is one: a provider it loads (a frame, script or form
+ * on their host), or a card field or wallet button. A demo's order button has none of these.
+ */
+export function realPayment(snap: AxSnapshot): string | undefined {
+  const host = (snap.payments ?? []).find((h) => PAYMENT_HOST.test(h));
+  if (host) return host;
+  if (PAYMENT_HOST.test(hostOf(snap.url))) return hostOf(snap.url);
+  for (const n of snap.nodes) {
+    if (CARD_FIELD.test(n.name)) return `a "${n.name}" field`;
+  }
+  return undefined;
+}
+
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '';
+  }
+};
 
 /** The control that pays or commits the order ("Place pickup order"; a checkout button only opens the form). */
 export const PAYS =

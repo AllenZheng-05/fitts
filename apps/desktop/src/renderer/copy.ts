@@ -654,6 +654,14 @@ export const copy = {
     allow: 'Allow once',
     caption:
       '"Allow once" unlocks after you check the box. Fitts reads this aloud and stays paused until you choose.',
+    /** The control places an order or pays: asked before the tap, after the owner said to go ahead. */
+    pays: {
+      title: '{action}?',
+      body: 'I’m ready to tap **"{action}"** on {route}. It places an order or pays, so it waits for your yes.',
+      holding: 'the tap itself (I tap only after you allow it)',
+      testing: 'Finishing what you asked',
+      understand: 'I understand this may place a real order on {url}',
+    },
   },
   notify: {
     modelsDown: 'Fitts paused: it can’t reach Meta’s models.',
@@ -1297,7 +1305,17 @@ export const copy = {
       revise_looks: 'another round of looks',
       dismiss: 'not a problem',
       retry_fix: 'trying a fix again',
+      task: 'what you asked',
     } as Record<string, string>,
+    /** An ability with nothing to do: said once, and it isn't picked again until you speak. */
+    spentAbility: 'Skipping {name} for now: {note}. I’ll do something else.',
+    spentNothing: 'it had nothing to do',
+    spentTwice: 'it did nothing twice in a row',
+    /** A task: what the owner asked, done with steps on the page Fitts is on. */
+    doingTask: 'Doing what you asked: {goal}',
+    /** A request to a real payment provider, held and never sent. */
+    providerHeld:
+      'I didn’t send a request to {host}: it’s a real payment provider, and I never pay on a run.',
     passStarted: 'Started {name}',
     passEnded: 'Finished {name}: {result}',
     passResults: {

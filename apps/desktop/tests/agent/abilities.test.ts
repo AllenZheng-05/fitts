@@ -102,3 +102,16 @@ describe('SPEC-phase4 §6.1: journeys in the scripted order', () => {
     ).toBe('device_pass');
   });
 });
+
+describe('an ability with nothing to do (Allen, Nov 4)', () => {
+  it('the fallback never picks a spent ability: no journey, then no exploring, then the checks', () => {
+    const journeys: Situation['journeys'] = [
+      { id: 'j1', name: 'Order', priority: 1, status: 'planned' },
+    ];
+    expect(scriptedNext(base({ journeys }))).toBe('journey');
+    expect(scriptedNext(base({ journeys, spent: ['journey'] }))).toBe('explore');
+    const ended = { ...base().coverage, ended: true };
+    expect(scriptedNext(base({ coverage: ended, spent: ['device_pass'] }))).toBe('check_links');
+    expect(scriptedNext(base({ spent: ['explore', 'journey'], journeys }))).toBe('device_pass');
+  });
+});

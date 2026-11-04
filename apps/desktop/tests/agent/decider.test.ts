@@ -58,7 +58,7 @@ describe('the decision step (SPEC-phase3 §1.2)', () => {
     expect(d).toEqual({ ability: 'explore', route: '/checkout', say: 'Opening checkout.' });
     expect(JSON.stringify(c.requests[0]?.input)).toContain('skip the blog');
     expect(c.requests[0]?.instructions).toContain('The owner steers');
-    expect(c.requests[0]?.tools).toHaveLength(18);
+    expect(c.requests[0]?.tools).toHaveLength(19);
     // SPEC-phase4 §4: the audit is proposed, never finished, and the owner can report a problem.
     const names = (
       c.requests[0]?.tools as { name: string; parameters: { required: string[] } }[]
@@ -118,5 +118,25 @@ describe('converse (§1.3)', () => {
       () => 'spark',
     );
     await expect(empty(input)).rejects.toThrow();
+  });
+});
+
+describe('task (Allen, Nov 4)', () => {
+  it('carries what the owner asked for, in their words', () => {
+    expect(
+      parseDecision(
+        'task',
+        JSON.stringify({
+          goal: ' Fill in name, phone and a pickup time and place the order ',
+          say: 'Filling it in now.',
+          why: 'The owner asked for an order',
+        }),
+      ),
+    ).toEqual({
+      ability: 'task',
+      goal: 'Fill in name, phone and a pickup time and place the order',
+      say: 'Filling it in now.',
+      why: 'The owner asked for an order',
+    });
   });
 });

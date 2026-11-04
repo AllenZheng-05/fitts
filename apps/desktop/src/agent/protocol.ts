@@ -102,7 +102,17 @@ export interface AxSnapshot {
   hasPassword: boolean;
   /** Lines where the page states hours ("Tuesday 4:00 PM – 10:00 PM"), to check times it offers. */
   hours?: string[];
+  /** Real payment providers the page loads (a frame, script or form action on their host). */
+  payments?: string[];
 }
+
+/**
+ * The hosts of real payment providers. A page that loads one never gets its pay control tapped,
+ * whatever the owner allows, and a request to one is never sent (Allen, Nov 4: the owner's yes
+ * reaches a demo site's order button, never a real payment).
+ */
+export const PAYMENT_HOST =
+  /(?:^|\.)(?:stripe\.(?:com|network)|paypal\.com|paypalobjects\.com|braintreegateway\.com|braintree-api\.com|adyen\.com|adyenpayments\.com|squareup\.com|squarecdn\.com|klarna\.(?:com|net)|afterpay\.com|checkout\.com|razorpay\.com|mollie\.com|authorize\.net|pay\.google\.com|apple-pay-gateway\.apple\.com)$/i;
 
 /** Browser actions the agent asks main to run on a project's site window (§1: RPC). */
 export type SiteOp =

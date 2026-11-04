@@ -41,6 +41,10 @@ Read every new message and act on what it asks:
 
 - "Skip the settings pages", "don't test the blog": `skip_pages` with those paths.
 - "Look at checkout next": `explore` with that route.
+- "Fill in the name, phone and a pickup time and place the order", "add a pizza and check
+  out", "sign up with a test email": `task` with their words as `goal`. You do it with steps
+  on the page you're on, so don't look for a `journey` for it. If it reaches the control that
+  places the order or pays, Fitts asks the owner first; that ask is the owner's to answer.
 - "Stop testing, just fix what you have": `stop_exploring`, then the checks and `fix`.
 - "I don't like how it looks", "can you redesign it": `new_look` with their wish in their words.
 - Feedback on directions already shown ("none of these", "the second one but warmer", "less
@@ -75,7 +79,8 @@ told what failed, before it's rolled back; `recent` shows the rollback too.
 - Never `explore` or re-run the audit's checks here: the audit is over.
 
 Some things a tool will refuse (proposing with pages left, fixing a live site). When `recent`
-shows a refusal, pick something else.
+shows a refusal, pick something else. `spent` lists the abilities that had nothing to do since
+the owner last spoke: they're refused until the owner says something new, so pick another one.
 
 Some steps refuse until the site is explored (`device_pass`, `check_links`, `state_pass`,
 `perf_pass`, `review`, `looks`,

@@ -3939,3 +3939,48 @@ The recorded run was on 0.1.0; these five were still in 0.1.1. Each is fixed at 
   untried forever, and the circling guard's skip landed on the wrong control the same way.
   Coverage now keeps the keys on the page as last seen: only those are offered, and a gone
   control doesn't hold a page open. It is offered again, under its new ref, when it shows again.
+
+## Phase 4 — the order the owner asked for (Allen, Nov 4, on 0.1.3)
+
+- **An ability with nothing to do isn't picked again for the same request.** After "place the
+  pickup order" the decider chose `journey` ten times in a row, each "no journey left to try".
+  The loop now marks an ability spent when it returns nothing, or when it returns the same
+  progress-less outcome twice (no step, page, finding, note, control or journey moved). Fitts
+  says so once ("Skipping a journey for now: no journey left to try. I’ll do something else."),
+  the decider sees `spent`, and a spent ability is refused, so the refusal's fallback (the
+  scripted order, which also skips spent ones) picks something else. A new owner message clears
+  it: a new request may give it something to do. Refusals and interruptions (a pause, the owner
+  speaking) don't count. In the loop, not the decider, so no decider can spin on it.
+- **A task is done on the page, not looked up as a journey.** A new ability, `task`, takes the
+  owner's words as the goal and runs them as a journey that starts on the current page: the
+  journey brain sees the screenshot and the controls and fills the fields, picks from the
+  pickup list (a select takes a choice; its options are in the snapshot, so the reviewers see
+  the times) and submits, all through the crawl's `perform`. The plan is the request itself, so
+  a destructive control the owner didn't name is still refused. The decide prompt routes
+  "fill in … and place the order" to it.
+- **The order button goes to the gate card, and the owner's yes taps it.** A journey stopped at
+  any control that pays or places an order ("Place pickup order" matched PAYS) and ended
+  "blocked" whatever the owner had said. That control now opens the gate card, worded as the
+  question ("Place pickup order?", the same modal, checkbox and buttons), and waits with no
+  timeout: Allow once taps it once (its own request isn't held again, and Ask every action
+  doesn't ask again), Don't do it or Test something else ends the task there, said in the chat,
+  and that control on that page isn't asked about again. Stop or taking the wheel closes it
+  unanswered. Dangerous mode on localhost taps without asking, as it does at the network gate.
+  It applies to every journey, not only ones marked as needing a payment.
+- **A real payment is still never made.** The hard stop stays for real providers, in code: a
+  page that loads a provider (a frame, script or form action on Stripe, PayPal, Braintree,
+  Adyen, Square, Klarna, Afterpay, Checkout.com, Razorpay, Mollie, Authorize.net, Google Pay or
+  Apple Pay's hosts) or shows a card field or wallet button ("Card number", "CVC", "Apple
+  Pay"…) never gets its pay control tapped and the owner isn't asked. A request to a provider's
+  host is never released, in any mode, with a line saying so. A payment path on the site's own
+  API still goes through the network gate as before.
+- **The crawl is unchanged.** Explore still taps an order button as one of the page's controls
+  (an empty form shows its errors; a filled one may submit), as it did before. Only journeys
+  and tasks ask first: they're the ones that fill the form to submit it. Left as is after the
+  freeze; worth revisiting if a crawl ever places a real order.
+- **A catch-all route isn't a page.** The App Map listed "/*" as "known from your code, not
+  reached yet", and the page counts counted it. `isCatchAll` (any `*` or `%2A`) keeps it off
+  the map and out of the known and unreached counts. The simpler of the two options Allen gave:
+  it's left off rather than shown as "Not found page (catch-all)". A real not-found page Fitts
+  lands on has a real URL and shows under it. Parameter routes (/menu/:id) still group their
+  pages.

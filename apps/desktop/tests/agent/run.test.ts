@@ -30,6 +30,8 @@ import {
   type Situation,
 } from '../../src/agent/orchestrator/abilities';
 import type { Site } from '../../src/agent/site-client';
+import type { JourneyAction } from '../../src/agent/crawler/journey';
+import { format } from '../../src/renderer/lib/format';
 import { copy } from '../../src/renderer/copy';
 
 /** A tiny app: / links to /b and /login; /b has a field and Save; / has a destructive button. */
@@ -163,6 +165,8 @@ function setup({
   retryModels,
   panel,
   judge,
+  appModel,
+  journeyBrain,
 }: {
   site?: ReturnType<typeof fakeSite>;
   brain?: Brain;
@@ -182,6 +186,8 @@ function setup({
   retryModels?: RunDeps['retryModels'];
   panel?: RunDeps['panel'];
   judge?: RunDeps['judge'];
+  appModel?: RunDeps['appModel'];
+  journeyBrain?: RunDeps['journeyBrain'];
 } = {}) {
   const events: RunEvent[] = [];
   const ledger = new CostLedger();
@@ -196,6 +202,8 @@ function setup({
       ...(retryModels ? { retryModels } : {}),
       ...(panel ? { panel } : {}),
       ...(judge ? { judge } : {}),
+      ...(appModel ? { appModel } : {}),
+      ...(journeyBrain ? { journeyBrain } : {}),
       ...(redesigner ? { redesigner } : {}),
       ...(maxSteps ? { maxSteps } : {}),
       ...(decider ? { decider } : {}),
@@ -2198,4 +2206,185 @@ describe('the surprise judge in a run (SPEC-phase4 §6B.5)', () => {
     expect(state()?.observations?.filter((o) => o.kind === 'popped-up')).toHaveLength(2);
     run.dispose();
   }, 15_000);
+});
+
+describe('an ability that does nothing, and what the owner asks for (Allen, Nov 4)', () => {
+  const said = (st: RunState | undefined) =>
+    st?.chat.flatMap((c) => (c.type === 'fitts.message' ? [c.text] : [])) ?? [];
+
+  it('a journey with nothing to do is said once and never picked again for the same request', async () => {
+    const seen: Situation[] = [];
+    const { run, state } = setup({
+      decider: {
+        next: (s: Situation) => {
+          seen.push(s);
+          return Promise.resolve<Decision>({ ability: 'journey' });
+        },
+      },
+    });
+    run.start();
+    await skipLogin(state, run);
+    await finished(state, run, 10_000);
+    const ran = seen.flatMap((x) => x.recent.slice(-1)).filter((o) => o.ability === 'journey');
+    expect(ran.filter((o) => o.result === 'nothing')).toHaveLength(1);
+    expect(seen.some((x) => x.spent?.includes('journey'))).toBe(true);
+    const line = format(copy.fitts.spentAbility, {
+      name: copy.fitts.abilityNames.journey ?? '',
+      note: 'no journey left to try',
+    });
+    expect(said(state()).filter((t) => t === line)).toHaveLength(1);
+    // The run still did everything else.
+    expect(state()?.controlsTried.done).toBe(state()?.controlsTried.total);
+    run.dispose();
+  }, 20_000);
+
+  /** Checkout: name, phone, a pickup list and the order button, which opens /confirmation. */
+  const checkoutSite = () => {
+    let path = '/';
+    const pages: Record<string, AxNode[]> = {
+      '/': [
+        { ref: 'name', role: 'textbox', name: 'Name', type: 'text' },
+        { ref: 'phone', role: 'textbox', name: 'Phone', type: 'tel' },
+        {
+          ref: 'time',
+          role: 'combobox',
+          name: 'Pickup time',
+          options: ['6:15 PM', '6:30 PM', '6:45 PM'],
+        },
+        { ref: 'place', role: 'button', name: 'Place pickup order' },
+      ],
+      '/confirmation': [{ ref: 'menu', role: 'link', name: 'Back to the menu', href: '/' }],
+    };
+    const site = fakeSite();
+    Object.assign(site, {
+      snapshot: () =>
+        Promise.resolve<AxSnapshot>({
+          url: `http://x${path}`,
+          path,
+          title: path === '/' ? 'Checkout' : 'Order placed',
+          headings: [],
+          nodes: pages[path] ?? [],
+          hasPassword: false,
+        }),
+      navigate: (p: string) => {
+        site.log.push(`nav ${p}`);
+        path = p;
+        return Promise.resolve({ path, navigated: true });
+      },
+      click: (ref: string) => {
+        site.log.push(`click ${ref}`);
+        if (!pages[path]?.some((n) => n.ref === ref)) return Promise.reject(new Error('gone'));
+        if (ref === 'place') path = '/confirmation';
+        return Promise.resolve({ path, navigated: ref === 'place' });
+      },
+      type: (ref: string, text: string) => {
+        site.log.push(`type ${ref} ${text}`);
+        const node = pages[path]?.find((n) => n.ref === ref);
+        if (node) node.value = text;
+        return Promise.resolve({ path, navigated: false });
+      },
+    });
+    return { site, where: () => path };
+  };
+  const orderBrain = () => {
+    const steps: JourneyAction[] = [
+      { kind: 'type', ref: 'name', name: 'Name', text: 'Allen', why: 'Your name' },
+      { kind: 'type', ref: 'phone', name: 'Phone', text: '5550100', why: 'Your phone' },
+      { kind: 'type', ref: 'time', name: 'Pickup time', text: '6:30 PM', why: 'A pickup time' },
+      { kind: 'click', ref: 'place', name: 'Place pickup order', why: 'Placing the order' },
+      { kind: 'goal_met', why: 'The order is placed' },
+    ];
+    let i = 0;
+    return { next: () => Promise.resolve(steps[Math.min(i++, steps.length - 1)]!) };
+  };
+  const GOAL = 'fill in name, phone and a pickup time and place the order';
+  /** Does the task when the owner asks; otherwise idles a moment and asks again. */
+  const asking = () => ({
+    next: (s: Situation) =>
+      s.messages.some((m) => m.includes('place the order'))
+        ? Promise.resolve<Decision>({ ability: 'task', goal: GOAL })
+        : new Promise<Decision>((r) => setTimeout(() => r({ ability: 'stop_exploring' }), 20)),
+  });
+
+  it('a task is done on the page: the fields, the pickup list, then the gate card, and the yes places it', async () => {
+    const { site, where } = checkoutSite();
+    const { run, state } = setup({ site, decider: asking(), journeyBrain: () => orderBrain() });
+    run.start();
+    run.sendMessage(GOAL);
+    await until(() => Boolean(state()?.gate));
+    expect(state()?.gate).toMatchObject({
+      action: 'Place pickup order',
+      route: '/',
+      kind: 'pays',
+    });
+    expect(format(copy.gate.pays.title, { action: state()?.gate?.action ?? '' })).toBe(
+      'Place pickup order?',
+    );
+    expect(site.log).toEqual(
+      expect.arrayContaining(['type name Allen', 'type phone 5550100', 'type time 6:30 PM']),
+    );
+    // No answer: it waits, and nothing is tapped.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(state()?.gate).toBeDefined();
+    expect(site.log).not.toContain('click place');
+    run.respondGate(state()?.gate?.id ?? '', 'allow');
+    await until(() => where() === '/confirmation');
+    expect(site.log.filter((l) => l === 'click place')).toHaveLength(1);
+    await until(() => said(state()).some((t) => t.startsWith('Done: “fill in name')));
+    expect(state()?.gate).toBeUndefined();
+    run.dispose();
+  });
+
+  it('the owner’s no leaves it untapped and says so; it never ends silently', async () => {
+    const { site, where } = checkoutSite();
+    const { run, state } = setup({ site, decider: asking(), journeyBrain: () => orderBrain() });
+    run.start();
+    run.sendMessage(GOAL);
+    await until(() => Boolean(state()?.gate));
+    run.respondGate(state()?.gate?.id ?? '', 'deny');
+    await until(() => said(state()).some((t) => t.includes('you said not to tap')));
+    expect(said(state())).toContain(copy.fitts.gateDenied);
+    expect(site.log).not.toContain('click place');
+    expect(where()).toBe('/');
+    run.dispose();
+  });
+
+  it('a request to a real payment provider is never sent, whatever was allowed', () => {
+    const { run, site, state } = setup({ mode: 'dangerous' });
+    run.start();
+    run.held({ id: 'h9', method: 'POST', url: 'https://api.stripe.com/v1/payment_intents' });
+    expect(site.log).toContain('release h9 deny');
+    expect(state()?.gate).toBeUndefined();
+    expect(said(state())).toContain(format(copy.fitts.providerHeld, { host: 'api.stripe.com' }));
+    run.dispose();
+  });
+});
+
+describe('a catch-all route in the coverage counts (Allen, Nov 4)', () => {
+  it('“/*” is never a page to reach: not counted as known, never listed unreached', async () => {
+    const page = (route: string, over: Record<string, unknown> = {}) => ({
+      route,
+      source: 'code',
+      features: [],
+      forms: [],
+      ...over,
+    });
+    const appModel = {
+      summary: 'A tiny app',
+      commit: 'abc',
+      pages: [page('/'), page('/b'), page('/*', { title: 'Not found', dynamic: true }), page('*')],
+      journeys: [],
+      tokens: [],
+      notes: [],
+    } as unknown as NonNullable<RunDeps['appModel']>;
+    const { run, state } = setup({ appModel });
+    run.start();
+    await skipLogin(state, run);
+    await finished(state, run, 10_000);
+    const cov = state()?.coverage;
+    expect(cov?.unreached.some((u) => u.route.includes('*'))).toBe(false);
+    expect(cov?.pages.known).toBe(2);
+    expect(state()?.routes.some((r) => r.path.includes('*'))).toBe(false);
+    run.dispose();
+  }, 20_000);
 });

@@ -803,6 +803,8 @@ export interface GateRequest {
   route: string;
   heldRequest: string;
   testing: string;
+  /** The control pays or places an order: the card asks before the tap (Allen, Nov 4). */
+  kind?: 'pays';
 }
 
 export type ChatItem =

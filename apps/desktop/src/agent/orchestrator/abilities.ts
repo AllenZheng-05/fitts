@@ -6,6 +6,11 @@ export type AbilityName =
   | 'explore'
   /** SPEC-phase4 §6.1: one of the App Model's journeys, end to end. */
   | 'journey'
+  /**
+   * What the owner asked Fitts to do ("fill in the form and place the order"), done with steps
+   * on the page it's on, the way a journey is, not by looking for a planned one (Allen, Nov 4).
+   */
+  | 'task'
   /** SPEC-phase4 §6.3: every explored page at every cell of the device matrix (was phone_pass). */
   | 'device_pass'
   /** SPEC-phase4 §6B.6: the site's own GETs empty, failing and slow (local projects only). */
@@ -36,6 +41,8 @@ export interface Decision {
   route?: string;
   /** `journey`: which one; empty for the next planned. */
   journeyId?: string;
+  /** `task`: what the owner asked for, in their words. */
+  goal?: string;
   /** `skip_pages`: the pages the owner wants skipped. */
   paths?: string[];
   /** `new_look`: what the owner wants; `revise_looks`: what they said about the looks. */
@@ -79,6 +86,12 @@ export interface Situation {
   findings: { total: number; bySeverity: Record<number, number>; worst: string[] };
   /** Which abilities have already run to the end (each of these runs once). */
   ran: Partial<Record<AbilityName, boolean>>;
+  /**
+   * Abilities that had nothing to do (or did the same nothing twice) since the owner last
+   * spoke: they're refused until the owner says something new (Allen, Nov 4: "run a journey"
+   * picked ten times in a row, each one "no journey left to try").
+   */
+  spent?: AbilityName[];
   /** The last changes (newest last): verified, rolled back with why, undone. */
   changes: {
     id: string;
@@ -128,10 +141,12 @@ export class ScriptedDecider implements Decider {
 }
 
 export function scriptedNext(s: Situation): AbilityName {
+  const spent = new Set(s.spent ?? []);
   const planned = (ok: (priority: number) => boolean) =>
-    s.journeys?.some((j) => j.status === 'planned' && ok(j.priority)) ?? false;
+    !spent.has('journey') &&
+    (s.journeys?.some((j) => j.status === 'planned' && ok(j.priority)) ?? false);
   if (planned((p) => p <= 2)) return 'journey';
-  if (!s.coverage.ended) return 'explore';
+  if (!s.coverage.ended && !spent.has('explore')) return 'explore';
   if (planned((p) => p === 3) && s.budget.spentUsd < s.budget.capUsd * 0.5) return 'journey';
   const order: AbilityName[] = [
     'device_pass',
@@ -141,8 +156,8 @@ export function scriptedNext(s: Situation): AbilityName {
     'review',
     'check_theme',
   ];
-  for (const a of order) if (!s.ran[a]) return a;
-  if (!s.live && !s.ran.looks) return 'looks';
-  if (!s.live && !s.ran.fix) return 'fix';
+  for (const a of order) if (!s.ran[a] && !spent.has(a)) return a;
+  if (!s.live && !s.ran.looks && !spent.has('looks')) return 'looks';
+  if (!s.live && !s.ran.fix && !spent.has('fix')) return 'fix';
   return 'propose_finish';
 }

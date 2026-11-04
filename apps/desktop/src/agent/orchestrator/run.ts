@@ -3,6 +3,7 @@
 // Probes (P5) run alongside it; reviewers (P6), the gate (P8) and fixes (P9) plug into this loop later.
 import {
   DEVICES,
+  isCatchAll,
   reduce,
   type AppModel,
   type Change,
@@ -22,7 +23,13 @@ import {
 } from '@fitts/schema';
 import type { BudgetGuard } from '../ledger/budget';
 import type { CostLedger } from '../ledger/ledger';
-import type { AxSnapshot, HeldRequest, OpTrace, ReplayStep } from '../protocol';
+import {
+  PAYMENT_HOST,
+  type AxSnapshot,
+  type HeldRequest,
+  type OpTrace,
+  type ReplayStep,
+} from '../protocol';
 import type { SiteRect } from '@fitts/schema';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
@@ -45,6 +52,7 @@ import {
   journeyOrder,
   runJourney,
   type JourneyBrain,
+  type JourneyDeps,
 } from '../crawler/journey';
 import { copy } from '../../renderer/copy';
 import { format } from '../../renderer/lib/format';
@@ -248,6 +256,19 @@ export class RealRun {
   private crawlEnded = false;
   /** Abilities that have run to the end, and what the last few did (for the decider). */
   private readonly ran: Partial<Record<AbilityName, boolean>> = {};
+  /**
+   * Abilities with nothing to do since the owner last spoke, and each one's last empty outcome:
+   * a spent one is refused until the owner says something new (Allen, Nov 4: "run a journey",
+   * ten times in a row, each "no journey left to try").
+   */
+  private readonly spent = new Map<AbilityName, string>();
+  private readonly emptyLast = new Map<AbilityName, string>();
+  /** Tasks the owner asked for so far (each one's id). */
+  private tasks = 0;
+  /** The gate card for a control that pays or places an order, waiting on the owner. */
+  private payGate: { gateId: string; resolve: (yes: boolean) => void } | undefined;
+  /** The order the owner allowed, while its tap runs: its own request isn't asked about again. */
+  private allowedTap: { name: string; route: string } | undefined;
   /** SPEC-phase4 §6.1: each journey's status, by id. */
   private readonly journeyStatus = new Map<
     string,
@@ -667,6 +688,11 @@ export class RealRun {
         continue;
       }
       this.deliverQueued();
+      // A new request from the owner: what had nothing to do before may have something now.
+      if (this.inbox.length > 0) {
+        this.spent.clear();
+        this.emptyLast.clear();
+      }
       const situation = this.situation();
       this.nudged = false;
       this.heard.push(...this.inbox);
@@ -697,9 +723,11 @@ export class RealRun {
           ability: { name: decision.ability, since: this.state.elapsedMs },
         },
       ]);
+      const before = this.progress();
       const outcome = refusal
         ? { ability: decision.ability, result: 'refused' as const, note: refusal }
         : await this.use(decision);
+      if (!refusal) this.noteEmpty(outcome, before);
       if (!this.finished) this.emit([{ type: 'ability.changed' }]);
       if (!refusal && !this.finished)
         this.logDetail(
@@ -723,6 +751,8 @@ export class RealRun {
    * feedback, round 7: a redesign brief sent the decider straight to them).
    */
   private refusal(d: Decision): string | undefined {
+    if (this.spent.has(d.ability))
+      return `it had nothing to do (${this.spent.get(d.ability) ?? ''}); pick something else until the owner speaks`;
     const needsPages: AbilityName[] = [
       'device_pass',
       'check_links',
@@ -740,6 +770,7 @@ export class RealRun {
     const audit: AbilityName[] = [
       'explore',
       'journey',
+      'task',
       'device_pass',
       'check_links',
       'state_pass',
@@ -749,6 +780,50 @@ export class RealRun {
     ];
     if (this.fixPhase && audit.includes(d.ability)) return 'fixes are underway; the audit is over';
     return undefined;
+  }
+
+  /** What moved since: steps, pages, findings, notes and journeys. An ability that moves none did nothing. */
+  private progress(): string {
+    return [
+      this.state.step,
+      this.pages.size,
+      this.state.findings.length,
+      this.observations.length,
+      this.coverage.controlsTried().done,
+      [...this.journeyStatus.values()].map((j) => j.status).join(','),
+    ].join('|');
+  }
+
+  /**
+   * An ability that had nothing to do, or did the same nothing twice, is spent until the owner
+   * speaks: Fitts says so once, and the decider picks something else (Allen, Nov 4). Lives here,
+   * not in the decider, so no decider can spin on it.
+   */
+  private noteEmpty(outcome: Outcome, before: string): void {
+    const a = outcome.ability;
+    if (outcome.result === 'refused' || outcome.result === 'done' || this.finished) return;
+    // Paused or stopped mid-way, or the owner spoke: not the ability's emptiness.
+    if (this.inbox.length > 0 || outcome.note === 'interrupted') return;
+    const key = `${outcome.result}|${outcome.note ?? ''}`;
+    const nothing = outcome.result === 'nothing';
+    const twice = !nothing && this.progress() === before && this.emptyLast.get(a) === key;
+    if (!nothing && this.progress() !== before) {
+      this.emptyLast.delete(a);
+      return;
+    }
+    if (!nothing && !twice) {
+      this.emptyLast.set(a, key);
+      return;
+    }
+    const note = outcome.note ?? (nothing ? copy.fitts.spentNothing : copy.fitts.spentTwice);
+    this.spent.set(a, note);
+    if (!this.ran[a])
+      this.say(
+        format(copy.fitts.spentAbility, {
+          name: copy.fitts.abilityNames[a] ?? a,
+          note: twice ? copy.fitts.spentTwice : note,
+        }),
+      );
   }
 
   /** Runs one ability. The guarantees (§1.6) are checked here, not by the decider. */
@@ -764,6 +839,8 @@ export class RealRun {
         return this.explore(d.route);
       case 'journey':
         return this.journey(d);
+      case 'task':
+        return this.task(d);
       case 'device_pass':
         await this.devicePass();
         this.ran.device_pass = true;
@@ -1069,6 +1146,7 @@ export class RealRun {
           .map((f) => f.title),
       },
       ran: { ...this.ran },
+      ...(this.spent.size ? { spent: [...this.spent.keys()] } : {}),
       changes: this.state.changes
         .filter((c) => c.kind !== 'wording')
         .slice(-8)
@@ -1563,6 +1641,13 @@ export class RealRun {
       return false;
     }
     if (mode !== 'ask-every') return true;
+    // The order the owner just allowed on the gate card.
+    if (
+      action.kind === 'click' &&
+      this.allowedTap?.name === action.name &&
+      this.allowedTap.route === routeOf(from)
+    )
+      return true;
     // What you've already allowed: everything this run, or everything on this page.
     if (this.allowAll || this.allowedOn.has(routeOf(from))) return true;
     // Show what Fitts wants to touch first: scrolled into view, outlined.
@@ -1796,6 +1881,23 @@ export class RealRun {
     } catch {
       // Keep the URL.
     }
+    // A real payment provider is never sent a request, whatever was allowed (Allen, Nov 4).
+    let host = '';
+    try {
+      host = new URL(held.url).host;
+    } catch {
+      // No host: not a provider.
+    }
+    if (host && PAYMENT_HOST.test(host)) {
+      void this.deps.site.release(held.id, false);
+      this.say(format(copy.fitts.providerHeld, { host }));
+      return;
+    }
+    // The order the owner just allowed on the gate card: its own request isn't asked again.
+    if (this.allowedTap && this.acting?.name === this.allowedTap.name) {
+      void this.deps.site.release(held.id, true);
+      return;
+    }
     if (this.state.mode === 'dangerous' && isLocal(this.deps.origin)) {
       void this.deps.site.release(held.id, true);
       this.say(format(copy.fitts.gateSkippedDangerous, { action }));
@@ -1838,6 +1940,22 @@ export class RealRun {
 
   /** The gate modal's answer: send or fail the held request, then carry on (§13). */
   respondGate(gateId: string, decision: 'deny' | 'other' | 'allow'): void {
+    const p = this.payGate;
+    if (p && p.gateId === gateId) {
+      const asked = this.state.gate;
+      if (decision !== 'allow' && asked) this.refused.add(`${asked.route}|${asked.action}`);
+      this.emit([{ type: 'gate.decided', gateId, decision }]);
+      this.say(
+        decision === 'allow'
+          ? copy.fitts.gateAllowed
+          : decision === 'other'
+            ? copy.fitts.gateOther
+            : copy.fitts.gateDenied,
+      );
+      this.resumeFromCard();
+      p.resolve(decision === 'allow');
+      return;
+    }
     const h = this.heldReq;
     if (!h || h.gateId !== gateId) return;
     this.heldReq = undefined;
@@ -2440,31 +2558,7 @@ export class RealRun {
         },
         snap0.path,
       );
-    const result = await runJourney(
-      {
-        brain,
-        snapshot: async () => {
-          const s = await site.snapshot();
-          this.coverage.observe(s);
-          this.syncCoverage();
-          await this.probes.onPage(s);
-          await this.remember(s);
-          this.lastSnap = s;
-          return s;
-        },
-        screenshot: async () => (await site.screenshot().catch(() => undefined))?.jpegBase64,
-        perform: async (action, from) => {
-          await this.perform(action, from);
-          this.deliverQueued();
-          return (await site.snapshot().catch(() => ({ path: from }))).path;
-        },
-        back: async () => (await site.back()).path,
-        stopped: () => this.finished || this.blocked(),
-        forms: (route) => this.deps.appModel?.pages.find((p) => p.route === route)?.forms ?? [],
-        signal: this.abort.signal,
-      },
-      j,
-    );
+    const result = await runJourney(this.walkDeps(brain), j);
     this.journeyNow = undefined;
     // Paused or stopped mid-way: not the journey's fault; it's tried again later.
     if (result.status === 'blocked' && result.reason === 'the run stopped' && !this.finished) {
@@ -2499,6 +2593,139 @@ export class RealRun {
           `journey “${j.name}” ${result.status} after ${result.steps} actions: ${result.reason ?? ''} (${result.trace.slice(-4).join('; ')})`,
         );
     if (this.inbox.length > 0) return outcome('progress', 'the owner spoke');
+    return outcome(result.status === 'done' ? 'done' : 'progress', `${j.name}: ${result.status}`);
+  }
+
+  /** What a journey or a task acts through: the crawl's own perform, probes and memory, and the pay gate. */
+  private walkDeps(brain: JourneyBrain): JourneyDeps {
+    const site = this.deps.site;
+    return {
+      brain,
+      snapshot: async () => {
+        const s = await site.snapshot();
+        this.coverage.observe(s);
+        this.syncCoverage();
+        await this.probes.onPage(s);
+        await this.remember(s);
+        this.lastSnap = s;
+        return s;
+      },
+      screenshot: async () => (await site.screenshot().catch(() => undefined))?.jpegBase64,
+      perform: async (action, from) => {
+        const allowed =
+          action.kind === 'click' &&
+          this.allowedTap?.name === action.name &&
+          this.allowedTap.route === routeOf(from);
+        try {
+          await this.perform(action, from);
+        } finally {
+          if (allowed) this.allowedTap = undefined;
+        }
+        this.deliverQueued();
+        return (await site.snapshot().catch(() => ({ path: from }))).path;
+      },
+      back: async () => (await site.back()).path,
+      stopped: () => this.finished || this.blocked(),
+      forms: (route) => this.deps.appModel?.pages.find((p) => p.route === route)?.forms ?? [],
+      confirm: (name, route) => this.confirmPays(name, route),
+      signal: this.abort.signal,
+    };
+  }
+
+  /**
+   * The gate card for a control that pays or places an order ("Place pickup order?"): the
+   * owner's yes taps it once, their no ends there. It waits as long as they take; only Stop or
+   * taking the wheel closes it unanswered (Allen, Nov 4: the order the owner allowed was
+   * never placed, and nothing said why).
+   */
+  private confirmPays(name: string, route: string): Promise<boolean> {
+    if (this.finished) return Promise.resolve(false);
+    if (this.refused.has(`${route}|${name}`)) return Promise.resolve(false);
+    // Dangerous mode on localhost taps what it finds, as it does at the network gate.
+    if (this.state.mode === 'dangerous' && isLocal(this.deps.origin)) {
+      this.say(format(copy.fitts.gateSkippedDangerous, { action: name }));
+      this.allowedTap = { name, route };
+      return Promise.resolve(true);
+    }
+    const gateId = `gate-pays-${this.id()}`;
+    return new Promise<boolean>((resolve) => {
+      this.payGate = {
+        gateId,
+        resolve: (yes) => {
+          this.payGate = undefined;
+          if (yes) this.allowedTap = { name, route };
+          resolve(yes);
+        },
+      };
+      this.emit([
+        {
+          type: 'gate.requested',
+          gate: {
+            id: gateId,
+            action: name,
+            route,
+            heldRequest: copy.gate.pays.holding,
+            testing: copy.gate.pays.testing,
+            kind: 'pays',
+          },
+        },
+        { type: 'waiting.changed', waitingFor: 'gate' },
+        { type: 'now.changed', nowText: format(copy.gate.pays.title, { action: name }) },
+      ]);
+      this.setActivity('waiting-on-user');
+    });
+  }
+
+  /**
+   * A task the owner asked for ("fill in name, phone and a pickup time and place the order"),
+   * done with steps on the page Fitts is on, the way a journey is: the same perform, probes
+   * and pay gate. Never a search for a planned journey (Allen, Nov 4).
+   */
+  private async task(d: Decision): Promise<Outcome> {
+    const outcome = (result: Outcome['result'], note?: string): Outcome => ({
+      ability: 'task',
+      result,
+      ...(note ? { note } : {}),
+    });
+    const goal = (d.goal ?? this.heard.at(-1) ?? '')
+      .replace(/\s*\[pointing at ref[^\]]*\]\s*$/, '')
+      .trim();
+    if (!goal) return outcome('refused', 'nothing asked: the owner said nothing to do');
+    const snap = await this.deps.site.snapshot().catch(() => undefined);
+    const start = routeOf(snap?.path ?? '/');
+    this.tasks += 1;
+    const j: Journey = {
+      id: `task-${this.tasks}`,
+      name: goal.slice(0, 80),
+      goal,
+      start,
+      steps: [goal],
+      pages: [start],
+      priority: 1,
+      // "Check out" opens a form here; the control that pays still goes to the gate.
+      needs: ['payment'],
+      source: 'owner',
+    };
+    this.emit([{ type: 'now.changed', nowText: format(copy.fitts.doingTask, { goal: j.name }) }]);
+    const spark = this.deps.journeyBrain?.(j);
+    const brain = spark ? new FallbackJourneyBrain(spark) : new PlanJourneyBrain();
+    this.journeyNow = j.id;
+    const result = await runJourney(this.walkDeps(brain), j);
+    this.journeyNow = undefined;
+    if (result.status === 'blocked' && result.reason === 'the run stopped' && !this.finished)
+      return outcome('progress', 'interrupted');
+    this.emit([{ type: 'now.changed' }]);
+    this.say(
+      result.status === 'done'
+        ? format(copy.fitts.journeyDone, { name: j.name, n: result.steps })
+        : format(copy.fitts.journeyFailed, { name: j.name, reason: result.reason ?? '' }),
+    );
+    if (result.status !== 'done')
+      this.pages
+        .get(result.route)
+        ?.evidence.trace.push(
+          `the owner's task “${j.name}” ${result.status} after ${result.steps} actions: ${result.reason ?? ''} (${result.trace.slice(-4).join('; ')})`,
+        );
     return outcome(result.status === 'done' ? 'done' : 'progress', `${j.name}: ${result.status}`);
   }
 
@@ -2965,7 +3192,10 @@ export class RealRun {
       unreached.push({ route: r.path, why });
     }
     const seenPatterns = new Set([...this.pages.keys()].map((k) => patternOf(k)));
-    const dynamic = (model?.pages ?? []).filter((p) => p.dynamic || p.route.includes(':'));
+    // A catch-all ("/*") is what the router shows for any other URL: never a page to reach.
+    const dynamic = (model?.pages ?? []).filter(
+      (p) => (p.dynamic || p.route.includes(':')) && !isCatchAll(p.route),
+    );
     let dynamicReached = 0;
     for (const p of dynamic) {
       if (seenPatterns.has(p.route)) dynamicReached += 1;
@@ -3533,6 +3763,7 @@ export class RealRun {
   dispose(): void {
     this.finished = true;
     this.pendingAsk?.(false);
+    this.payGate?.resolve(false);
     this.pickWaiter?.(undefined);
     if (this.heldReq) void this.deps.site.release(this.heldReq.held.id, false);
     if (this.clock) clearInterval(this.clock);
@@ -3589,6 +3820,7 @@ export class RealRun {
   takeWheel(): void {
     if (this.finished || this.state.activity === 'user-driving') return;
     this.pendingAsk?.(false);
+    this.payGate?.resolve(false);
     this.emit([
       { type: 'waiting.changed' },
       { type: 'activity.changed', activity: 'user-driving' },

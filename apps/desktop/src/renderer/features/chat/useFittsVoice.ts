@@ -75,7 +75,10 @@ export function useFittsVoice() {
       if (run.gate && !gates.has(run.gate.id)) {
         gates.add(run.gate.id);
         lines.push({
-          text: `${copy.gate.title}. ${format(copy.gate.body, { action: run.gate.action, route: run.gate.route })}`,
+          text:
+            run.gate.kind === 'pays'
+              ? `${format(copy.gate.pays.title, { action: run.gate.action })} ${format(copy.gate.pays.body, { action: run.gate.action, route: run.gate.route })}`
+              : `${copy.gate.title}. ${format(copy.gate.body, { action: run.gate.action, route: run.gate.route })}`,
         });
       }
       // Not while you're talking to it: the lines are in the chat, and Fitts doesn't talk over you.

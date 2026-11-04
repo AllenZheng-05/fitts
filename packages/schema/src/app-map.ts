@@ -47,6 +47,16 @@ export function matchesTemplate(template: string, path: string): boolean {
   return t.length === p.length && t.every((s, i) => s.startsWith(':') || s === p[i]);
 }
 
+/**
+ * A catch-all route ("*", "/*", "/docs/*"): what the router shows for any other URL, not a page
+ * to reach. It's left off the map and out of the page counts (Allen, Nov 4: the map listed "/*"
+ * as "known from your code, not reached yet"). A real "not found" page Fitts lands on is a real
+ * URL, and shows under it.
+ */
+export function isCatchAll(path: string): boolean {
+  return /\*|%2a/i.test(path);
+}
+
 const routeOf = (path: string) => (path.split(/[?#]/)[0] ?? '/').replace(/\/+$/, '') || '/';
 
 /** The App Map for a run: the model's pages, the routes the run reached, and every finding's. */
@@ -63,6 +73,7 @@ export function appMap(
   const instances = new Map<string, Set<string>>();
   const paths = new Set<string>();
   const add = (path: string) => {
+    if (isCatchAll(path)) return;
     const c = canonical(path);
     paths.add(c);
     if (c !== routeOf(path)) instances.set(c, (instances.get(c) ?? new Set()).add(routeOf(path)));

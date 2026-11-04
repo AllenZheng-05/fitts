@@ -33,7 +33,12 @@ import {
 /** A current mobile Chrome, so sites serve their phone experience. */
 const MOBILE_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
-import type { AxSnapshot, HeldRequest, OpTrace } from '../../agent/protocol';
+import {
+  PAYMENT_HOST,
+  type AxSnapshot,
+  type HeldRequest,
+  type OpTrace,
+} from '../../agent/protocol';
 import { BrowserWindow, session, type WebContents } from 'electron';
 import { cleanFrames, selectorFor, SOURCE_CHAIN_FN } from './source-chain';
 import { REFS } from './refs';
@@ -1052,6 +1057,9 @@ export class SiteWindow {
         nodes,
         hasPassword: !!document.querySelector('input[type=password]'),
         hours: F.hours(document.body.innerText),
+        payments: [...new Set([...document.querySelectorAll('iframe[src],script[src],form[action]')].map((e) => {
+          try { return new URL(e.getAttribute('src') || e.getAttribute('action') || '', location.href).host; } catch { return ''; }
+        }).filter((h) => new RegExp(${JSON.stringify(PAYMENT_HOST.source)}, 'i').test(h)))].slice(0, 5),
       };`);
   }
 

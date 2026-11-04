@@ -12,6 +12,7 @@ import {
   formValue,
   journeyOrder,
   PAYS,
+  realPayment,
   runJourney,
   type JourneyAction,
   type JourneyBrain,
@@ -442,5 +443,126 @@ describe('SparkJourneyBrain', () => {
     // SPEC-phase4 §6C: a ref that isn't on the page, then a path off the site: unusable twice,
     // so it throws (the run's FallbackJourneyBrain lets the plan take that step).
     await expect(brain.next(input)).rejects.toMatchObject({ name: 'UnusableAnswer' });
+  });
+});
+
+describe('the control that pays or places the order (Allen, Nov 4)', () => {
+  const order: Journey = {
+    ...journey,
+    id: 'task-1',
+    name: 'Place the pickup order',
+    goal: 'Fill in name, phone and a pickup time and place the order',
+    start: '/checkout',
+    steps: ['Fill in name, phone and a pickup time and place the order'],
+    pages: ['/checkout'],
+    needs: ['payment'],
+    source: 'owner',
+  };
+  const checkout = (extra: Partial<AxSnapshot> = {}, nodes: AxSnapshot['nodes'] = []) =>
+    site(
+      {
+        '/checkout': {
+          ...page('/checkout', [
+            { ref: 'name', role: 'textbox', name: 'Name', type: 'text' },
+            { ref: 'place->/confirmation', role: 'button', name: 'Place pickup order' },
+            ...nodes,
+          ]),
+          ...extra,
+        },
+        '/confirmation': page('/confirmation', [], ['Order placed']),
+      },
+      '/checkout',
+    );
+  const brain = () =>
+    scripted([
+      { kind: 'type', ref: 'name', name: 'Name', text: 'Allen', why: 'Your name' },
+      { kind: 'click', ref: 'place->/confirmation', name: 'Place pickup order', why: 'Placing it' },
+      { kind: 'goal_met', why: 'The order is placed' },
+    ]);
+  const taps = (s: ReturnType<typeof site>) =>
+    s.performed.flatMap((a) => (a !== 'back' && a.kind === 'click' ? [a.name] : []));
+
+  it('asks first, and the owner’s yes taps it once and goes on', async () => {
+    const s = checkout();
+    const asked: string[] = [];
+    const r = await runJourney(
+      s.deps(brain(), {
+        confirm: (name, route) => {
+          asked.push(`${route} ${name}`);
+          return Promise.resolve(true);
+        },
+      }),
+      order,
+    );
+    expect(asked).toEqual(['/checkout Place pickup order']);
+    expect(taps(s)).toEqual(['Place pickup order']);
+    expect(r.status).toBe('done');
+    expect(s.where()).toBe('/confirmation');
+  });
+
+  it('the owner’s no ends it there, untapped, and says why', async () => {
+    const s = checkout();
+    const r = await runJourney(s.deps(brain(), { confirm: () => Promise.resolve(false) }), order);
+    expect(taps(s)).toEqual([]);
+    expect(r).toMatchObject({
+      status: 'blocked',
+      reason: 'you said not to tap "Place pickup order"',
+    });
+  });
+
+  it('with no answer it waits, and never taps', async () => {
+    const s = checkout();
+    let answer: ((yes: boolean) => void) | undefined;
+    const done = runJourney(
+      s.deps(brain(), { confirm: () => new Promise<boolean>((r) => (answer = r)) }),
+      order,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(answer).toBeDefined();
+    expect(taps(s)).toEqual([]);
+    answer?.(false);
+    expect((await done).status).toBe('blocked');
+    expect(taps(s)).toEqual([]);
+  });
+
+  it('a real payment provider or a card field is never paid, and the owner isn’t asked', async () => {
+    for (const s of [
+      checkout({ payments: ['js.stripe.com'] }),
+      checkout({}, [{ ref: 'cc', role: 'textbox', name: 'Card number', type: 'text' }]),
+    ]) {
+      let asked = 0;
+      const r = await runJourney(
+        s.deps(brain(), {
+          confirm: () => {
+            asked += 1;
+            return Promise.resolve(true);
+          },
+        }),
+        order,
+      );
+      expect(asked).toBe(0);
+      expect(taps(s)).toEqual([]);
+      expect(r.status).toBe('blocked');
+      expect(r.reason).toMatch(/never pay a real payment provider/);
+    }
+    expect(
+      realPayment(page('/checkout', [{ ref: 'b', role: 'button', name: 'Place pickup order' }])),
+    ).toBeUndefined();
+  });
+
+  it('a journey that isn’t about paying still asks before the order button', async () => {
+    const s = checkout();
+    let asked = 0;
+    await runJourney(
+      s.deps(brain(), {
+        confirm: () => {
+          asked += 1;
+          return Promise.resolve(false);
+        },
+      }),
+      { ...order, needs: [] },
+    );
+    expect(asked).toBe(1);
+    expect(taps(s)).toEqual([]);
   });
 });

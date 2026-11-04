@@ -31,6 +31,9 @@ function Gate({ run }: { run: RunState }) {
     getEngine().respondGate(run.projectId, gate.id, decision);
   const url = project?.url ?? 'localhost';
   const mode = run.mode === 'dangerous' ? copy.modes.dangerous : copy.modes[run.mode];
+  // An order or payment the owner asked for: the same gate, worded as the question it is.
+  const pays = gate.kind === 'pays';
+  const g = pays ? { ...copy.gate, ...copy.gate.pays } : copy.gate;
 
   return (
     <Modal
@@ -46,26 +49,28 @@ function Gate({ run }: { run: RunState }) {
       <div className="flex items-center gap-3 border-b-2 border-ink bg-danger px-[22px] py-4 text-card">
         <TriangleAlert size={24} strokeWidth={2.2} aria-hidden="true" />
         <h1 id="gate-title" className="font-display text-[21px] font-extrabold">
-          {copy.gate.title}
+          {format(g.title, { action: gate.action })}
         </h1>
       </div>
       <div className="flex flex-col gap-3.5 overflow-y-auto px-[22px] py-5">
         <p id="gate-desc" className="text-[16px] leading-normal">
-          <RichText text={format(copy.gate.body, { action: gate.action, route: gate.route })} />
+          <RichText text={format(g.body, { action: gate.action, route: gate.route })} />
         </p>
         <dl className="grid grid-cols-[110px_1fr] gap-x-3.5 gap-y-2 rounded-card border border-ink bg-surface-2 p-3.5 text-[14px]">
           <dt className="text-muted">{copy.gate.click}</dt>
           <dd>{format(copy.gate.clickValue, { action: gate.action })}</dd>
           <dt className="text-muted">{copy.gate.holding}</dt>
-          <dd className="font-mono text-[13px]">{gate.heldRequest}</dd>
+          <dd className={pays ? undefined : 'font-mono text-[13px]'}>
+            {pays ? g.holding : gate.heldRequest}
+          </dd>
           <dt className="text-muted">{copy.gate.testing}</dt>
-          <dd>{gate.testing}</dd>
+          <dd>{pays ? g.testing : gate.testing}</dd>
           <dt className="text-muted">{copy.gate.mode}</dt>
           <dd>{format(copy.gate.modeValue, { mode })}</dd>
         </dl>
         <Checkbox
           tone="danger"
-          label={format(copy.gate.understand, { url })}
+          label={format(g.understand, { url })}
           checked={understood}
           onChange={(e) => setUnderstood(e.target.checked)}
         />

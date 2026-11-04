@@ -31,6 +31,11 @@ const TOOLS = [
       description: 'The journey, from `journeys`; empty for the next planned one.',
     },
   }),
+  tool(
+    'task',
+    'The owner asked you to do something on the site (fill in a form, place an order): do it with steps on the current page.',
+    { goal: { type: 'string', description: 'What they asked for, in their words.' } },
+  ),
   tool('device_pass', 'Check every explored page at every screen size in the device matrix.'),
   tool('check_links', 'Check links and network requests.'),
   tool('state_pass', 'See pages when their data is empty, fails or is slow (local projects).'),
@@ -83,11 +88,13 @@ export function parseDecision(name: string, args: string): Decision {
     text?: string;
     why?: string;
     journeyId?: string;
+    goal?: string;
   };
   return {
     ability: name as AbilityName,
     ...(a.route?.trim() ? { route: a.route.trim() } : {}),
     ...(a.journeyId?.trim() ? { journeyId: a.journeyId.trim().slice(0, 80) } : {}),
+    ...(a.goal?.trim() ? { goal: a.goal.trim().slice(0, 300) } : {}),
     ...(a.say?.trim() ? { say: a.say.trim().slice(0, 240) } : {}),
     ...(a.paths?.length ? { paths: a.paths.slice(0, 20) } : {}),
     ...(a.wish?.trim() ? { wish: a.wish.trim().slice(0, 300) } : {}),

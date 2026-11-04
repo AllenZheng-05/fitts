@@ -16,7 +16,14 @@ function needsYou(run: RunState): { id: string; text: string } | null {
     const item = run.chat.find((c): c is Question => c.id === itemId && c.type === 'question');
     if (item) return { id: `${run.projectId}:${item.id}`, text: item.text };
   }
-  if (run.gate) return { id: `${run.projectId}:${run.gate.id}`, text: copy.gate.title };
+  if (run.gate)
+    return {
+      id: `${run.projectId}:${run.gate.id}`,
+      text:
+        run.gate.kind === 'pays'
+          ? format(copy.gate.pays.title, { action: run.gate.action })
+          : copy.gate.title,
+    };
   // SPEC-phase4 §4.1: Fitts thinks it's done; only the owner finishes, so it reaches them.
   if (run.waitingFor === 'finish-proposal') {
     const item = [...run.chat].reverse().find((c) => c.type === 'finish-proposal');

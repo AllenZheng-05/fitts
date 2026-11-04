@@ -4,6 +4,7 @@
 import {
   appMap,
   flattenMap,
+  isCatchAll,
   mapMarkdown,
   mapTable,
   matchesTemplate,
@@ -178,5 +179,34 @@ describe('appMap', () => {
       '| / | 0 | 1 |',
       '| /contacts/:id | 1 | 0 |',
     ]);
+  });
+});
+
+describe('a catch-all route (Allen, Nov 4)', () => {
+  const withCatchAll = {
+    ...model,
+    pages: [
+      ...model.pages,
+      { route: '/*', title: 'Not found', source: 'code', features: [], forms: 0, dynamic: true },
+      { route: '*', source: 'code', features: [], forms: 0 },
+      { route: '/docs/*', source: 'code', features: [], forms: 0 },
+    ],
+  } as unknown as AppModelSummary;
+
+  it('never shows on the map, reached or not; templates still group their real pages', () => {
+    const root = appMap(run({ appModel: withCatchAll }));
+    const paths = flattenMap(root).map(({ node }) => node.path);
+    expect(paths.some((p) => p.includes('*'))).toBe(false);
+    expect(paths).not.toContain('/docs');
+    expect(
+      flattenMap(root)
+        .filter(({ node }) => node.page && !node.page.reached)
+        .map(({ node }) => node.path),
+    ).toEqual(['/settings/profile']);
+    const t = root.children.find((c) => c.path === '/contacts')?.children[0];
+    expect(t).toMatchObject({ path: '/contacts/:id', instances: 2 });
+    expect(mapMarkdown(root).filter((l) => l.includes('not reached'))).toHaveLength(1);
+    expect(isCatchAll('/*')).toBe(true);
+    expect(isCatchAll('/contacts/:id')).toBe(false);
   });
 });
