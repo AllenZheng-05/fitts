@@ -108,4 +108,22 @@ export const tokens = (n: number) =>
       ? `${(n / 1000).toFixed(1)}k`
       : `${n}`;
 
+/**
+ * For a run of one of the Fitts repo's own demo apps: how to start that app yourself. Keyed by
+ * the project's id; `**bold**` and `` `code` `` work in `lead` and `after`.
+ */
+export const runItYourself: Record<string, { lead: string; commands: string[]; after: string }> = {
+  'demo-chat': {
+    lead: 'This is `demo/chat`, the test app in the Fitts repo. Its planted issues are listed in `demo/chat/PLANTED.md`. To start it on your computer, with Node.js 22.12 or later and pnpm:',
+    commands: [
+      'git clone https://github.com/AllenZheng-05/fitts.git',
+      'cd fitts',
+      'pnpm install',
+      'pnpm --filter demo-chat dev',
+    ],
+    after:
+      'It opens at `http://localhost:5173` (set `PORT` if that port is taken). To run this audit on it, choose the `demo/chat` folder in Fitts. To score the probes alone, free and with no key: `BENCH_OFFLINE=1 pnpm bench:chat`.',
+  },
+};
+
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

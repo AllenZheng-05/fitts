@@ -42,20 +42,20 @@ lines behind every finding. No install and no keys needed.
   load-bearing stage. In the Quality profile it's one of the five reviewers, independent of the
   hosted models. In the Open profile it runs every reviewer, the merging of findings and the
   theme check, with hosted Muse Spark 1.3 alongside for the rest.
-- **Best Creative Build.** A redesign pairs Muse Wonder's design directions with Muse Image
-  illustrations, shown side by side before anything changes in the code.
+- **Best Creative Build.** A redesign pairs design directions (from Muse Wonder in the Quality
+  profile) with Muse Image illustrations, shown side by side before anything changes in the code.
 
 ## Meta models and their jobs
 
 | Model | Job |
 |---|---|
-| Muse Spark 1.3 | The interview, reading the code into an App Model, each crawl decision, journeys from screenshots, the chat, and the fixer when Muse Code isn't available |
-| Muse Wonder 1.0 | Two of the five reviewers, merging findings, the theme check, judging surprising page changes, redesign directions |
+| Muse Spark 1.3 | The interview, reading the code into an App Model, each crawl decision, journeys from screenshots and the chat. In Economy, also the five reviewers, merging findings, the theme check, redesign directions, and the fixer when Muse Code isn't available |
+| Muse Wonder 1.0 | In every profile: judging surprising page changes, and reviewing fixes a measurement can't check. In Quality, also two of the five reviewers, merging findings, the theme check, redesign directions, and the fixer when Muse Code isn't available |
 | Muse Code | Meta's coding agent, running Muse Wonder: makes the fixes inside an edit allowlist, and does the second pass of reading the code |
 | Muse Spark Open (Baseten) | An independent reviewer in Quality; in the Open profile, every reviewer, the merging and the theme check |
 | Muse Image 1.0 | Mockups of a fix and redesign illustrations |
 | SAM 3.1 | Outlines the element a finding is about, and the element that moved in a surprise |
-| Muse Voice Transcribe 1.0 | Turns the owner's voice into chat and commands |
+| Muse Voice Transcribe 1.0 | Turns the owner's voice messages and voice commands into text |
 
 ## Install
 

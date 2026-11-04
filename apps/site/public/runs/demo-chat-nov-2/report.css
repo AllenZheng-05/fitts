@@ -348,6 +348,21 @@ h1 {
 .math {
   color: var(--ink-2);
 }
+.try {
+  max-width: 44rem;
+  margin: 1rem 0;
+  padding: 14px 16px;
+  border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+.try h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+}
+.try p {
+  margin: 0.5rem 0 0;
+}
 .toc ul {
   display: flex;
   flex-wrap: wrap;

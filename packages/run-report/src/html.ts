@@ -12,6 +12,7 @@ import {
   phases,
   plural,
   providers,
+  runItYourself,
   severityNames,
   tasks,
   tokens,
@@ -114,6 +115,7 @@ ${stat('Rolled back', String(s.rolledBack), '')}
 ${stat('Spent on models', usd(s.spentUsd), plural(s.calls, 'call'))}
 </dl>
 <p class="math">${esc(mathLine(d))}</p>
+${tryIt(d.projectId)}
 ${d.otherChanges.length + d.findings.filter((f) => f.change).length === 0 ? '<p class="small">No fixes in this run: it ended before any were approved. Fitts asks before it changes code.</p>' : ''}
 <nav aria-label="On this page" class="toc"><ul>${shown
     .map((x) => `<li><a href="#${x.id}">${esc(x.title)}</a></li>`)
@@ -143,6 +145,13 @@ ${costSection(d)}
 </body>
 </html>
 `;
+}
+
+/** "Run it yourself", on a run of one of the repo's demo apps. */
+function tryIt(project: string) {
+  const t = runItYourself[project];
+  if (!t) return '';
+  return `<aside class="try" aria-labelledby="try-title"><h2 id="try-title">Run it yourself</h2><p>${inline(t.lead)}</p><pre tabindex="0" aria-label="Commands to start ${esc(project)}"><code>${t.commands.map((c) => esc(c)).join('\n')}</code></pre><p>${inline(t.after)}</p></aside>`;
 }
 
 function siteBar(site: NonNullable<RenderOptions['site']>) {

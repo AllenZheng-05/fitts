@@ -147,6 +147,16 @@ Three jobs, in order: a shareable run report, real open-source apps, the README 
 | E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | done (Nov 3)                      |
 | E3  | README for judges                                            | Wednesday, once the numbers exist |
 
+**Status, Nov 4, after the freeze (checks and content only).**
+- Main merged in again (the homepage emblem and one Download button, the keyboard test fix).
+  The site's e2e passes (42), axe included; the homepage was looked at by hand at 390 and 320 px.
+- The demo-chat run page has a "Run it yourself" note with the commands to start `demo/chat`
+  (checked: it starts with them). The note comes from `@fitts/run-report` by project id, so a
+  re-export keeps it.
+- Wednesday's steps and README edits, with placeholders: [RUNS-SWAP.md](evidence/RUNS-SWAP.md).
+- `docs/SUBMISSION.md` corrected against the model routing (which jobs are Wonder's in which
+  profile).
+
 **Status, Nov 3, evening. Ready to merge into main.**
 - Main is merged into `evidence` twice: at 5858790 (README is main's, with "Try it without keys";
   the test script adds the run-report tests), then at 0b86975 (the Phase 4 session's crawl and

@@ -359,6 +359,11 @@ describe('exportRun', () => {
     expect(html).toContain('$0.223');
   });
 
+  it('tells how to start a repo demo app yourself', () => {
+    expect(html).toContain('<h2 id="try-title">Run it yourself</h2>');
+    expect(html).toContain('pnpm install\npnpm --filter demo-chat dev</code></pre>');
+  });
+
   it('keeps suggestions apart from findings', () => {
     expect(html).toContain('id="suggestions"');
     expect(html).not.toContain('id="f-f4"');

@@ -104,6 +104,8 @@ export interface ModelUse {
 
 export interface ReportData {
   project: string;
+  /** Fitts's id for the project ("demo-chat"), which a display name may not match. */
+  projectId: string;
   framework?: string;
   runId: string;
   /** ISO timestamps of the first and last logged events. */
@@ -396,6 +398,7 @@ export function buildReport(
 
   const data: ReportData = {
     project: run.project?.name ?? s.projectId,
+    projectId: s.projectId,
     ...(run.project?.framework ? { framework: run.project.framework } : {}),
     runId: s.runId,
     startedAt: new Date(run.startedAt).toISOString(),
