@@ -110,6 +110,7 @@ and every model call goes into a cost ledger with a cap you set.
 Apps with planted problems, each scored against its answer key, which is hidden from Fitts during
 the run. The comparison was pre-registered in `docs/bench/PLAN.md` before any run; every run,
 including the stopped one, is a row in `docs/bench/RESULTS.md`.
+Every bench run here used the scripted decider: the cheap crawl setting (`FITTS_CRAWL_BRAIN=explorer`) also turned the model decider off, so these runs measure Fitts’s checks and reviewers on a scripted crawl, not the app’s own model decider.
 
 **`demo/chat`, 33 planted** (19 structural, S1; 14 that need judgment, S2):
 

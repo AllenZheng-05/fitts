@@ -45,6 +45,8 @@ test('bench:audit', async () => {
       FITTS_E2E_PICK_FOLDER: FOLDER,
       FITTS_SITE_PORT: PORT,
       FITTS_CRAWL_BRAIN: 'explorer',
+      // BENCH_DECIDER=model: the real decider, so what the owner asks for is decided as in the app.
+      ...(process.env['BENCH_DECIDER'] === 'model' ? { FITTS_DECIDER: 'model' } : {}),
       FITTS_OFFLINE: '0',
       FITTS_NO_DEV_KEYS: '0',
       ...(AUTONOMOUS ? { FITTS_GH_DRY_RUN: '1' } : {}),
@@ -107,12 +109,27 @@ test('bench:audit', async () => {
         const all = await states();
         const [projectId, s] = Object.entries(all).find(([, r]) => r.phase !== 'interview') ?? [];
         if (!projectId || !s) return false;
-        if (STEER && !steered && s.phase !== 'done' && Date.now() - startedAt > STEER_AFTER_MS) {
+        if (
+          STEER &&
+          !steered &&
+          !s.gate &&
+          !s.waitingFor &&
+          s.phase !== 'done' &&
+          Date.now() - startedAt > STEER_AFTER_MS
+        ) {
           steered = true;
           await page.getByLabel('Message Fitts').fill(STEER);
           await page.getByLabel('Message Fitts').press('Enter');
         }
-        if (ASK && !asked && s.phase !== 'done' && Date.now() - startedAt > ASK_AFTER_MS) {
+        // Never while a card is up: Enter would land on its focused "Don't do it".
+        if (
+          ASK &&
+          !asked &&
+          !s.gate &&
+          !s.waitingFor &&
+          s.phase !== 'done' &&
+          Date.now() - startedAt > ASK_AFTER_MS
+        ) {
           asked = true;
           await page.getByLabel('Message Fitts').fill(ASK);
           await page.getByLabel('Message Fitts').press('Enter');
@@ -166,6 +183,7 @@ test('bench:audit', async () => {
           // "I think I'm done": only the owner ends a run, so the audit is over here too (the
           // site session found runs that ended at this card never reported).
           s.waitingFor === 'finish-proposal' ||
+          s.chat.some((c) => c.type === 'state' && c.stateKind === 'budget' && !c.answer) ||
           s.chat.some((c) => c.type === 'state' && c.stateKind === 'nothing-found')
         );
       },

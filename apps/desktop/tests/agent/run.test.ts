@@ -2388,3 +2388,65 @@ describe('a catch-all route in the coverage counts (Allen, Nov 4)', () => {
     run.dispose();
   }, 20_000);
 });
+
+describe('what the owner asks for is done, whatever the decider picks (Allen, Nov 4)', () => {
+  it('a decider that never picks a task still gets one when the owner asks', async () => {
+    let path = '/';
+    const nodes: AxNode[] = [
+      { ref: 'name', role: 'textbox', name: 'Name', type: 'text' },
+      { ref: 'place', role: 'button', name: 'Place pickup order' },
+    ];
+    const site = fakeSite();
+    Object.assign(site, {
+      snapshot: () =>
+        Promise.resolve<AxSnapshot>({
+          url: `http://x${path}`,
+          path,
+          title: path,
+          headings: [],
+          nodes: path === '/' ? nodes : [],
+          hasPassword: false,
+        }),
+      click: (ref: string) => {
+        site.log.push(`click ${ref}`);
+        if (ref === 'place') path = '/confirmation';
+        return Promise.resolve({ path, navigated: ref === 'place' });
+      },
+      type: (ref: string, text: string) => {
+        site.log.push(`type ${ref} ${text}`);
+        const n = nodes.find((x) => x.ref === ref);
+        if (n) n.value = text;
+        return Promise.resolve({ path, navigated: false });
+      },
+    });
+    const picked: string[] = [];
+    const steps: JourneyAction[] = [
+      { kind: 'type', ref: 'name', name: 'Name', text: 'Allen', why: 'Your name' },
+      { kind: 'click', ref: 'place', name: 'Place pickup order', why: 'Placing it' },
+      { kind: 'goal_met', why: 'Placed' },
+    ];
+    let i = 0;
+    const { run, state } = setup({
+      site,
+      decider: {
+        next: () =>
+          new Promise<Decision>((r) =>
+            setTimeout(() => {
+              picked.push('journey');
+              r({ ability: 'journey' });
+            }, 20),
+          ),
+      },
+      journeyBrain: () => ({
+        next: () => Promise.resolve(steps[Math.min(i++, steps.length - 1)]!),
+      }),
+    });
+    run.start();
+    run.sendMessage('Fill in my name and place the order. It’s a demo site.');
+    await until(() => state()?.gate?.kind === 'pays');
+    run.respondGate(state()?.gate?.id ?? '', 'allow');
+    await until(() => path === '/confirmation');
+    expect(site.log.filter((l) => l === 'click place')).toHaveLength(1);
+    run.dispose();
+  });
+});

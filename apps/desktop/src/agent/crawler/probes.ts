@@ -44,6 +44,12 @@ export class ProbeRunner {
   private readonly backTried = new Set<string>();
   /** The last text typed on each route (for back-mid-flow). */
   private readonly typed = new Map<string, { ref: string; text: string }>();
+  /**
+   * A journey or a task is under way: back-mid-flow waits for the crawl, since its Back would
+   * leave the page the journey just reached (Nov 4: an order placed, then Back to /checkout,
+   * and the journey never saw the confirmation).
+   */
+  walking = false;
   private readonly traces = new Map<string, ActionTrace[]>();
   private readonly requests: RequestRecord[] = [];
   private readonly forward: ForwardAction[] = [];
@@ -403,7 +409,7 @@ export class ProbeRunner {
    */
   private async backMidFlow(from: string, to: string): Promise<void> {
     const typed = this.typed.get(from);
-    if (!typed || this.backTried.has(from) || to === '/' || to === from) return;
+    if (this.walking || !typed || this.backTried.has(from) || to === '/' || to === from) return;
     this.backTried.add(from);
     const items: ProbeItem[] = [];
     try {

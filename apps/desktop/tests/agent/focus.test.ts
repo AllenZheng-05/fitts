@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AxNode, AxSnapshot } from '../../src/agent/protocol';
 import { Coverage, isPattern } from '../../src/agent/crawler/coverage';
-import { pivotFrom } from '../../src/agent/crawler/focus';
+import { pivotFrom, taskFrom } from '../../src/agent/crawler/focus';
 
 const snap = (path: string, nodes: AxNode[], title = 'Basil & Ember'): AxSnapshot => ({
   url: `http://localhost:5176${path}`,
@@ -101,5 +101,30 @@ describe("reading a pivot from the owner's words", () => {
     expect(pivotFrom('The checkout button looks off, keep going', pages)).toBeUndefined();
     expect(pivotFrom('Stay on the moon', pages)).toBeUndefined();
     expect(pivotFrom('OK, you can test anywhere now', pages)).toEqual({ lift: true });
+  });
+});
+
+describe('reading a task from the owner’s words (Allen, Nov 4)', () => {
+  it('an instruction to act on the site is a task; feedback and questions aren’t', () => {
+    for (const yes of [
+      "Fill in name, phone and a pickup time and place the order. It's a demo site, no real money.",
+      'Can you add a margherita to the cart and check out?',
+      'go ahead and place the order',
+      'Okay, place a test order',
+      'please submit the form',
+      'Order a margherita for pickup',
+      'Fitts, book a table for two tonight',
+    ])
+      expect(taskFrom(yes), yes).toBe(yes);
+    for (const no of [
+      'add a skip link',
+      'make the button bigger',
+      "why can't I place an order?",
+      'the checkout button looks off, keep going',
+      'Stay on checkout',
+      'place the cart icon somewhere obvious',
+      'That is not a problem',
+    ])
+      expect(taskFrom(no), no).toBeUndefined();
   });
 });

@@ -62,6 +62,31 @@ describe('ProbeRunner', () => {
     ]);
   });
 
+  it('back mid-flow waits while a journey or task is under way: its Back would leave the page it reached', async () => {
+    const { runner, calls, failed } = setup();
+    runner.walking = true;
+    await runner.afterAction(
+      { kind: 'type', ref: 'compose-body', name: 'Message', text: 'fitts-test message' },
+      '/compose/recipient',
+      { path: '/compose/recipient', navigated: false },
+    );
+    await runner.afterAction(
+      { kind: 'click', ref: 'compose-next', name: 'NEXT' },
+      '/compose/recipient',
+      { path: '/compose/confirm', navigated: true },
+    );
+    expect(calls).toEqual([]);
+    expect(failed('back-mid-flow')).toEqual([]);
+    // The crawl still checks it later.
+    runner.walking = false;
+    await runner.afterAction(
+      { kind: 'click', ref: 'compose-next', name: 'NEXT' },
+      '/compose/recipient',
+      { path: '/compose/confirm', navigated: true },
+    );
+    expect(calls).toEqual(['back']);
+  });
+
   it('empty submit: once per form, only with empty fields and a submit-like control', () => {
     const { runner } = setup();
     const form = snap('/compose/recipient', [

@@ -3984,3 +3984,29 @@ The recorded run was on 0.1.0; these five were still in 0.1.1. Each is fixed at 
   it's left off rather than shown as "Not found page (catch-all)". A real not-found page Fitts
   lands on has a real URL and shows under it. Parameter routes (/menu/:id) still group their
   pages.
+- **What the owner asks for is the next thing done, in code.** Validation runs 2 and 3 seemed to
+  show the decider ignoring "Fill in name, phone and a pickup time and place the order", but the
+  bench launches the built app and both ran a build from before these fixes, with the scripted
+  decider; the real decider's choice wasn't measured. Routed in code instead, so it doesn't depend
+  on that choice (the guarantees live in code, not in a prompt). `taskFrom` reads an instruction
+  to act on the site from the owner's words (it starts with fill in, place … order, order a, book
+  a, submit, check out, add … to the cart and the like, optionally after "can you", "go ahead and"
+  or "please"); the next decision is that task, without asking the decider. Design feedback ("add
+  a skip link", "place the cart icon somewhere obvious") and questions don't match.
+- **Back mid-flow waits while a journey or task runs.** In the first validation run the order was
+  placed, then the probe pressed Back to check what typing survives, which left the journey on
+  /checkout: it never saw the confirmation and failed after 15 actions. The probe now runs only in
+  the crawl.
+- **The bench can run the real decider.** Every bench sets `FITTS_CRAWL_BRAIN=explorer` (a cheap
+  crawl), and that also turned the model decider off, so no bench run had used it (noted in
+  RESULTS.md and the README). `FITTS_DECIDER=model` keeps the real decider over the explorer crawl;
+  the bench sets it with `BENCH_DECIDER=model`. The app never sets either. The bench also stops at
+  an unanswered budget card, which ends the audit as the approval card does.
+- **Three things the real decider turned up (validation run 4, Nov 4).** It said "Staying on
+  checkout as you asked" more than 20 times once checkout was covered: a decider line that opens
+  like one of its last six isn't said again. It kept choosing "explore /checkout": a page already
+  seen and covered isn't opened again, and the crawl carries on where it is. And explore is never
+  marked spent (it ends itself; spent, the checks would be refused with nothing left to explore
+  first). The bench now waits for no card to be up before typing, since Enter landed on the gate's
+  focused "Don't do it". The last validation run was skipped to record on time: the task path is
+  covered by tests, not yet by a paid run.

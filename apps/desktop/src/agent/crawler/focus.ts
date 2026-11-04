@@ -37,3 +37,26 @@ export function pivotFrom(message: string, pages: { route: string; title?: strin
     .map((p) => p.route);
   return focus.length ? { focus: [...new Set(focus)] } : undefined;
 }
+
+/**
+ * A request to do something on the site, said as an instruction: "Fill in name, phone and a
+ * pickup time and place the order", "can you add a margherita to the cart and check out". The
+ * run does it as a task, in code: the decider was told to and picked another journey instead
+ * (Allen, Nov 4, validation run 2). Design feedback ("add a skip link", "make it bigger") and
+ * questions ("why can't I place an order?") aren't requests to act.
+ */
+const DO = new RegExp(
+  [
+    '^(?:(?:ok(?:ay)?|now|so|then|next|alright|fitts)[,.!\\s]+)*',
+    "(?:(?:can|could|would|will) you\\s+|go ahead and\\s+|try (?:to\\s+)?|i(?:'d| would) like you to\\s+|i want you to\\s+)?",
+    '(?:please\\s+)?',
+    '(?:fill (?:in|out)|place (?:an?|the|my)(?: test)? (?:\\w+ ){0,2}(?:order|booking|reservation)\\b|order (?:an?|the|some|two|one|\\d)\\b|book (?:an?|the)\\b|reserve (?:an?|the)\\b|submit (?:the|my|it)\\b|sign (?:up|in)\\b|log ?in\\b|check ?out\\b|complete (?:the|my|an?)\\b|buy\\b|enter (?:my|a|the|some)\\b|(?:pick|choose|select) (?:an?|the)\\b|add (?:.{1,60}) to (?:the |my )?(?:cart|order|bag|basket)\\b)',
+  ].join(''),
+  'i',
+);
+
+/** The owner's words when they ask Fitts to do something on the site, else undefined. */
+export function taskFrom(message: string): string | undefined {
+  const text = message.trim();
+  return DO.test(text) ? text.slice(0, 300) : undefined;
+}

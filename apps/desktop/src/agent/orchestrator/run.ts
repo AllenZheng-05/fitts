@@ -34,7 +34,7 @@ import type { SiteRect } from '@fitts/schema';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
 import { Coverage, DESTRUCTIVE, isPattern, patternOf, routeOf } from '../crawler/coverage';
-import { pivotFrom } from '../crawler/focus';
+import { pivotFrom, taskFrom } from '../crawler/focus';
 import { chooseCells, mergeBreakpoints, widthsFromCss } from '../devices/matrix';
 import { chooseStates, stateKey } from '../crawler/states';
 import {
@@ -265,6 +265,10 @@ export class RealRun {
   private readonly emptyLast = new Map<AbilityName, string>();
   /** Tasks the owner asked for so far (each one's id). */
   private tasks = 0;
+  /** The owner asked Fitts to do something on the site: the next decision is that task. */
+  private asked: string | undefined;
+  /** The decider's last lines, by their opening words: the same line isn't said again and again. */
+  private readonly lastSays: string[] = [];
   /** The gate card for a control that pays or places an order, waiting on the owner. */
   private payGate: { gateId: string; resolve: (yes: boolean) => void } | undefined;
   /** The order the owner allowed, while its tap runs: its own request isn't asked about again. */
@@ -697,23 +701,41 @@ export class RealRun {
       this.nudged = false;
       this.heard.push(...this.inbox);
       this.inbox = [];
+      // What the owner asked Fitts to do is the next thing it does, in code (Allen, Nov 4).
+      const asked = this.asked;
+      this.asked = undefined;
       // A real decision takes a moment: the Now line says what Fitts is doing meanwhile.
       if (this.deps.decider && !refused)
         this.emit([{ type: 'now.changed', nowText: 'Thinking about what’s next' }]);
       let decision: Decision;
-      try {
-        decision = await (refused ? fallback : decider).next(situation, this.abort.signal);
-      } catch (e) {
-        if (this.finished) return;
-        if ((e as { name?: string }).name === 'AbortError') continue;
-        decision = await fallback.next(situation);
-      }
+      if (asked) decision = { ability: 'task', goal: asked, why: 'The owner asked for it' };
+      else
+        try {
+          decision = await (refused ? fallback : decider).next(situation, this.abort.signal);
+        } catch (e) {
+          if (this.finished) return;
+          if ((e as { name?: string }).name === 'AbortError') continue;
+          decision = await fallback.next(situation);
+        }
       if (this.finished) return;
       if (this.blocked() && !listening) continue;
       // The decider's line is what it's about to do: said only when the step will run, so a
       // refused step never announces itself (Allen's feedback, round 7).
       const refusal = this.refusal(decision);
-      if (decision.say && !refusal) this.say(decision.say);
+      // The same line again ("Staying on checkout as you asked", 20 times in a row on Nov 4)
+      // is noise: a line that opens like one of the last few isn't said.
+      if (decision.say && !refusal) {
+        const opening = decision.say
+          .toLowerCase()
+          .replace(/[^a-z0-9 ]+/g, ' ')
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 3)
+          .join(' ');
+        if (!this.lastSays.includes(opening)) this.say(decision.say);
+        this.lastSays.push(opening);
+        if (this.lastSays.length > 6) this.lastSays.shift();
+      }
       if (decision.why && !refusal) this.logDetail('thinking', decision.why);
       const passName = copy.fitts.abilityNames[decision.ability] ?? decision.ability;
       if (!refusal) this.logDetail('pass', format(copy.fitts.passStarted, { name: passName }));
@@ -802,6 +824,9 @@ export class RealRun {
   private noteEmpty(outcome: Outcome, before: string): void {
     const a = outcome.ability;
     if (outcome.result === 'refused' || outcome.result === 'done' || this.finished) return;
+    // Exploring ends itself (covered, circling, the ceiling); spent, it would leave the checks
+    // refused with nothing to explore first.
+    if (a === 'explore') return;
     // Paused or stopped mid-way, or the owner spoke: not the ability's emptiness.
     if (this.inbox.length > 0 || outcome.note === 'interrupted') return;
     const key = `${outcome.result}|${outcome.note ?? ''}`;
@@ -1197,7 +1222,14 @@ export class RealRun {
       result,
       ...(note ? { note } : {}),
     });
-    if (route && !isPattern(route) && this.coverage.inFocus(route)) {
+    // A page that's already covered isn't opened again: the crawl carries on where it is
+    // (Nov 4: "explore /checkout" picked again and again once checkout was covered).
+    if (
+      route &&
+      !isPattern(route) &&
+      this.coverage.inFocus(route) &&
+      !(this.pages.has(routeOf(route)) && this.coverage.routeDone(route))
+    ) {
       const snap = await this.deps.site.snapshot().catch(() => undefined);
       if (snap && routeOf(snap.path) !== routeOf(route))
         await this.perform({ kind: 'navigate', path: route, why: `Opening ${route}` }, snap.path);
@@ -2558,7 +2590,10 @@ export class RealRun {
         },
         snap0.path,
       );
-    const result = await runJourney(this.walkDeps(brain), j);
+    this.probes.walking = true;
+    const result = await runJourney(this.walkDeps(brain), j).finally(
+      () => (this.probes.walking = false),
+    );
     this.journeyNow = undefined;
     // Paused or stopped mid-way: not the journey's fault; it's tried again later.
     if (result.status === 'blocked' && result.reason === 'the run stopped' && !this.finished) {
@@ -2710,7 +2745,10 @@ export class RealRun {
     const spark = this.deps.journeyBrain?.(j);
     const brain = spark ? new FallbackJourneyBrain(spark) : new PlanJourneyBrain();
     this.journeyNow = j.id;
-    const result = await runJourney(this.walkDeps(brain), j);
+    this.probes.walking = true;
+    const result = await runJourney(this.walkDeps(brain), j).finally(
+      () => (this.probes.walking = false),
+    );
     this.journeyNow = undefined;
     if (result.status === 'blocked' && result.reason === 'the run stopped' && !this.finished)
       return outcome('progress', 'interrupted');
@@ -3913,6 +3951,9 @@ export class RealRun {
       this.coverage.focus(pivot.focus);
       this.say(format(copy.fitts.focusOn, { pages: pivot.focus.join(', ') }));
     }
+    // "Fill in … and place the order": the next thing Fitts does (Allen, Nov 4).
+    const task = taskFrom(text);
+    if (task) this.asked = task;
     // An open finish proposal closes: the message is what to do next (§4.1).
     const proposal = this.state.chat.find((c) => c.id === this.proposalId);
     if (proposal?.type === 'finish-proposal') this.answerProposal(proposal, 'continue');

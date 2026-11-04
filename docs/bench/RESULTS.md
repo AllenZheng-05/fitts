@@ -6,6 +6,8 @@ matched (overall, then S1 structure-detectable and S2 judgment or visual). Preci
 of shown findings that match a planted issue, strict and at severity ≥ 2. Cost is the run's
 ledger; wall time is the run's own.
 
+Every bench run here used the scripted decider: the cheap crawl setting (`FITTS_CRAWL_BRAIN=explorer`) also turned the model decider off, so these runs measure Fitts’s checks and reviewers on a scripted crawl, not the app’s own model decider.
+
 ## demo/chat (33 planted: 19 S1, 14 S2)
 
 | Run id | Date (UTC) | Arm | Commit | Recall | S1 | S2 | Precision (strict) | Precision (sev ≥ 2) | Unplanted at sev ≥ 2 | Cost | Wall |

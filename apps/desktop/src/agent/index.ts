@@ -424,7 +424,12 @@ function startRealAudit(projectId: string, set: EngineCall['settings']): boolean
     allowed: () => runRef.current?.allowed() ?? true,
   });
   const modelOpts = { contributor, baseten: Boolean(keys.baseten) };
-  const deciding = useModel && process.env['FITTS_DECIDER'] !== 'scripted';
+  // FITTS_DECIDER=model: the real decider over the explorer crawl (a bench that checks what
+  // the owner asks for gets decided; the app never sets FITTS_CRAWL_BRAIN).
+  const deciding =
+    online() &&
+    process.env['FITTS_DECIDER'] !== 'scripted' &&
+    (useModel || process.env['FITTS_DECIDER'] === 'model');
   const decider = deciding
     ? new SparkDecider(runCaller, runCtx, () => modelFor('crawl', profile(), modelOpts).model)
     : undefined;
