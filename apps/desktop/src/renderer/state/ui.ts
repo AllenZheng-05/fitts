@@ -95,11 +95,12 @@ type UiFields = Omit<
   | 'settingsReturnTo'
 >;
 
-/** First launch, or no projects: Welcome. Otherwise the last opened project (SPEC §4). */
-function initialScreen(): Screen {
-  const { projects, lastOpenId } = useProjects.getState();
-  return projects.length > 0 && lastOpenId ? 'workspace' : 'welcome';
-}
+/**
+ * Fitts always opens on Welcome: the setup card the first time, "Welcome back" with projects.
+ * Opening the last project dropped you into its interview or run; lastOpenId is kept for the
+ * pages that return to it.
+ */
+const initialScreen = (): Screen => 'welcome';
 
 export const useUi = create<UiState>((set, get) => ({
   screen: initialScreen(),

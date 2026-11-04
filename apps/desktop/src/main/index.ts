@@ -21,7 +21,8 @@ import { UnderstandHost } from './understand';
 import { MemoryStore } from './store/memory';
 import { ProjectStore } from './store/projects';
 import { SAFE_ID } from './store/run-log';
-import { APP_ID, createMainWindow, ICON_PATH } from './window';
+import { appIdFor } from './app-details';
+import { createMainWindow, ICON_PATH } from './window';
 
 // The name first: Electron fixes the user data folder the first time anything asks for it, from
 // the app's name at that moment. Asked before this, it's the package name, @fitts/desktop, and
@@ -36,7 +37,7 @@ if (process.argv.includes(WIPE_FLAG)) wipeUserData(app.getPath('userData'));
 registerAssetScheme();
 // Windows groups taskbar buttons by app ID. Without one of its own, Fitts shares
 // electron.exe's identity and the taskbar shows Electron's icon instead of the window's.
-if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
+if (process.platform === 'win32') app.setAppUserModelId(appIdFor(app.isPackaged));
 
 void app.whenReady().then(() => {
   // The app's own page may use the microphone, audio only (SPEC-phase2 §14); nothing else is

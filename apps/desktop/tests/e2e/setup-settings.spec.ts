@@ -81,13 +81,17 @@ test('first launch: no code here, audit a live site instead', async () => {
   ).toHaveAttribute('aria-selected', 'true');
 });
 
-test('relaunch opens the last project instead of Welcome', async () => {
+test('relaunch opens Welcome back, which offers the last project', async () => {
   await completeSetup(launched.page);
   const { userData } = launched;
   await launched.close({ keepUserData: true });
   launched = await launchApp({ userData });
+  const { page } = launched;
+  await expect(page.getByRole('heading', { name: /^Welcome back/, level: 2 })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Switch project/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /demo\/chat/ }).click();
   await expect(
-    launched.page.getByRole('button', { name: 'Switch project, current: demo/chat' }),
+    page.getByRole('button', { name: 'Switch project, current: demo/chat' }),
   ).toBeVisible();
 });
 

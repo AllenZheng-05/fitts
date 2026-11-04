@@ -245,3 +245,16 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
 - **One issue text, not two.** Only TodoMVC's placeholder contrast is confirmed, unreported and
   owned by the project. The keyboard gap is already tastejs/todomvc#1017, and Bootstrap's dark
   secondary color is twbs/bootstrap#39484 (fixed in v6).
+- **The homepage shows the app's large Welcome logo (Allen, Nov 3).** The hero had the small mark
+  beside the name; it now has the 300×300 emblem from the app's Welcome screen beside it, side by
+  side (Allen: not above and below), outside the h1 so the heading is still "Fitts": the layer
+  tag, the mark on its hero card, the cursor flying in along the dotted path to the coral target
+  (once, on load; reduced motion shows the end state) and the Fitts's-law label. It's a copy of
+  FittsEmblem.tsx in src/components/Emblem.tsx, and the drift test compares the drawing. It's
+  drawn at 300 and scaled: full size from lg (the name 160px), 75% on tablets, 44% on phones (the
+  name 64px), so the row fits a 320px screen.
+- **One Download button on the homepage (Allen, Nov 3).** The three platform buttons, the "Free ·
+  open source · beta · macOS beta" line and the install-notes link are replaced by one large blue
+  "Download" button with the download icon. It opens the Download page rather than a file: that
+  page fills the button for the visitor's platform and keeps every build, the Mac beta note and
+  the install notes, so nobody whose platform isn't detected gets the wrong installer.

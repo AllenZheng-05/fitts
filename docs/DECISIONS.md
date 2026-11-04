@@ -2592,6 +2592,22 @@ understand the project's CI before coding; and one PR for the whole run.
 
 # Phase 4
 
+## Phase 3 — the taskbar icon and the launch screen (Allen, Nov 3)
+
+- **The Windows taskbar shows Fitts's icon in the installed app.** The relaunch details pointed
+  at resources/icon.ico, which in a packaged app is inside app.asar; Explorer can't read files
+  there, so the Windows 11 taskbar fell back to Electron's icon (the exe, window and thumbnail
+  were right). Packaged, the icon now comes from Fitts.exe itself (appIconPath: the exe,
+  appIconIndex 0); dev keeps the .ico, a real file. Dev also runs under its own AppUserModelID,
+  app.fitts.desktop.dev, in both setAppUserModelId and the window's details, so a dev run never
+  caches electron.exe's icon under the installed app's id. The choice lives in
+  src/main/app-details.ts (no Electron imports) so both branches are unit-tested.
+- **Fitts always opens on Welcome.** Launch used to open the last project's workspace, which
+  dropped you straight into its interview or run. Now it's the setup card the first time and
+  "Welcome back" when there are projects; lastOpenId is kept. Opening a project from Welcome back
+  is the same as before: a run still in memory reopens as it was; otherwise the project opens on
+  its interview, which waits for you. Nothing starts a crawl or spends anything on its own.
+
 ## Phase 4 — U0: housekeeping
 
 - **"Allow microphone" asks for real.** The chip used to set a flag. Now `requestMic()` goes to
@@ -3186,7 +3202,7 @@ cuts.
 ## Phase 4 — demo/basil-ember (Allen, Nov 2)
 
 - **The AI-generated restaurant site is a demo target, as generated.** Muse Code built it from
-  one prompt (`prompt.md`) in `C:/Users/Plasm/Projects/basil-ember-gen`; it's copied into
+  one prompt (`prompt.md`) in `../basil-ember-gen`; it's copied into
   demo/basil-ember byte for byte, without node_modules, its .git or dist (its own .gitignore
   leaves dist out), and committed on its own. The monorepo's .gitignore leaves its
   `tsconfig.tsbuildinfo` out and git stores `prompt.md` with LF line endings; nothing else
@@ -3449,7 +3465,7 @@ cuts.
   path inside its own folders. Allen turned on `LongPathsEnabled` and installed CMake 3.31.6
   (its ninja is 1.12.1). CMake 4 drops support for the old `cmake_minimum_required` that some
   native libraries still declare. The build points at it with `cmake.dir` in the generated
-  `android/local.properties`, which is never committed. Fitts builds from C:/Users/Plasm/bea, a
+  `android/local.properties`, which is never committed. Fitts builds from ../../bea, a
   clone of the mirror. Short folders and a `subst` drive were tried first: Gradle resolves real
   paths, so `subst` gives "different roots". The mapping was removed.
 - **Development build, not Expo Go** (§9.2's choice): the app uses expo-dev-client, as Allen's
@@ -3825,3 +3841,32 @@ What the bench runs taught:
   it has no name) is tapped at most 3 times a run whatever its key, a retry doesn't untry it past
   that, and a same-page anchor link ("#main", or the page's own path with a hash) is tried once a
   run, on the first page that has it.
+- **Two false sev-4s on Basil & Ember's /reserve, fixed at the cause (Nov 3).** Both were checked
+  by hand in Chrome first; neither is real.
+  1. "Keyboard focus gets stuck" on the date field: Chromium gives a date input a Tab per part
+     (month, day, year), then Tab moves on to Time. The rule called any 3 Tabs in a row on one
+     element a trap. Now it's stuck only when the sweep ends on an element it never left, after
+     10 Tabs or more (datetime-local has at most 6 parts; a real trap holds focus until the
+     sweep's 200 presses run out).
+  2. "A link goes to the wrong page": "Request this table" (a submit button) "went to /reserve
+     (its link says /menu)". Refs are counted afresh on each page load, and the probe's
+     ref → href map was never cleared, so the button inherited an earlier page's link with the
+     same ref. Now a ref with no href in the latest snapshot has none. A real wrong link
+     (demo/chat's #31) is still caught.
+  The fallback (show these as suggestions) wasn't needed. The held-out result stays as recorded
+  (blind, before these fixes); validated on Basil & Ember only.
+- **Docs use relative paths (Nov 3).** The repo is public; paths to other folders on the dev
+  machine in DECISIONS, NEEDS-ALLEN and PROGRESS are relative to the repo root
+  (`../../be-site`, `../AllenZheng`).
+- **Linux CI: the site's keyboard test waits for the page (Nov 3).** The merge's ubuntu run
+  failed one site e2e: on /download/ the first Tab stayed on the body. The site renders on the
+  client and `goto` can return before React has drawn the nav; a Tab then focuses nothing. The
+  two tests that Tab from page load now wait for the skip link first. Not a page bug: a person
+  can't press Tab inside those milliseconds.
+- **A click that stayed on its page isn't "a link to the wrong page" (Nov 3).** The Basil & Ember
+  validation after the two /reserve fixes (be-val-4) still showed "A link goes to the wrong page"
+  at sev 4: Home's "Hours & directions" (to /about) "went to /*", the page it was clicked on
+  (Basil & Ember's catch-all route renders Home). The first click missed, as the run's own sev-4
+  "A control moves just as you reach for it" on the same page suggests; a second click opened
+  /about. Wrong-place now needs the click to have left its page; a link that goes nowhere is
+  "does nothing visible", and a moved control is its own finding.

@@ -54,6 +54,13 @@
   --radius-emblem: var(--radius-emblem);
   --radius-pill: var(--radius-pill);
 
+  --animate-target-pulse: target-pulse 250ms ease-in-out;
+  @keyframes target-pulse {
+    50% {
+      transform: scale(1.35);
+    }
+  }
+
   --shadow-*: initial;
   --shadow-button: var(--shadow-button);
   --shadow-panel: var(--shadow-panel);

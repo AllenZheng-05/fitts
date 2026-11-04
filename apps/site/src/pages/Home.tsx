@@ -1,10 +1,11 @@
 import { ArrowRight, Download, FileSearch, Play } from 'lucide-react';
 import { useState } from 'react';
-import { FittsMark, GitHubMark } from '../components/brand';
-import { button, card, chip, chipBase, cx, link, size } from '../components/ui';
+import { GitHubMark } from '../components/brand';
+import { FittsEmblem } from '../components/Emblem';
+import { button, card, chip, chipBase, cx, size } from '../components/ui';
 import { home } from '../content/home';
 import { featuredRun, runPath, runsCopy } from '../content/runs';
-import { links, macBeta, flags, pages, platforms } from '../content/site';
+import { links, pages } from '../content/site';
 import { detectPlatform } from '../lib/platform';
 
 export function Home() {
@@ -50,15 +51,17 @@ export function Home() {
 
 function Hero() {
   const [detected] = useState(detectPlatform);
-  // Unknown computer: Windows is the most common, so it gets the filled button.
-  const primary = detected ?? 'windows';
   const onPhone = detected === null && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   return (
     <section className="mx-auto flex min-h-[calc(100svh-4rem)] max-w-6xl flex-col items-center justify-center px-4 py-16 text-center sm:px-6">
-      <h1 className="flex items-center justify-center gap-3 font-display text-[76px] leading-none font-extrabold tracking-[-0.04em] sm:gap-5 sm:text-[128px] lg:text-[168px]">
-        <FittsMark className="size-[72px] flex-none sm:size-[120px] lg:size-[160px]" />
-        {home.name}
-      </h1>
+      {/* The app's Welcome emblem beside the name (outside the h1, so the heading is "Fitts"):
+          full size from lg, smaller on tablets and phones so the row fits a 320px screen. */}
+      <div className="flex items-center justify-center gap-3 sm:gap-6 lg:gap-8">
+        <FittsEmblem className="size-[132px] [--emblem-scale:0.44] sm:size-[225px] sm:[--emblem-scale:0.75] lg:size-[300px] lg:[--emblem-scale:1]" />
+        <h1 className="font-display text-[64px] leading-none font-extrabold tracking-[-0.04em] sm:text-[112px] lg:text-[160px]">
+          {home.name}
+        </h1>
+      </div>
       <p className="mt-6 font-display text-[28px] leading-tight font-bold text-balance sm:text-5xl">
         {home.tagline}
       </p>
@@ -66,38 +69,19 @@ function Hero() {
         {home.line}
       </p>
 
-      <ul className="mt-10 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center">
-        {platforms.map(({ platform, label, build }) => (
-          <li key={platform}>
-            <a
-              href={build.href}
-              className={cx(
-                platform === primary ? button.primary : button.secondary,
-                size.lg,
-                'w-full sm:min-w-44',
-              )}
-              aria-label={home.download.replace('{os}', label)}
-            >
-              <Download size={20} aria-hidden="true" />
-              {label}
-            </a>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-4 text-[15px] text-muted">
-        {home.meta}
-        {!flags.macTested && (
-          <span className="block sm:inline">
-            <span className="hidden sm:inline">{' · '}</span>
-            {platforms.find((p) => p.platform === 'mac')?.label} {macBeta}
-          </span>
+      {/* One button to the Download page, which picks the build for this computer and has the
+          rest (Allen, Nov 3: in place of the three platform buttons and the notes under them). */}
+      <a
+        href={pages.download.path}
+        className={cx(
+          button.primary,
+          size.lg,
+          'mt-10 min-h-16 w-full px-10 text-[20px] sm:w-auto sm:min-w-64',
         )}
-      </p>
-      <p className="mt-2">
-        <a href={pages.download.path} className={link}>
-          {home.notes}
-        </a>
-      </p>
+      >
+        <Download size={24} aria-hidden="true" />
+        {home.download}
+      </a>
       {onPhone && (
         <p className={cx(chipBase, chip.sun, 'mt-4 !self-center px-3 py-1 font-semibold')}>
           {home.phone}

@@ -112,6 +112,35 @@ describe('ProbeRunner', () => {
   });
 });
 
+describe('a link’s destination is the one its ref has now (Basil & Ember, Nov 3)', () => {
+  it('a button that got an earlier page’s link ref is not a link to the wrong page', async () => {
+    const { runner, failed } = setup();
+    await runner.onPage(snap('/', [{ ref: 'e9', role: 'link', name: 'Menu', href: '/menu' }]));
+    await runner.onPage(
+      snap('/reserve', [{ ref: 'e9', role: 'button', name: 'Request this table' }]),
+    );
+    await runner.afterAction({ kind: 'click', ref: 'e9', name: 'Request this table' }, '/reserve', {
+      path: '/reserve',
+      navigated: false,
+    });
+    expect(failed('navigation')).toEqual([]);
+  });
+
+  it('a link that goes elsewhere is still caught', async () => {
+    const { runner, failed } = setup();
+    await runner.onPage(
+      snap('/settings', [{ ref: 'e4', role: 'link', name: 'Contacts', href: '/contacts' }]),
+    );
+    await runner.afterAction({ kind: 'click', ref: 'e4', name: 'Contacts' }, '/settings', {
+      path: '/settings/privacy',
+      navigated: true,
+    });
+    expect(failed('navigation')[0]?.items[0]?.measured).toBe(
+      '"Contacts" went to /settings/privacy (its link says /contacts)',
+    );
+  });
+});
+
 describe('surprise events belong to the page they happened on (bench:chat, Nov 2)', () => {
   it('a tip that slid in on /compose/confirm, read after moving on to /, is filed under /compose/confirm', async () => {
     const site = {

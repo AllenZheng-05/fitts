@@ -3,10 +3,12 @@
 export const home = {
   name: 'Fitts',
   tagline: 'Making sure your design fits.',
+  emblemLabel:
+    'Fitts logo: a lowercase f selected in a design tool, its crossbar reaching a coral target as a cursor lands on it',
+  emblemTag: 'Fitts',
+  formula: 'ID = log₂(D/W + 1) = 1.58',
   line: 'Your UX expert: it uses your app like a person, then fixes what gets in the way.',
-  download: 'Download for {os}',
-  meta: 'Free · open source · beta',
-  notes: 'Install notes, Intel Macs and every build',
+  download: 'Download',
   phone: 'Fitts is a desktop app. Open this page on your computer to install it.',
   github: 'See the code on GitHub',
   videoTitle: 'Watch Fitts work',

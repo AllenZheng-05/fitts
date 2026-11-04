@@ -1,5 +1,6 @@
-import { BrowserWindow, screen, type Rectangle } from 'electron';
+import { app, BrowserWindow, screen, type Rectangle } from 'electron';
 import { join } from 'node:path';
+import { appDetails } from './app-details';
 import { loadWindowState, saveWindowState } from './window-state';
 
 // Sizes are the web content area, so the 1440×900 design frame and the layout guard
@@ -10,10 +11,8 @@ export const MIN_SIZE = { width: 1200, height: 720 } as const;
 const PAPER = '#FBFAF7';
 /** The Fitts app icon (Logos3 option D on its tile), in place of Electron's default. */
 export const ICON_PATH = join(__dirname, '../../resources/icon.png');
-/** The same icon as a multi-size .ico, for the Windows taskbar's relaunch details. */
+/** The same icon as a multi-size .ico, for the Windows taskbar's relaunch details (dev only). */
 const ICON_ICO_PATH = join(__dirname, '../../resources/icon.ico');
-/** Windows groups taskbar buttons by this id. */
-export const APP_ID = 'app.fitts.desktop';
 const isMac = process.platform === 'darwin';
 
 export function createMainWindow(): BrowserWindow {
@@ -51,15 +50,15 @@ export function createMainWindow(): BrowserWindow {
   win.once('ready-to-show', () => win.show());
   // The Windows 11 taskbar takes a grouped button's icon from the window's relaunch details,
   // which default to the exe: electron.exe's icon in development. Point them at Fitts's.
-  if (process.platform === 'win32') {
-    const quote = (s: string) => `"${s}"`;
-    win.setAppDetails({
-      appId: APP_ID,
-      appIconPath: ICON_ICO_PATH,
-      relaunchCommand: [process.execPath, ...process.argv.slice(1)].map(quote).join(' '),
-      relaunchDisplayName: 'Fitts',
-    });
-  }
+  if (process.platform === 'win32')
+    win.setAppDetails(
+      appDetails({
+        packaged: app.isPackaged,
+        execPath: process.execPath,
+        argv: process.argv,
+        icoPath: ICON_ICO_PATH,
+      }),
+    );
 
   trackWindowState(win, saved.bounds);
   lockDownNavigation(win);

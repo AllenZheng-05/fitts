@@ -25,6 +25,15 @@ describe('wrongPlace', () => {
     expect(wrongPlace({ ref: 'x', name: 'Go', expected: '/a?x=1', arrived: '/a' })).toBeNull();
   });
 
+  it('a click that stayed on its page went nowhere, not to the wrong page', () => {
+    // Basil & Ember (Nov 3): Home's "Hours & directions" (to /about) moved as it was clicked.
+    const click = { ref: 'e5', name: 'Hours & directions', expected: '/about', arrived: '/*' };
+    expect(wrongPlace({ ...click, from: '/*' })).toBeNull();
+    expect(wrongPlace({ ...click, from: '/menu' })?.measured).toBe(
+      '"Hours & directions" went to /* (its link says /about)',
+    );
+  });
+
   it('a login on the way to the right page is not "wrong"', () => {
     expect(
       wrongPlace({

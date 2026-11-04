@@ -41,6 +41,19 @@ describe('copies of the app', () => {
     expect(shapes(mark)).toEqual(app);
   });
 
+  it('the large emblem draws the same as the app’s Welcome emblem', () => {
+    const drawing = (src: string) => [
+      ...[...src.matchAll(/\b(d|cx|cy|r|width|height|viewBox|strokeDasharray)="([^"]+)"/g)].map(
+        (m) => `${m[1]}=${m[2]}`,
+      ),
+      ...[...src.matchAll(/EMBLEM_(PATH|MS) = ([^;]+);/g)].map((m) => `${m[1]}=${m[2]}`),
+      ...[...src.matchAll(/className="(absolute[^"]*)"/g)].map((m) => m[1]),
+    ];
+    const app = drawing(desktop('src/renderer/components/brand/FittsEmblem.tsx'));
+    expect(app.length).toBeGreaterThan(10);
+    expect(drawing(site('src/components/Emblem.tsx'))).toEqual(app);
+  });
+
   it('ShapeField keeps the app’s physics constants', () => {
     const constants = (src: string) =>
       [

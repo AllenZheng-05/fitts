@@ -134,7 +134,10 @@ export class ProbeRunner {
         } catch {
           this.hrefOf.set(n.ref, n.href);
         }
-      }
+        // Refs are counted afresh on each page load, so "e9" is a link on one page and a button
+        // on the next: a ref without an href now has none (Basil & Ember's submit button had
+        // taken "Browse the menu"'s /menu, and read as a link to the wrong page).
+      } else this.hrefOf.delete(n.ref);
     }
     if (!this.headingsOf.has(route)) this.headingsOf.set(route, snap.headings);
     // A dialog open on the page: its keyboard rules, once per route (§6B.2).
@@ -338,6 +341,7 @@ export class ProbeRunner {
         ...(expected ? { expected: new URL(expected, 'http://x').pathname } : {}),
         arrived,
         redirects: hops,
+        from: route,
       });
       if (w) this.add('navigation', route, [w]);
       if (hops.length) {
