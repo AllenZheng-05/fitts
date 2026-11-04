@@ -10,6 +10,8 @@ interface DetectorApi {
   startedAt: number;
   /** Drains what's been recorded since the last read (times relative to startedAt). */
   take(): SurpriseEvent[];
+  /** Fitts is about to scroll the page itself: scrolls in the next `ms` are its own. */
+  own(ms: number): void;
 }
 
 const w = window as unknown as { __fittsSurprise?: DetectorApi };
@@ -42,6 +44,7 @@ if (!w.__fittsSurprise) {
   const TOASTY = /toast|snack|notif|flash|alert/i;
   const shownAt = new WeakMap<Element, number>();
   let lastTrusted = -Infinity;
+  let ownUntil = -Infinity;
   let pendingFocus: { at: number; el: Element; path: string } | null = null;
   let pendingTyping: { at: number; el: Element; path: string } | null = null;
 
@@ -215,7 +218,11 @@ if (!w.__fittsSurprise) {
     () => {
       const dy = scrollY - lastY;
       lastY = scrollY;
-      if (Math.abs(dy) > 200) push({ type: 'scroll', at: now(), dy: Math.round(dy) });
+      // Fitts's own scrolls, and a key's or a tap's (Tab moves the page to the focus), aren't
+      // the page scrolling by itself (Basil & Ember, Nov 4: a Tab sweep's return to the top).
+      const own = now() < ownUntil || now() - lastTrusted < 1000;
+      if (Math.abs(dy) > 200)
+        push({ type: 'scroll', at: now(), dy: Math.round(dy), ...(own ? { own } : {}) });
     },
     { passive: true },
   );
@@ -254,6 +261,9 @@ if (!w.__fittsSurprise) {
     startedAt,
     take() {
       return events.splice(0, events.length);
+    },
+    own(ms) {
+      ownUntil = now() + ms;
     },
   };
 }

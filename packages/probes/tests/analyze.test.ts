@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  belowContrast,
   contrastRatio,
   feedbackTiming,
+  quietTap,
   fittsId,
   isGenericError,
   labelConsistency,
@@ -221,5 +223,38 @@ describe('label consistency', () => {
         [],
       ),
     ).toEqual([]);
+  });
+});
+
+describe('belowContrast', () => {
+  it('a ratio that shows as the bar passes; one that shows below it fails', () => {
+    expect(belowContrast(4.47, 4.5)).toBe(false);
+    expect(belowContrast(4.44, 4.5)).toBe(true);
+    expect(belowContrast(2.96, 3)).toBe(false);
+    expect(belowContrast(3.6, 4.5)).toBe(true);
+  });
+});
+
+describe('a tap that rightly changes nothing (Basil & Ember, Nov 4)', () => {
+  const dead = trace({
+    name: 'Decrease quantity',
+    feedback: { firstChangeMs: null, busyMs: null, added: [], live: [], errors: [] },
+  });
+  it('a control that changed nothing is flagged, unless there was a reason for it', () => {
+    expect(feedbackTiming(dead)[0]?.measured).toBe('"Decrease quantity" changed nothing on screen');
+    expect(feedbackTiming({ ...dead, quiet: 'at-limit' })).toEqual([]);
+  });
+  it('disabled, already chosen, a native picker, or a minus at 1', () => {
+    const b = { tag: 'button', name: 'Add' };
+    expect(quietTap({ ...b, disabled: true })).toBe('disabled');
+    expect(quietTap({ tag: 'input', type: 'radio', name: '12" Classic', selected: true })).toBe(
+      'selected',
+    );
+    expect(quietTap({ tag: 'select', name: 'Time' })).toBe('picker');
+    expect(quietTap({ tag: 'input', type: 'time', name: 'Time' })).toBe('picker');
+    expect(quietTap({ tag: 'button', name: 'Decrease quantity', count: 1 })).toBe('at-limit');
+    expect(quietTap({ tag: 'button', name: '−', count: 1 })).toBe('at-limit');
+    expect(quietTap({ tag: 'button', name: 'Decrease quantity', count: 2 })).toBeUndefined();
+    expect(quietTap(b)).toBeUndefined();
   });
 });

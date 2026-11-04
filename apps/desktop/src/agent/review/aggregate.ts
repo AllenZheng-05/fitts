@@ -39,7 +39,9 @@ interface Template {
 export function template(probe: ProbeName, item: ProbeItem): Template {
   const m = item.measured;
   switch (probe) {
-    case 'contrast':
+    case 'contrast': {
+      // Large text needs 3:1, the rest 4.5:1: the line names the bar this text missed.
+      const need = /\d+(?:\.\d+)?:1/.exec(item.expected ?? '')?.[0] ?? '4.5:1';
       return /placeholder/.test(m)
         ? {
             title: 'Placeholder text is too faint to read',
@@ -50,11 +52,12 @@ export function template(probe: ProbeName, item: ProbeItem): Template {
           }
         : {
             title: 'Text is too faint to read',
-            finding: `Some text has ${m}, below the 4.5:1 contrast people need to read it comfortably.`,
-            fix: 'Darken the text color to reach at least 4.5:1 contrast.',
+            finding: `Some text has ${m}, below the ${need} contrast people need to read it comfortably.`,
+            fix: `Darken the text color to reach at least ${need} contrast.`,
             lens: 'accessibility',
             severity: 2,
           };
+    }
     case 'target-size':
       return {
         title: 'Tap target is too small',

@@ -36,12 +36,30 @@ function ariaRole(role: string): string {
   return map[role] ?? role;
 }
 
-/** The line that performs a repro step. */
+/** A key name Playwright knows ("Enter", "Shift+Tab", "a"), not a description of keys. */
+const KEY =
+  /^(?:(?:Control|Shift|Alt|Meta|ControlOrMeta)\+)*(?:[\x21-\x7e]|F\d{1,2}|Enter|Tab|Escape|Backspace|Delete|Space|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right))$/;
+
+/**
+ * The line that performs a repro step. A reviewer's step in its own words ("Press Tab through
+ * header links") is a comment to do by hand, never a key name or a URL (Basil & Ember, Nov 4).
+ */
 export function stepCode(step: Repro['steps'][number]): string {
   const text = step.text.replace(/\*\*/g, '');
-  if (/^Open /.test(text)) return `await page.goto(${q(text.slice('Open '.length))});`;
+  const byHand = `// By hand: ${text.replace(/\s+/g, ' ')}`;
+  if (/^Open /.test(text)) {
+    const url = text.slice('Open '.length).trim();
+    return /^(?:https?:\/\/|\/)\S*$/.test(url) && !/\*|\/:/.test(url)
+      ? `await page.goto(${q(url)});`
+      : byHand;
+  }
   if (/^Go back/.test(text)) return 'await page.goBack();';
-  if (/^Press /.test(text)) return `await page.keyboard.press(${q(text.slice('Press '.length))});`;
+  if (/^Press /.test(text)) {
+    const key = text.slice('Press '.length).trim();
+    return KEY.test(key) ? `await page.keyboard.press(${q(key)});` : byHand;
+  }
+  // A step with no control behind it is the reviewer's words: clicking the body does nothing.
+  if (!step.target) return byHand;
   const loc = locator(step.target);
   const typed = /^Type “(.*)” in /.exec(text);
   if (typed) return `await ${loc}.fill(${q(typed[1] ?? '')});`;

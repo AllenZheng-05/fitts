@@ -3870,3 +3870,41 @@ What the bench runs taught:
   "A control moves just as you reach for it" on the same page suggests; a second click opened
   /about. Wrong-place now needs the click to have left its page; a link that goes nowhere is
   "does nothing visible", and a moved control is its own finding.
+
+## Phase 4 — what the Basil & Ember recording turned up (Allen, Nov 4)
+
+The recorded run was on 0.1.0; these five were still in 0.1.1. Each is fixed at the cause.
+
+- **"A control moves just as you reach for it" was Fitts's own scroll.** Basil & Ember sets
+  `html { scroll-behavior: smooth }`, so the click's `scrollIntoView` animated, and the second
+  read of the target 150 ms later was mid-scroll ("Order pickup moved 121 px"). Checked by hand
+  on the site: the old sequence read "Order pickup" 459 px away in the view and 0 px on the page.
+  The click now scrolls instantly whatever the site's CSS, and the move is measured on the page
+  (view position plus scroll offset). A late banner moves the target on the page and is still
+  caught (planted #30 on demo/chat, asserted in site-live.spec). The smooth scroll is also the
+  likely cause of be-val-4's missed click on "Hours & directions". Android's jump check is
+  separate (main/android/surprise.ts, node bounds between frames) and unchanged.
+- **"The page scrolled N px by itself" was Fitts's too.** The Tab sweep's return to the top, its
+  Tabs (focus scrolls the page), the into-view before typing, and `reveal` (a control scrolled
+  into view to show it) moved the page without being counted as input. Scripts that scroll now tell the detector
+  first (`own(1500)`), and a scroll within 1 s of a trusted key or tap is the input's. Both are
+  marked `own` on the event; the analysis skips them. Chrome's layout-shift entries already
+  leave out scrolling, so the jump notes needed nothing.
+- **Contrast "4.5:1, below the 4.5:1".** axe fails 4.47:1, which shows as 4.5. A ratio is
+  flagged only when it's below the bar as shown, to one decimal, so axe's borderline fails at
+  4.45–4.49 aren't findings. The line also names the bar the text missed (3:1 for large text).
+- **Repro tests opened a route pattern and pressed prose.** The start URL is a real page Fitts
+  was on that matches the finding's route (the last one in the trail), else the home page. A
+  step in a reviewer's words ("Press Tab through header links", "Tap the add button") is a
+  `// By hand:` comment; only real key names are pressed and only real URLs opened.
+- **"Does nothing visible" on controls that rightly do nothing.** Main reads the control as it's
+  tapped: disabled (or aria-disabled), already chosen (a checked radio, aria-pressed, -checked
+  or -selected true), a native picker (a select, a date/time field), or a stepper's minus at 1.
+  Basil & Ember's Decrease isn't disabled in the DOM: it clamps at 1 (`Math.max(1, q - 1)`),
+  hence the stepper rule (a minus-named control beside a number ≤ 1). None of these makes a
+  "changed nothing" finding. A known control that turns disabled leaves the crawl's untried
+  list until it's enabled again. The 3-taps cap (7725020, in 0.1.1) already holds a
+  control to 3 taps a run by route, role and name, so the 0.1.0 crawl's 100+ Decrease taps
+  can't recur.
+- **fix-host's undo test gets 20 s.** It spawns a dozen git commands and passed 5 s twice on
+  a loaded machine right after a build. Alone it takes about 1 s.

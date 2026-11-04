@@ -7,8 +7,13 @@ import PROBES from '@fitts/probes/page.js?raw';
 import DETECTOR from '@fitts/probes/detector.js?raw';
 import {
   faultable,
+  movedOnPage,
+  quietTap,
   rewrite,
+  type QuietTap,
+  type TapState,
   type FaultCase,
+  type ViewBox,
   type SurpriseEvent,
   type TabStop,
 } from '@fitts/probes';
@@ -39,6 +44,28 @@ const CONTROLS =
 
 /** Isolated world for Fitts's scripts (refs, rects); the page can't see them. */
 const WORLD = 1001;
+/**
+ * Prefixed to a script that scrolls the page: the detector counts the scrolls in the next 1.5 s
+ * as Fitts's, not the page scrolling by itself (Basil & Ember, Nov 4: "the page scrolled 549 px
+ * up by itself" was the Tab sweep's return to the top).
+ */
+const OWN_SCROLL = 'window.__fittsSurprise && window.__fittsSurprise.own(1500);';
+/** A control's state as it's tapped (TapState), from `el`: a label stands for its input. */
+const TAP_STATE = `(() => {
+  const c = el.tagName === 'LABEL' && el.control ? el.control : el;
+  const p = c.parentElement;
+  const num = p && p.querySelector('input[type=number]');
+  const shown = p ? /(?:^|\\s)(\\d+)(?:\\s|$)/.exec(p.innerText || '') : null;
+  const count = num ? Number(num.value) : shown ? Number(shown[1]) : undefined;
+  return {
+    disabled: !!(c.disabled || c.closest('[aria-disabled="true"]')),
+    selected: (c.type === 'radio' && c.checked) || ['aria-pressed', 'aria-checked', 'aria-selected'].some((a) => c.getAttribute(a) === 'true'),
+    tag: c.tagName.toLowerCase(),
+    type: c.type || undefined,
+    name: (c.getAttribute('aria-label') || c.textContent || '').trim().slice(0, 60),
+    count,
+  };
+})()`;
 /** WCAG 1.4.12's text spacing, as a sheet the page gets in the text-spacing cell. */
 const TEXT_SPACING_CSS =
   '* { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; } p { margin-bottom: 2em !important; }';
@@ -442,7 +469,8 @@ export class SiteWindow {
     // spot, and a sweep that began partway down called everything above it unreachable (found
     // auditing apps/site, Nov 2). Focusing a throwaway first element moves the starting point.
     await this.evaluate(
-      "document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); const t = document.createElement('span'); t.tabIndex = -1; document.body.prepend(t); t.focus({ preventScroll: true }); t.remove(); return true;",
+      OWN_SCROLL +
+        "document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); const t = document.createElement('span'); t.tabIndex = -1; document.body.prepend(t); t.focus({ preventScroll: true }); t.remove(); return true;",
     );
     const facts = await this.probes<{
       interactive: { ref: string; selector: string; name: string }[];
@@ -471,7 +499,8 @@ export class SiteWindow {
       stops.push(stop);
     }
     await this.evaluate(
-      'document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); return true;',
+      OWN_SCROLL +
+        'document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); return true;',
     );
     return { stops, facts };
   }
@@ -1064,6 +1093,7 @@ export class SiteWindow {
     this.redirects = [];
     this.loadedAt = 0;
     this.lastMoved = undefined;
+    this.lastQuiet = undefined;
     this.acting = ref;
     this.fittsUntil = t0 + 15_000;
     let rect: SiteRect | null;
@@ -1110,6 +1140,7 @@ export class SiteWindow {
         console: { errors: errors.length, ...(errors[0] ? { first: errors[0] } : {}) },
         ...(redirects.length ? { redirects: [...redirects] } : {}),
         ...(this.lastMoved ? { moved: this.lastMoved } : {}),
+        ...(this.lastQuiet ? { quiet: this.lastQuiet } : {}),
       },
     };
   }
@@ -1145,7 +1176,7 @@ export class SiteWindow {
 
   /** Scrolls an element to the middle of the view, so the user sees what Fitts will touch. */
   reveal(ref: string): Promise<void> {
-    return this.evaluate<void>(`
+    return this.evaluate<void>(`${OWN_SCROLL}
       const el = F.find(${JSON.stringify(ref)});
       if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });`);
   }
@@ -1158,36 +1189,44 @@ export class SiteWindow {
   private async clickAt(ref: string): Promise<SiteRect> {
     const before = this.path();
     this.focus();
-    const rect = await this.evaluate<SiteRect | null>(`
+    // Instant, whatever the site's scroll-behavior: a smooth scroll still running 150 ms later
+    // moved the target in the view and the click with it (Basil & Ember, Nov 4).
+    const box = `const r = el.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height, scrollX, scrollY };`;
+    const rect = await this.evaluate<(ViewBox & { tap: TapState }) | null>(`${OWN_SCROLL}
       const el = F.find(${JSON.stringify(ref)});
       if (!el) return null;
-      el.scrollIntoView({ block: 'center', inline: 'center' });
+      el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      const tap = ${TAP_STATE};
       const r = el.getBoundingClientRect();
-      return { left: r.left, top: r.top, width: r.width, height: r.height };`);
+      return { left: r.left, top: r.top, width: r.width, height: r.height, scrollX, scrollY, tap };`);
     if (!rect) throw new Error(`No element ${ref} on ${before}`);
+    this.lastQuiet = quietTap(rect.tap);
     const x0 = Math.round(rect.left + rect.width / 2);
     const y0 = Math.round(rect.top + rect.height / 2);
     // Reach for it like a person: move there, a beat, then press (§6B.5: did it move away?).
     this.noteInput();
     this.wc.sendInputEvent({ type: 'mouseMove', x: x0, y: y0 });
     await new Promise((r) => setTimeout(r, 150));
-    const now = await this.evaluate<SiteRect | null>(
+    const now = await this.evaluate<ViewBox | null>(
       `
       const el = F.find(${JSON.stringify(ref)});
       if (!el) return null;
-      const r = el.getBoundingClientRect();
-      return { left: r.left, top: r.top, width: r.width, height: r.height };`,
+      ${box}`,
     ).catch(() => null);
     const at = now ?? rect;
     const x = Math.round(at.left + at.width / 2);
     const y = Math.round(at.top + at.height / 2);
-    this.lastMoved =
-      Math.hypot(x - x0, y - y0) > 20 ? { decided: { x: x0, y: y0 }, tapped: { x, y } } : undefined;
+    // Did it move on the page? A scroll moves it in the view only (§6B.5).
+    this.lastMoved = movedOnPage(rect, at);
     this.wc.sendInputEvent({ type: 'mouseMove', x, y });
     this.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
     this.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
-    return at;
+    return { left: at.left, top: at.top, width: at.width, height: at.height };
   }
+
+  /** Why the last click's control could rightly change nothing (disabled, chosen, a picker). */
+  private lastQuiet: QuietTap | undefined;
 
   /** The last click's target moved while Fitts reached for it (§6B.5). */
   private lastMoved:
@@ -1202,10 +1241,10 @@ export class SiteWindow {
     const before = this.path();
     this.noteInput();
     this.focus();
-    const how = await this.evaluate<'set' | 'keys' | null>(`
+    const how = await this.evaluate<'set' | 'keys' | null>(`${OWN_SCROLL}
       const el = F.find(${JSON.stringify(ref)});
       if (!el) return null;
-      el.scrollIntoView({ block: 'center' });
+      el.scrollIntoView({ block: 'center', behavior: 'instant' });
       el.focus();
       if (F.pick(el, ${JSON.stringify(text)})) return 'set';
       if ('select' in el) el.select();

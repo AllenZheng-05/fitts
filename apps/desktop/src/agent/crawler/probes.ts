@@ -296,6 +296,7 @@ export class ProbeRunner {
       feedback: result.trace?.feedback ?? null,
       navigated: result.navigated,
       ...(result.trace?.opened ? { opened: true } : {}),
+      ...(result.trace?.quiet ? { quiet: result.trace.quiet } : {}),
       requests: result.trace?.requests ?? [],
       ...(action.kind === 'type' ? { chars: action.text?.length ?? 0 } : {}),
     };

@@ -5,6 +5,7 @@
 import axe from 'axe-core';
 import type { ProbeItem } from '@fitts/schema';
 import {
+  belowContrast,
   contrastRatio,
   isGenericError,
   LEAK,
@@ -176,7 +177,9 @@ async function contrast(F: Refs): Promise<PageProbeResult> {
     const large =
       parseFloat(s.fontSize) >= 24 ||
       (parseFloat(s.fontSize) >= 18.66 && Number(s.fontWeight) >= 700);
-    items.push(item(F, el, `text contrast ${ratio.toFixed(1)}:1`, `at least ${large ? 3 : 4.5}:1`));
+    const need = large ? 3 : 4.5;
+    if (!belowContrast(ratio, need)) continue;
+    items.push(item(F, el, `text contrast ${ratio.toFixed(1)}:1`, `at least ${need}:1`));
   }
   // axe doesn't check placeholders; people read them, so they count (#8 on demo/chat).
   for (const el of document.querySelectorAll('input[placeholder],textarea[placeholder]')) {
@@ -186,7 +189,7 @@ async function contrast(F: Refs): Promise<PageProbeResult> {
     if (!fg) continue;
     const bg = backgroundOf(el);
     const ratio = contrastRatio(blend(fg, bg), bg);
-    if (ratio < 4.5)
+    if (belowContrast(ratio, 4.5))
       items.push(item(F, el, `placeholder contrast ${ratio.toFixed(1)}:1`, 'at least 4.5:1'));
   }
   return { probe: 'contrast', pass: items.length === 0, items };

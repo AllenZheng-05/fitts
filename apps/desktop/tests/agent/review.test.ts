@@ -10,6 +10,7 @@ import {
   aggregateWithChecks,
   quoted,
   severityOf,
+  template,
 } from '../../src/agent/review/aggregate';
 import {
   cleanDrafts,
@@ -410,6 +411,20 @@ describe('the same missing loading sign seen twice on a page', () => {
     expect(titles.filter((t) => /loading/i.test(t))).toHaveLength(2);
     expect(findings.find((f) => f.title === 'No sign the page is loading')?.route).toBe(
       '/contacts',
+    );
+  });
+});
+
+describe('the contrast line names the bar the text missed', () => {
+  it('large text below 3:1 says 3:1, not 4.5:1', () => {
+    const t = template('contrast', {
+      ref: 'h',
+      selector: 'h1',
+      measured: 'text contrast 2.6:1',
+      expected: 'at least 3:1',
+    });
+    expect(t.finding).toBe(
+      'Some text has text contrast 2.6:1, below the 3:1 contrast people need to read it comfortably.',
     );
   });
 });

@@ -277,7 +277,8 @@ describe('FixHost', () => {
     });
     expect(git(dir, 'status', '--porcelain')).toBe('');
     expect(git(dir, 'log', '-1', '--format=%s')).toBe('B2');
-  });
+    // A dozen git spawns: past 5 s on a loaded machine right after a build (Nov 3 and 4).
+  }, 20_000);
 
   it('a fix can start from the redesign; its PR stacks on it, and push updates an open PR', async () => {
     const fix = (await host.call('app', {

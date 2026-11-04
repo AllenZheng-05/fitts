@@ -150,12 +150,19 @@ export class Coverage {
     route.seen = true;
     for (const n of snap.nodes) {
       if (n.href && n.role === 'link') this.discover(n.href);
-      if (n.disabled || isChrome(n)) continue;
+      if (isChrome(n)) continue;
       const key = n.key ?? n.ref;
-      route.refs.set(n.ref, key);
+      // A control that turned disabled (a stepper at its floor) waits until it's enabled again,
+      // rather than being tapped to no effect (Basil & Ember's 0.1.0 crawl: 100+ taps).
       const known = route.controls.get(key);
+      if (n.disabled) {
+        if (known && !known.skipped) known.skipped = 'disabled';
+        continue;
+      }
+      route.refs.set(n.ref, key);
       if (known) {
         known.ref = n.ref;
+        if (known.skipped === 'disabled') delete known.skipped;
         continue;
       }
       const elsewhere = key.startsWith('card:')

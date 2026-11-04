@@ -166,3 +166,23 @@ describe('Coverage: repeat taps (Bootstrap examples: 991 of 1,000 taps on one sk
     expect(c.untried('/rentals')).toEqual([]);
   });
 });
+
+describe('a control that turns disabled waits (Basil & Ember, Nov 4)', () => {
+  it('leaves the untried list while disabled and comes back when enabled', () => {
+    const c = new Coverage('http://localhost:5173');
+    const minus = (disabled: boolean): AxNode => ({
+      ref: 'm',
+      role: 'button',
+      name: 'Decrease quantity',
+      key: 'minus',
+      ...(disabled ? { disabled } : {}),
+    });
+    c.observe(snap('/menu/margherita', [minus(false)]));
+    expect(c.untried('/menu/margherita').map((u) => u.name)).toEqual(['Decrease quantity']);
+    c.observe(snap('/menu/margherita', [minus(true)]));
+    expect(c.untried('/menu/margherita')).toEqual([]);
+    expect(c.routeDone('/menu/margherita')).toBe(true);
+    c.observe(snap('/menu/margherita', [minus(false)]));
+    expect(c.untried('/menu/margherita').map((u) => u.name)).toEqual(['Decrease quantity']);
+  });
+});

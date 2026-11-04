@@ -93,6 +93,14 @@ export function contrastRatio(a: Rgba, b: Rgba): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/**
+ * The ratio falls short of `need` as it's shown, to one decimal: axe fails 4.47:1, which reads
+ * "4.5:1, below the 4.5:1" (Basil & Ember, Nov 4). A ratio that rounds up to the bar passes.
+ */
+export function belowContrast(ratio: number, need: number): boolean {
+  return Math.round(ratio * 10) / 10 < need;
+}
+
 /** Template and serialization leaks people should never see. */
 export const LEAK = /\((?:null|undefined)\)|^null$|\bundefined\b|\bNaN\b|\[object Object\]|\{\{/;
 
@@ -124,10 +132,44 @@ const CONFIRMS =
   /^(?:\W\s*)?(?:[\w-]+\s+){0,2}(?:sent|saved|added|created|deleted|removed|updated|posted)\b|^(?:done|success|thanks)\b[.!]?$/i;
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/** What a control was when Fitts tapped it: why it might rightly change nothing. */
+export interface TapState {
+  disabled?: boolean;
+  /** A checked radio, or aria-pressed, -checked or -selected true. */
+  selected?: boolean;
+  tag: string;
+  type?: string;
+  name: string;
+  /** The number shown beside it (a quantity stepper's value), when there is one. */
+  count?: number;
+}
+
+export type QuietTap = 'disabled' | 'selected' | 'picker' | 'at-limit';
+
+/**
+ * Why a tap is expected to change nothing on screen: the control is disabled, already chosen,
+ * opens a native picker the page can't show, or is a stepper's minus at 1 (Basil & Ember,
+ * Nov 4: Decrease quantity at 1, the 12" size already picked, the pickup Time list).
+ */
+export function quietTap(s: TapState): QuietTap | undefined {
+  if (s.disabled) return 'disabled';
+  if (s.selected) return 'selected';
+  if (
+    s.tag === 'select' ||
+    /^(?:date|time|datetime-local|month|week|color|file)$/.test(s.type ?? '')
+  )
+    return 'picker';
+  const minus = /^(?:decrease|decrement|minus|subtract|fewer|less)\b|^[−–-]$/i.test(s.name.trim());
+  if (minus && s.count !== undefined && s.count <= 1) return 'at-limit';
+  return undefined;
+}
+
 export interface ActionTrace {
   ref: string;
   name: string;
   kind: 'click' | 'type';
+  /** Why this tap could rightly change nothing (no "changed nothing" finding then). */
+  quiet?: QuietTap;
   feedback: Feedback | null;
   navigated: boolean;
   /** Requests that started during the action (and its settle time). */
@@ -173,6 +215,7 @@ export function feedbackTiming(t: ActionTrace): ProbeItem[] {
     fb &&
     fb.firstChangeMs === null &&
     !fb.moved &&
+    !t.quiet &&
     !t.navigated &&
     !t.opened &&
     t.requests.length === 0

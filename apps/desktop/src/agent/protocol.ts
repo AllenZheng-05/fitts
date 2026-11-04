@@ -7,6 +7,7 @@ import type {
   PagePerf,
   RequestRecord,
   SurpriseEvent,
+  QuietTap,
   TabStop,
 } from '@fitts/probes';
 import type {
@@ -359,6 +360,8 @@ export interface OpTrace {
   redirects?: string[];
   /** SPEC-phase4 §6B.5: where the target was when Fitts reached for it, and when it tapped. */
   moved?: { decided: { x: number; y: number }; tapped: { x: number; y: number } };
+  /** Why the tapped control could rightly change nothing (disabled, already chosen, a picker). */
+  quiet?: QuietTap;
 }
 
 export type SiteOpResult =

@@ -8,11 +8,12 @@ import {
   environment,
   oracleFor,
   pruneTrail,
+  realPath,
   stepText,
   type TrailStep,
 } from '../../src/agent/repro/repro';
 import { askFor, confirm, replaySteps, type ReplayAnswer } from '../../src/agent/repro/replay';
-import { playwrightTest } from '../../src/agent/repro/playwright';
+import { playwrightTest, stepCode } from '../../src/agent/repro/playwright';
 
 const finding = (over: Partial<Finding> = {}): Finding => ({
   id: 'run-1-f1',
@@ -645,5 +646,25 @@ describe('ddmin in the confirmation (U4b, SPEC-phase4 §5.2 step 3)', () => {
     // The pruned replay, the full trail, one ddmin replay; then the stop ends it.
     expect(log.length).toBe(3);
     expect(waited).toBe(3);
+  });
+});
+
+describe('a repro test opens a real page and presses real keys (Basil & Ember, Nov 4)', () => {
+  const at = (route: string): TrailStep => ({ step: 1, route, label: '', kind: 'load' });
+  it('a route pattern opens the last page that matches it, else home', () => {
+    expect(realPath('/*', [at('/'), at('/menu')])).toBe('/menu');
+    expect(realPath('/menu/:id', [at('/menu/margherita'), at('/cart')])).toBe('/menu/margherita');
+    expect(realPath('/menu/:id', [])).toBe('/');
+    expect(realPath('/cart', [])).toBe('/cart');
+  });
+  it("a reviewer's words are a step by hand, not a key name, a URL or a click on the body", () => {
+    const s = (text: string) => stepCode({ n: 1, text, route: '/' });
+    expect(s('Press Tab through header links')).toBe('// By hand: Press Tab through header links');
+    expect(s('Press Shift+Tab')).toBe('await page.keyboard.press("Shift+Tab");');
+    expect(s('Open http://localhost:5176/*')).toBe('// By hand: Open http://localhost:5176/*');
+    expect(s('Open http://localhost:5176/cart')).toBe(
+      'await page.goto("http://localhost:5176/cart");',
+    );
+    expect(s('Tap the add button')).toBe('// By hand: Tap the add button');
   });
 });

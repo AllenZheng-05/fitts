@@ -169,6 +169,24 @@ export interface ReproInput {
   model?: AppModel;
 }
 
+/**
+ * A page to open for a route: the route itself, or for a pattern ("/*", "/menu/:id") the last
+ * page Fitts was on that matches it, else the home page. A pattern isn't a URL (Basil & Ember,
+ * Nov 4: a repro test opened "http://localhost:5176/*").
+ */
+export function realPath(route: string, trail: TrailStep[]): string {
+  if (!/[*:]/.test(route)) return route;
+  const esc = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(
+    `^${route
+      .split('/')
+      .map((p) => (p === '*' ? '.*' : p.startsWith(':') ? '[^/]+' : esc(p)))
+      .join('/')}$`,
+  );
+  const hit = [...trail].reverse().find((t) => !/[*:]/.test(t.route) && re.test(t.route));
+  return hit?.route ?? '/';
+}
+
 /** The repro before replay: steps, expected/actual, environment, standards, the test. */
 export function buildRepro(input: ReproInput): Repro {
   const { finding, origin, cell, item, probe, draft } = input;
@@ -192,7 +210,7 @@ export function buildRepro(input: ReproInput): Repro {
   ].filter((c, i, all) => all.findIndex((x) => x.sc === c.sc) === i);
   const repro: Repro = {
     start: {
-      url: new URL(finding.route, origin).toString(),
+      url: new URL(realPath(finding.route, input.trail), origin).toString(),
       device: cell?.id ?? 'desktop',
     },
     steps,

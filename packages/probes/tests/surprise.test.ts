@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   movedBeforeTap,
+  movedOnPage,
   surpriseKind,
   surpriseProblems,
   type SurpriseEvent,
@@ -138,5 +139,38 @@ describe('movedBeforeTap', () => {
       '"Send" moved 40 px just before the tap',
     );
     expect(movedBeforeTap({ ...t, tapped: { x: 105, y: 410 } })).toBeNull();
+  });
+});
+
+describe('a move is on the page, not in the view', () => {
+  const box = (top: number, scrollY: number) => ({
+    left: 600,
+    top,
+    width: 160,
+    height: 44,
+    scrollX: 0,
+    scrollY,
+  });
+  it("Fitts's own smooth scroll into view moves the button in the view only: no finding", () => {
+    // Basil & Ember, Nov 4: "Order pickup" read at 500, then 379 once the scroll had gone 121 px.
+    expect(movedOnPage(box(500, 0), box(379, 121))).toBeUndefined();
+  });
+  it('a banner that loads late and pushes the button down 121 px is caught', () => {
+    const moved = movedOnPage(box(500, 0), box(621, 0));
+    expect(moved).toEqual({ decided: { x: 680, y: 522 }, tapped: { x: 680, y: 643 } });
+    const t = { ref: 'order', selector: '', name: 'Order pickup' };
+    expect(movedBeforeTap({ ...t, ...moved! })?.measured).toBe(
+      '"Order pickup" moved 121 px just before the tap',
+    );
+  });
+});
+
+describe("the page's own scrolls, not Fitts's", () => {
+  it('a scroll Fitts or a key caused is no note, whenever it lands', () => {
+    const own: SurpriseEvent = { type: 'scroll', at: 5000, dy: -549, own: true };
+    expect(surpriseProblems([own], [1000]).notes).toEqual([]);
+    expect(surpriseProblems([{ ...own, own: undefined }], [1000]).notes[0]?.measured).toBe(
+      'the page scrolled 549 px up by itself 4.0 s after the last tap',
+    );
   });
 });

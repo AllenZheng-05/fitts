@@ -36,7 +36,8 @@ type SurpriseEventBody =
     }
   /** Typing alone (no submit) changed the page or opened something (WCAG 3.2.2). */
   | { type: 'typed-change'; at: number; ref: string; selector: string; name: string; what: string }
-  | { type: 'scroll'; at: number; dy: number }
+  /** `own`: Fitts scrolled it (a control into view, the top before a Tab sweep) or a key did. */
+  | { type: 'scroll'; at: number; dy: number; own?: boolean }
   | {
       type: 'removed';
       at: number;
@@ -164,7 +165,7 @@ export function surpriseProblems(
         });
         break;
       case 'scroll':
-        if (Math.abs(e.dy) > SCROLL_PX && unprompted(e.at))
+        if (!e.own && Math.abs(e.dy) > SCROLL_PX && unprompted(e.at))
           notes.push({
             kind: 'scrolled-by-itself',
             ref: '',
@@ -214,6 +215,35 @@ export function movedBeforeTap(t: {
     measured: `"${t.name || t.selector}" moved ${Math.round(d)} px just before the tap`,
     expected: 'controls stay put while the page loads',
   };
+}
+
+/** An element's box in the view, and how far the page was scrolled when it was read. */
+export interface ViewBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  scrollX: number;
+  scrollY: number;
+}
+
+/**
+ * Where a target's center was when Fitts decided to tap it and when it tapped, on the page
+ * rather than in the view: a scroll (Fitts's own into-view, smooth on a site with
+ * `scroll-behavior: smooth`) moves everything in the view and nothing on the page (Basil &
+ * Ember, Nov 4: "Order pickup moved 121 px"). Undefined when it stayed within 20 px.
+ */
+export function movedOnPage(
+  decided: ViewBox,
+  tapped: ViewBox,
+): { decided: { x: number; y: number }; tapped: { x: number; y: number } } | undefined {
+  const center = (b: ViewBox) => ({
+    x: Math.round(b.left + b.width / 2 + b.scrollX),
+    y: Math.round(b.top + b.height / 2 + b.scrollY),
+  });
+  const a = center(decided);
+  const b = center(tapped);
+  return Math.hypot(b.x - a.x, b.y - a.y) > 20 ? { decided: a, tapped: b } : undefined;
 }
 
 /** The surprise probe's kinds, by what was measured (titles and severities key on these). */
