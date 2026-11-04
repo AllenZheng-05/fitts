@@ -14,5 +14,5 @@ Fitts's own fixer runs on Muse Wonder in Quality and Muse Spark otherwise. **Mus
 Baseten is a full stage, not a token: it's an independent reviewer in the Quality profile, and
 in the Open profile it runs every reviewer, the merging and the theme check. **Muse Image 1.0**
 draws mockups and redesign illustrations, **SAM 3.1** outlines the element each finding is
-about, and **Muse Voice Transcribe 1.0** turns the owner's voice into chat messages and
-commands.
+about, and **Muse Voice Transcribe 1.0** turns the owner's voice messages and voice
+commands into text.
