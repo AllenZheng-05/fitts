@@ -56,12 +56,14 @@ function Hero() {
   const onPhone = detected === null && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   return (
     <section className="mx-auto flex min-h-[calc(100svh-4rem)] max-w-6xl flex-col items-center justify-center px-4 py-16 text-center sm:px-6">
-      {/* The app's Welcome emblem, full size on screens 900px tall and up; 80% below that, so the
-          download buttons stay in view on a 1280×800 laptop. */}
-      <FittsEmblem className="mb-6 size-[240px] [--emblem-scale:0.8] sm:[@media(min-height:900px)]:size-[300px] sm:[@media(min-height:900px)]:[--emblem-scale:1]" />
-      <h1 className="font-display text-[76px] leading-none font-extrabold tracking-[-0.04em] sm:text-[112px] lg:text-[128px]">
-        {home.name}
-      </h1>
+      {/* The app's Welcome emblem beside the name (outside the h1, so the heading is "Fitts"):
+          full size from lg, smaller on tablets and phones so the row fits a 320px screen. */}
+      <div className="flex items-center justify-center gap-3 sm:gap-6 lg:gap-8">
+        <FittsEmblem className="size-[132px] [--emblem-scale:0.44] sm:size-[225px] sm:[--emblem-scale:0.75] lg:size-[300px] lg:[--emblem-scale:1]" />
+        <h1 className="font-display text-[64px] leading-none font-extrabold tracking-[-0.04em] sm:text-[112px] lg:text-[160px]">
+          {home.name}
+        </h1>
+      </div>
       <p className="mt-6 font-display text-[28px] leading-tight font-bold text-balance sm:text-5xl">
         {home.tagline}
       </p>
