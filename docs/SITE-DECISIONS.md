@@ -253,3 +253,8 @@ Judgment calls for the fitts.allenzheng.com redesign (docs/SPEC-site.md), newest
   FittsEmblem.tsx in src/components/Emblem.tsx, and the drift test compares the drawing. It's
   drawn at 300 and scaled: full size from lg (the name 160px), 75% on tablets, 44% on phones (the
   name 64px), so the row fits a 320px screen.
+- **One Download button on the homepage (Allen, Nov 3).** The three platform buttons, the "Free ·
+  open source · beta · macOS beta" line and the install-notes link are replaced by one large blue
+  "Download" button with the download icon. It opens the Download page rather than a file: that
+  page fills the button for the visitor's platform and keeps every build, the Mac beta note and
+  the install notes, so nobody whose platform isn't detected gets the wrong installer.

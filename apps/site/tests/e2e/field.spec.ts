@@ -74,7 +74,9 @@ test.describe('a desktop', () => {
     const fetched = watchField(page);
     await page.goto('/');
     // The page is usable before the field arrives: the buttons are there at once.
-    await expect(page.getByRole('link', { name: /Download for/ }).first()).toBeVisible();
+    await expect(
+      page.getByRole('main').getByRole('link', { name: 'Download', exact: true }),
+    ).toBeVisible();
     await expect(page.locator('[data-shape-field="lively"] canvas')).toHaveCount(1, {
       timeout: 15000,
     });
