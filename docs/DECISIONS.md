@@ -3908,3 +3908,25 @@ The recorded run was on 0.1.0; these five were still in 0.1.1. Each is fixed at 
   can't recur.
 - **fix-host's undo test gets 20 s.** It spawns a dozen git commands and passed 5 s twice on
   a loaded machine right after a build. Alone it takes about 1 s.
+- **Never a route pattern as a page (found while recording).** Basil & Ember's App Model has the
+  catch-all `*` route; the seeding skipped `:param` routes but not `*`, so the crawl opened
+  "/*", got Home, never counted it as visited and kept going back (run-1 of the recorded run:
+  three loads, 34 entries filed under "/*"). `isPattern` (any `*`, `%2A`, or a `:param`
+  segment) keeps patterns out of Coverage, the decider's explore route, journeys' start and the
+  perf pass. A finding seen on a pattern is filed under a real page it was also seen on, else
+  Home.
+- **A URL showing a page already seen is that page, visited.** On a route's first snapshot, its
+  title, headings and controls are compared with the pages seen so far; a match makes the route
+  done, labelled "same page as /". The comparison is exact (names included), so two items of
+  one template differ. The risk is a snapshot taken before an SPA route renders; the settle
+  wait before snapshots makes that rare, and the cost is one page not crawled.
+- **The owner's pivot holds, in code.** "Stay on checkout" was heard by the decider and
+  acknowledged, but nothing narrowed the crawl, so the explore frontier pulled it back. The
+  message is now read in code (`pivotFrom`): steering words ("focus on", "stay on", "stick to",
+  "only test", "go to"…) plus a page named by its last path segment or its App Model title
+  focus Coverage on those routes and the routes under them. Outside the focus nothing is
+  tried and `nextRoute` only offers focus routes, so the crawl heads straight back; journeys
+  that don't touch the focus and device and perf pass pages outside it are left out. "Anywhere",
+  "the whole site", "you can move on"… lift it, and a covered focus lifts itself with a line
+  ("/checkout is covered. Back to the rest of the site."). A mention without a steering word
+  ("the checkout button looks off, keep going") is no pivot. The decider still hears the message.

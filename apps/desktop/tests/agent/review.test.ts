@@ -428,3 +428,19 @@ describe('the contrast line names the bar the text missed', () => {
     );
   });
 });
+
+describe('a finding is filed under a real page, never a route pattern (Allen, Nov 4)', () => {
+  it('"/*" gives way to the real page it was also seen on, else Home', () => {
+    const on = (...routes: string[]) =>
+      aggregate({
+        runId: 'r',
+        probes: routes.map((route, i) => probe({ evidenceId: `r-ev${i}`, route })),
+        reviews: [],
+        stepOf: () => ({ stepIndex: 0, atMs: 0 }),
+      })[0];
+    expect(on('/*', '/menu')?.route).toBe('/menu');
+    expect(on('/*', '/menu')?.locations).toBeUndefined();
+    expect(on('/*')?.route).toBe('/');
+    expect(on('/cart')?.route).toBe('/cart');
+  });
+});

@@ -26,7 +26,8 @@ import type { AxSnapshot, HeldRequest, OpTrace, ReplayStep } from '../protocol';
 import type { SiteRect } from '@fitts/schema';
 import type { Site } from '../site-client';
 import type { Action, Brain } from '../crawler/brain';
-import { Coverage, DESTRUCTIVE, patternOf, routeOf } from '../crawler/coverage';
+import { Coverage, DESTRUCTIVE, isPattern, patternOf, routeOf } from '../crawler/coverage';
+import { pivotFrom } from '../crawler/focus';
 import { chooseCells, mergeBreakpoints, widthsFromCss } from '../devices/matrix';
 import { chooseStates, stateKey } from '../crawler/states';
 import {
@@ -375,7 +376,7 @@ export class RealRun {
     // SPEC-phase4 §6.2: the code's static routes are known before the first page; dynamic ones
     // wait for a real link. Journeys are planned from the model (priority 1 and 2 run first).
     for (const p of deps.appModel?.pages ?? [])
-      if (!p.dynamic && !p.route.includes(':')) this.coverage.discover(p.route, 'code');
+      if (!p.dynamic && !isPattern(p.route)) this.coverage.discover(p.route, 'code');
     const { first, later } = journeyOrder(deps.appModel?.journeys ?? []);
     for (const j of [...first, ...later]) this.journeyStatus.set(j.id, { status: 'planned' });
     this.probes = new ProbeRunner(
@@ -783,7 +784,7 @@ export class RealRun {
         const journeyPages = (this.deps.appModel?.journeys ?? []).flatMap((j) => j.pages);
         const routes = [
           ...new Set([...journeyPages.filter((r) => this.pages.has(r)), ...this.pages.keys()]),
-        ].filter((r) => !FILE_ROUTE.test(r));
+        ].filter((r) => !FILE_ROUTE.test(r) && !isPattern(r) && this.coverage.inFocus(r));
         await this.probes.perfPass(routes);
         this.ran.perf_pass = true;
         return outcome('done');
@@ -1118,7 +1119,7 @@ export class RealRun {
       result,
       ...(note ? { note } : {}),
     });
-    if (route) {
+    if (route && !isPattern(route) && this.coverage.inFocus(route)) {
       const snap = await this.deps.site.snapshot().catch(() => undefined);
       if (snap && routeOf(snap.path) !== routeOf(route))
         await this.perform({ kind: 'navigate', path: route, why: `Opening ${route}` }, snap.path);
@@ -2303,8 +2304,9 @@ export class RealRun {
    */
   private async devicePass(): Promise<void> {
     const site = this.deps.site;
+    // Inside the owner's focus, when there is one (Allen, Nov 4).
     const routes = [...this.pages.keys()]
-      .filter((r) => !FILE_ROUTE.test(r))
+      .filter((r) => !FILE_ROUTE.test(r) && this.coverage.inFocus(r))
       .slice(0, MAX_CELL_PAGES);
     if (!site.cell || routes.length === 0) return;
     const media = (await site.breakpoints?.().catch(() => [])) ?? [];
@@ -2406,11 +2408,20 @@ export class RealRun {
     });
     const all = this.deps.appModel?.journeys ?? [];
     const { first, later } = journeyOrder(all);
-    const planned = (j: Journey) => this.journeyStatus.get(j.id)?.status === 'planned';
+    // With a focus, only journeys that start or pass inside it (Allen, Nov 4).
+    const planned = (j: Journey) =>
+      this.journeyStatus.get(j.id)?.status === 'planned' &&
+      [j.start, ...j.pages].some((r) => !isPattern(r) && this.coverage.inFocus(r));
     const j =
       (d.journeyId ? all.find((x) => x.id === d.journeyId && planned(x)) : undefined) ??
       [...first, ...later].find(planned);
-    if (!j) return outcome('nothing', 'no journey left to try');
+    if (!j)
+      return outcome(
+        'nothing',
+        this.coverage.focused()
+          ? 'no journey left inside the owner’s focus'
+          : 'no journey left to try',
+      );
     this.setJourney(j.id, { status: 'running' });
     this.emit([
       { type: 'now.changed', nowText: format(copy.fitts.tryingJourney, { name: j.name }) },
@@ -2420,7 +2431,7 @@ export class RealRun {
     const brain = spark ? new FallbackJourneyBrain(spark) : new PlanJourneyBrain();
     this.journeyNow = j.id;
     const snap0 = await site.snapshot().catch(() => undefined);
-    if (snap0 && routeOf(snap0.path) !== routeOf(j.start))
+    if (snap0 && !isPattern(j.start) && routeOf(snap0.path) !== routeOf(j.start))
       await this.perform(
         {
           kind: 'navigate',
@@ -2908,6 +2919,8 @@ export class RealRun {
   }
 
   private syncCoverage(): void {
+    const lifted = this.coverage.takeLifted();
+    if (lifted) this.say(format(copy.fitts.focusCovered, { pages: lifted.join(', ') }));
     const routes = this.coverage.stateRoutes();
     const key = JSON.stringify(routes);
     const events: RunEvent[] = [];
@@ -3652,6 +3665,21 @@ export class RealRun {
       this.say('On it. I’ll adjust the redesign and check every page again.');
       void this.pipeline.adjust(text);
       return;
+    }
+    // "Stay on checkout" (Allen, Nov 4): the crawl keeps to those pages, in code, until lifted
+    // or covered; the decider still hears the message.
+    const pivot = pivotFrom(text, [
+      ...this.coverage.stateRoutes().map((r) => ({ route: r.path })),
+      ...(this.deps.appModel?.pages ?? []).map((p) => ({ route: p.route, title: p.title })),
+    ]);
+    if (pivot && 'lift' in pivot) {
+      if (this.coverage.focused()) {
+        this.coverage.unfocus();
+        this.say(copy.fitts.focusLifted);
+      }
+    } else if (pivot) {
+      this.coverage.focus(pivot.focus);
+      this.say(format(copy.fitts.focusOn, { pages: pivot.focus.join(', ') }));
     }
     // An open finish proposal closes: the message is what to do next (§4.1).
     const proposal = this.state.chat.find((c) => c.id === this.proposalId);

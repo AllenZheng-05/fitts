@@ -20,6 +20,9 @@ const BRIEF = process.env['BENCH_BRIEF'] ?? '';
 const PORT = process.env['BENCH_PORT'] ?? '5193';
 /** Autonomous: fixes and a redesign run to Done (dry-run PRs; set FITTS_GH_DRY_RUN=1). */
 const AUTONOMOUS = process.env['BENCH_AUTONOMOUS'] === '1';
+/** One pivot, said once BENCH_STEER_AFTER_S into the run ("Stay on checkout"); the log lists every page opened after it. */
+const STEER = process.env['BENCH_STEER'] ?? '';
+const STEER_AFTER_MS = Number(process.env['BENCH_STEER_AFTER_S'] ?? '300') * 1000;
 
 let launched: LaunchedApp | undefined;
 
@@ -78,6 +81,8 @@ test('bench:audit', async () => {
     await start.waitFor({ timeout: 30_000 }).catch(() => undefined);
   }
   await start.click();
+  const startedAt = Date.now();
+  let steered = false;
 
   const states = () =>
     page.evaluate(async () => {
@@ -93,6 +98,11 @@ test('bench:audit', async () => {
         const all = await states();
         const [projectId, s] = Object.entries(all).find(([, r]) => r.phase !== 'interview') ?? [];
         if (!projectId || !s) return false;
+        if (STEER && !steered && s.phase !== 'done' && Date.now() - startedAt > STEER_AFTER_MS) {
+          steered = true;
+          await page.getByLabel('Message Fitts').fill(STEER);
+          await page.getByLabel('Message Fitts').press('Enter');
+        }
         const pick = s.chat.find(
           (c) =>
             c.type === 'question' && c.answer === undefined && c.options.includes('Keep my look'),
@@ -138,6 +148,29 @@ test('bench:audit', async () => {
     .map((l) => (JSON.parse(l) as { event: RunEvent }).event);
   const state = replay(events);
   const findings = state?.findings ?? [];
+  // After the pivot: each action's page, until Fitts says the focus is covered or lifted.
+  const steerLines: string[] = [];
+  if (STEER) {
+    let after = false;
+    for (const e of events) {
+      if (e.type === 'chat.item' && e.item.type === 'user.message' && e.item.text === STEER) {
+        after = true;
+        steerLines.push(`Steered: "${STEER}"`);
+      } else if (
+        after &&
+        e.type === 'chat.item' &&
+        e.item.type === 'fitts.message' &&
+        /\b(?:stay on|covered|whole site)\b/.test(e.item.text)
+      ) {
+        steerLines.push(`  Fitts: ${e.item.text}`);
+        if (!/stay on/.test(e.item.text)) after = false;
+      } else if (after && e.type === 'action.recorded') {
+        steerLines.push(
+          `  step ${e.record.step} ${e.record.kind} ${e.record.from} → ${e.record.to}`,
+        );
+      }
+    }
+  }
   const lookfeel = state?.chat.find((c) => c.type === 'lookfeel');
   const lines = findings
     .sort((a, b) => b.severity - a.severity)
@@ -165,6 +198,8 @@ test('bench:audit', async () => {
           `  change ${c.kind} ${c.status}${c.prNumber ? ` PR #${c.prNumber}` : ''} · ${c.title}${c.reason ? ` (${c.reason})` : ''}`,
       ),
       `Spent $${(state?.cost.spentUsd ?? 0).toFixed(4)}`,
+      `Took ${Math.round((Date.now() - startedAt) / 60_000)} min`,
+      ...steerLines,
       '',
     ].join('\n'),
   );

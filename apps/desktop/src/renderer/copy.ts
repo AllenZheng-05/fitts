@@ -1239,6 +1239,9 @@ export const copy = {
     showFindingDevice: 'I switched the view to {device}, where it happens.',
     stepCap:
       'I stopped testing at {max} steps, the most one run takes. {controls} controls on {pages} weren’t tried.',
+    focusOn: 'I’ll stay on {pages} until you say otherwise or it’s covered.',
+    focusLifted: 'Back to the whole site.',
+    focusCovered: '{pages} is covered. Back to the rest of the site.',
     circlingPage:
       'I’m going in circles on {route}, so I’m leaving its last {n} controls and moving on.',
     circlingRun:

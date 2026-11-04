@@ -20,6 +20,7 @@ import { BRAND_PERSONA } from './brandfit';
 
 /** The judge's titles for moving content (jumped, scrolled). */
 const JUMPY = /jumps|scrolls by itself/i;
+import { isPattern } from '../crawler/coverage';
 import { navigationKind } from '../crawler/navigation';
 import type { PersonaReview } from './reviewers';
 
@@ -873,8 +874,10 @@ function toFinding(
       (id) => id.endsWith('#trace') || id.endsWith('#snapshot') || id.includes('-ev'),
     );
   const shown = grounded && (Boolean(c.probe) || reviewers >= 2 || judged);
-  const routes = [...c.routes];
-  const at = stepOf(c.route);
+  // Filed under a page people can open, never a route pattern like "/*" (Allen, Nov 4).
+  const routes = [...c.routes].filter((r) => !isPattern(r));
+  const route = isPattern(c.route) ? (routes[0] ?? '/') : c.route;
+  const at = stepOf(route);
   const evidence = [
     ...c.items
       .slice(0, 3)
@@ -894,7 +897,7 @@ function toFinding(
     title: onDevice(c.template?.title ?? lead?.title ?? 'Problem', c.device),
     finding: c.template?.finding ?? lead?.finding ?? '',
     fix: c.template?.fix ?? lead?.fix ?? '',
-    route: c.route,
+    route,
     agreement: {
       agreeing: reviewers,
       total: PANEL_SIZE,

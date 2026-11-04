@@ -45,6 +45,21 @@ export type DiscoverHow = 'link' | 'visit' | 'code';
 /** "/compose/recipient?x=1" → "/compose/recipient". Query strings don't make new routes. */
 export const routeOf = (path: string) => (path.split(/[?#]/)[0] ?? '/').replace(/\/+$/, '') || '/';
 
+/**
+ * A route pattern from the code, not a page: a catch-all ("*", "/*", "/docs/*") or a parameter
+ * with no value ("/menu/:id"). Opening one loads whatever the catch-all renders (Basil & Ember,
+ * Nov 4: "/*" showed Home, never counted as visited, and the crawl kept going back to it).
+ */
+export const isPattern = (path: string) => /\*|%2a|(?:^|\/):[^/]/i.test(path);
+
+/** A page as a person would recognize it: its title, headings and controls, in order. */
+const pageOf = (snap: AxSnapshot) =>
+  JSON.stringify([snap.title, snap.headings, snap.nodes.map((n) => [n.role, n.name])]);
+
+/** Whether `path` is one of the owner's focus routes or under one ("/checkout/done"). */
+const within = (path: string, focus: string[]) =>
+  focus.some((f) => path === f || (f !== '/' && path.startsWith(`${f}/`)));
+
 const depthOf = (path: string) => Math.max(0, path.split('/').filter(Boolean).length - 1);
 
 /**
@@ -97,8 +112,49 @@ export class Coverage {
   private readonly taps = new Map<string, number>();
   /** Same-page anchor links by name and href, tried once anywhere: → the route they were tried on. */
   private readonly triedAnchors = new Map<string, string>();
+  /** Each page seen, as a person would recognize it → the first route that showed it. */
+  private readonly pages = new Map<string, string>();
+  /** The owner's pivot ("stay on checkout"): the routes the crawl keeps to until it's lifted. */
+  private focusRoutes: string[] | undefined;
+  private lifted: string[] | undefined;
 
   constructor(private readonly origin: string) {}
+
+  /** The owner's pivot: the crawl keeps to these routes until lifted or covered. */
+  focus(paths: string[]): void {
+    const routes = [...new Set(paths.map(routeOf))].filter((p) => !isPattern(p));
+    for (const p of routes) this.discover(p, 'visit');
+    this.focusRoutes = routes.length ? routes : undefined;
+  }
+
+  unfocus(): void {
+    this.focusRoutes = undefined;
+  }
+
+  /** The focus that was covered and lifted since the last call, once. */
+  takeLifted(): string[] | undefined {
+    const l = this.lifted;
+    this.lifted = undefined;
+    return l;
+  }
+
+  focused(): string[] | undefined {
+    return this.focusRoutes;
+  }
+
+  /** The focus routes, and the routes under them, are all tried or skipped. */
+  focusCovered(): boolean {
+    const focus = this.focusRoutes;
+    if (!focus) return false;
+    return [...this.routes.values()]
+      .filter((r) => within(r.path, focus))
+      .every((r) => r.status === 'done' || (r.seen && this.routeDone(r.path)));
+  }
+
+  /** Inside the owner's focus, or no focus. */
+  inFocus(path: string): boolean {
+    return !this.focusRoutes || within(routeOf(path), this.focusRoutes);
+  }
 
   /**
    * Adds a route to the queue (same origin only). Returns true when it's new. `how` says where
@@ -113,6 +169,7 @@ export class Coverage {
     } catch {
       return false;
     }
+    if (isPattern(path)) return false;
     const known = this.routes.get(path);
     if (known) {
       if (how === 'link') known.linked = true;
@@ -147,6 +204,18 @@ export class Coverage {
     this.discover(path, 'visit');
     const route = this.routes.get(path);
     if (!route) return;
+    // The same page under another URL (a catch-all showing Home) is that page, visited.
+    if (!route.seen) {
+      const page = pageOf(snap);
+      const first = this.pages.get(page);
+      if (first && first !== path) {
+        route.seen = true;
+        route.status = 'done';
+        route.label = `same page as ${first}`;
+        return;
+      }
+      this.pages.set(page, path);
+    }
     route.seen = true;
     for (const n of snap.nodes) {
       if (n.href && n.role === 'link') this.discover(n.href);
@@ -256,7 +325,8 @@ export class Coverage {
 
   untried(path: string): { ref: string; name: string; role: string; type?: string }[] {
     const route = this.routes.get(routeOf(path));
-    if (!route) return [];
+    // Outside the owner's focus, nothing here is tried: the crawl heads back (`nextRoute`).
+    if (!route || !this.inFocus(path)) return [];
     return [...route.controls.values()]
       .filter((c) => !c.tried && !c.skipped)
       .map((c) => ({
@@ -269,9 +339,14 @@ export class Coverage {
 
   /** The next route that still needs work, in discovery order. */
   nextRoute(): string | undefined {
-    for (const r of this.routes.values())
-      if (r.status !== 'done' && !this.routeDone(r.path)) return r.path;
-    for (const r of this.routes.values()) if (r.status !== 'done' && !r.seen) return r.path;
+    // A covered focus lifts itself: the rest of the site comes back (`takeLifted` says so).
+    if (this.focusRoutes && this.focusCovered()) {
+      this.lifted = this.focusRoutes;
+      this.focusRoutes = undefined;
+    }
+    const routes = [...this.routes.values()].filter((r) => this.inFocus(r.path));
+    for (const r of routes) if (r.status !== 'done' && !this.routeDone(r.path)) return r.path;
+    for (const r of routes) if (r.status !== 'done' && !r.seen) return r.path;
     return undefined;
   }
 
