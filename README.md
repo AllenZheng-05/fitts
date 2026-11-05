@@ -6,14 +6,16 @@ heuristics plus accessibility, performance and look-and-feel. Then it fixes the 
 fix on its own branch, and opens a pull request. You can talk to it by chat or voice while it
 works. Built from scratch during the Meta Global AI Developer Hackathon, Oct 28 – Nov 4, 2026.
 
-[fitts.allenzheng.com](https://fitts.allenzheng.com) · [Roadmap](docs/ROADMAP.md)
+[fitts.allenzheng.com](https://fitts.allenzheng.com) · [Demo video](https://youtu.be/CV27fWbfVdA) · [Roadmap](docs/ROADMAP.md)
 
 ## Try it without keys
 
 Open the recorded runs at [fitts.allenzheng.com/runs/](https://fitts.allenzheng.com/runs/) in
-any browser. Each is a real run's report: what Fitts understood, the findings with their
-evidence and repro steps, the verified fixes, and the App Map. Each report shows the Noticed
-lines behind every finding. No install and no keys needed.
+any browser. The featured one is [Basil & Ember](https://fitts.allenzheng.com/runs/basil-ember-nov-4/),
+a restaurant site Muse Code generated from one prompt and nobody has edited since: Fitts found
+18 problems and fixed and verified 1, for $3.33. Each report shows what Fitts understood, the
+findings with their evidence and repro steps, the verified fixes and the App Map, with the
+Noticed lines behind every finding. No install and no keys needed.
 
 ## Quickstart
 
@@ -156,6 +158,24 @@ findings at severity 2+. On an earlier run Fitts also fixed three findings and c
 one was the brand drift, restored from the app's own brand cues to within the bench's color
 distance of the answer key, with the same fonts.
 
+**Basil & Ember's website, no answer key** (Nov 4, Economy, $3.33): 18 findings and 6
+suggestions in a 115-minute run. Fitts tried 12 fixes: 1 passed its check ("Too many text
+sizes") and 11 were rolled back when theirs failed. These findings haven't been checked by hand
+yet, so this run has no precision figure.
+
+**Two open-source apps nobody here wrote**, every finding checked by hand
+([TodoMVC](docs/evidence/oss-todomvc-react.md), [Bootstrap](docs/evidence/oss-bootstrap.md)):
+
+| App | Findings | Real | False | Unsure | Cost |
+|---|---|---|---|---|---|
+| TodoMVC, React (`ff43b02`) | 10 | 3 | 7 | 0 | $3.48 |
+| Bootstrap 5.3.8, Examples page | 30 | 9 | 15 | 6 | $1.39 |
+
+Precision was low here too. On Bootstrap the crawl spent 991 of its 1,000 actions on one skip
+link, so it never opened an example; repeat taps are now capped. On TodoMVC the one correct fix
+couldn't be verified, because its webpack dev server ignores the port Fitts gives it. The
+placeholder contrast it confirmed is drafted as an issue for TodoMVC, not filed.
+
 ## Check the results yourself (offline)
 
 The tests run with no network and no keys. Model answers come from recorded fixtures in
@@ -185,6 +205,9 @@ pnpm bench:android  # a real audit of the Android demo on the emulator (10 plant
   Expo's floating Tools button can hide the app's header from Fitts: turn it off in the dev
   menu.
 - Live sites are audit only: Fitts has no code to fix there.
+- Fixes are verified on a second dev server on its own port. Vite projects and servers that read
+  `PORT` (Next.js, Create React App) get one; webpack-dev-server, and scripts with a fixed
+  `--port`, don't yet, so their fixes can't be verified.
 - A run needs Meta's models to be reachable; when they aren't, Fitts pauses and says so.
 - Cut for the deadline, with reasons, in the last section of the [roadmap](docs/ROADMAP.md).
 

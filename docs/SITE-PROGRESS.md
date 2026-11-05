@@ -147,6 +147,23 @@ Three jobs, in order: a shareable run report, real open-source apps, the README 
 | E2  | Open-source apps: Bootstrap's examples and TodoMVC React     | done (Nov 3)                      |
 | E3  | README for judges                                            | Wednesday, once the numbers exist |
 
+**Status, Nov 4, final docs pass (E3).**
+- Main merged in (Desktop 0.1.4). The release is `v0.1.4` (Latest); nothing in the README or
+  the site names a version, and the download links go to `releases/latest/download/`.
+- The demo video is up: `links.video` is its YouTube embed, so the homepage shows the video in
+  place of the "Video coming" card, and the README links it.
+- /runs/ swap done per RUNS-SWAP: the app's Basil & Ember run of Nov 4 (`run-1`, Economy,
+  115 min, $3.33, 18 findings and 6 suggestions, 1 fix verified, 11 rolled back) is
+  `basil-ember-nov-4`, the featured run. Its copy is in `.fitts-dev/runs/basil-ember/`, with the
+  project's display name set to "Basil & Ember" for the page heading. demo-chat-nov-2 stays
+  listed. Its findings aren't checked by hand, so the README gives no real/false split for it.
+- README: Fitts's numbers for that run, the open-source table, and the fix-port limit. The
+  Muse Wonder row was checked against `router.ts` and `agent/index.ts` again and still matches
+  (it was fixed in f04a79e), so it's unchanged. No uncut run videos are linked: none were found
+  in the repo, the site content or the notes.
+- Links: every outside link in the README and the site content returns 200, except
+  `/runs/basil-ember-nov-4/`, which goes live with the push.
+
 **Status, Nov 4, after the freeze (checks and content only).**
 - Main merged in again (the homepage emblem and one Download button, the keyboard test fix).
   The site's e2e passes (42), axe included; the homepage was looked at by hand at 390 and 320 px.
