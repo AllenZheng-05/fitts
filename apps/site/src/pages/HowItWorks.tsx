@@ -52,7 +52,7 @@ export function HowItWorks() {
       <Redesigns />
       <Section id="pull-request" title={how.prTitle} lead={how.prLead}>
         <div className="grid gap-6 lg:grid-cols-[3fr_2fr] lg:items-start">
-          <Clip m={PR_MEDIA} className="shadow-panel" />
+          {PR_MEDIA.src ? <Clip m={PR_MEDIA} className="shadow-panel" /> : null}
           <ol className="flex flex-col gap-3">
             {how.prCallouts.map((c, i) => (
               <li key={c.name} className={cx(card, 'flex gap-4 p-4')}>
@@ -176,7 +176,10 @@ function Loop() {
               )}
             </ul>
           </div>
-          <Clip m={LOOP_MEDIA[step.id] ?? PR_MEDIA} />
+          {(() => {
+            const m = LOOP_MEDIA[step.id];
+            return m?.src ? <Clip m={m} /> : null;
+          })()}
         </div>
       )}
     </Section>

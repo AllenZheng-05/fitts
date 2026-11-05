@@ -33,7 +33,7 @@ export function Showcase() {
 
       <section aria-label={showcase.title} className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <ul className="grid gap-6 md:grid-cols-2">
-          {SHOWCASE_MEDIA.map((m) => (
+          {SHOWCASE_MEDIA.filter((m) => m.src).map((m) => (
             <li key={m.id} id={m.id} className={cx(card, 'flex flex-col gap-3 p-4')}>
               <Clip m={m} />
               <div className="flex flex-wrap items-center justify-between gap-2 px-1">

@@ -47,6 +47,8 @@ export const LOOP_MEDIA: Record<string, Media> = {
   }),
   explore: slot({
     id: 'loop-explore',
+    src: '/media/explore.mp4',
+    poster: '/media/explore.webp',
     title: 'Explore',
     caption: 'Fitts follows a journey through the site, then tries it on a phone.',
     honesty: 'untouched',
@@ -68,6 +70,8 @@ export const LOOP_MEDIA: Record<string, Media> = {
   }),
   fix: slot({
     id: 'loop-fix',
+    src: '/media/verified-fix.mp4',
+    poster: '/media/verified-fix.webp',
     title: 'Fix',
     caption: 'Muse Code changes the code in a separate copy; Fitts checks it there.',
     honesty: 'planted',
@@ -124,6 +128,8 @@ export const SHOWCASE_MEDIA: Media[] = [
   }),
   slot({
     id: 'verified-fix',
+    src: '/media/verified-fix.mp4',
+    poster: '/media/verified-fix.webp',
     title: 'A verified fix',
     caption: 'Fixed in a separate copy, measured again there, then marked Verified.',
     honesty: 'planted',
@@ -131,6 +137,8 @@ export const SHOWCASE_MEDIA: Media[] = [
   }),
   slot({
     id: 'pickup',
+    src: '/media/pickup.mp4',
+    poster: '/media/pickup.webp',
     title: 'The 2:45 AM pickup',
     caption: 'A pickup time the restaurant can’t honor, found by using the site like a customer.',
     honesty: 'untouched',
@@ -145,6 +153,8 @@ export const SHOWCASE_MEDIA: Media[] = [
   }),
   slot({
     id: 'android-jump',
+    src: '/media/android-jump.mp4',
+    poster: '/media/android-jump.webp',
     title: 'The menu jump, judged',
     caption: 'A banner pushes every row down; Muse Wonder judges the moment from its frames.',
     honesty: 'planted',
@@ -166,6 +176,8 @@ export const SHOWCASE_MEDIA: Media[] = [
   }),
   slot({
     id: 'gate',
+    src: '/media/gate.mp4',
+    poster: '/media/gate.webp',
     title: 'The “Cancel order” gate',
     caption: 'Fitts tries every control, but anything it can’t undo waits for you.',
     honesty: 'planted',
@@ -173,6 +185,8 @@ export const SHOWCASE_MEDIA: Media[] = [
   }),
   slot({
     id: 'redesign',
+    src: '/media/redesign.mp4',
+    poster: '/media/redesign.webp',
     title: 'A redesign',
     caption:
       'Three directions as style boards, a round of feedback, every page restyled and checked.',
