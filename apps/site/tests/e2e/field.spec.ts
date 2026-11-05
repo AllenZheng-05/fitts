@@ -1,6 +1,9 @@
 // Phones, reduced motion and Save-Data get the still image and never download the WebGL
 // bundle; a desktop gets the 3D field, lazily, and it never takes a click from the content.
 import { expect, test, type Page } from '@playwright/test';
+import { blockOutside } from './offline';
+
+test.beforeEach(blockOutside);
 
 /** Every request for the field's chunk (three.js, Rapier), while the page settles. */
 function watchField(page: Page) {

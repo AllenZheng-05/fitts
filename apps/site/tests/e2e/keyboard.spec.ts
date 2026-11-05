@@ -1,5 +1,8 @@
 // Full keyboard use: the skip link first, the menu, the loop's steps and the catalog's filters.
 import { expect, test, type Page } from '@playwright/test';
+import { blockOutside } from './offline';
+
+test.beforeEach(blockOutside);
 
 test.use({ viewport: { width: 1440, height: 900 } });
 

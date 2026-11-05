@@ -3,6 +3,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { featuredRun, published, runPath } from '../../src/content/runs';
+import { blockOutside } from './offline';
+
+test.beforeEach(blockOutside);
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
 const sideways = (page: Page) =>

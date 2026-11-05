@@ -2,6 +2,9 @@
 // clean (WCAG 2.0–2.2 A and AA, and best practice) on a desktop and a phone.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { blockOutside } from './offline';
+
+test.beforeEach(blockOutside);
 
 const PAGES = [
   { path: '/', h1: 'Fitts', nav: 'Fitts, home' },
