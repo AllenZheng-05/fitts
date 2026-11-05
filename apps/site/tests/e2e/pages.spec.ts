@@ -41,7 +41,7 @@ for (const size of SIZES)
 
         // The current page is marked (in the menu, on a phone).
         if (size.width < 1024 && p.path !== '/') {
-          await page.getByRole('button', { name: 'Menu' }).click();
+          await page.getByRole('button', { name: 'Menu', exact: true }).click();
         }
         const current = page.locator('[aria-current="page"]:visible');
         await expect(current.first()).toBeVisible();

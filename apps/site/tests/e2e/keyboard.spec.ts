@@ -78,7 +78,7 @@ test.describe('phone menu', () => {
   test.use({ viewport: { width: 390, height: 844 } });
   test('opens with the keyboard and Esc closes it, returning focus', async ({ page }) => {
     await page.goto('/');
-    const menu = page.getByRole('button', { name: 'Menu' });
+    const menu = page.getByRole('button', { name: 'Menu', exact: true });
     await menu.focus();
     await page.keyboard.press('Enter');
     await expect(menu).toHaveAttribute('aria-expanded', 'true');
