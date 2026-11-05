@@ -1,6 +1,21 @@
 {
-  "featured": "demo-chat-nov-2",
+  "featured": "basil-ember-nov-4",
   "runs": [
+    {
+      "id": "basil-ember-nov-4",
+      "project": "Basil & Ember",
+      "runId": "run-1",
+      "startedAt": "2026-11-04T18:25:31.526Z",
+      "minutes": 115,
+      "shown": 18,
+      "suggestions": 6,
+      "verified": 1,
+      "review": 0,
+      "rolledBack": 11,
+      "spentUsd": 3.33044,
+      "calls": 386,
+      "label": "Real AI-built site, untouched"
+    },
     {
       "id": "demo-chat-nov-2",
       "project": "demo-chat",
