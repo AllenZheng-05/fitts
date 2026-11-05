@@ -18,7 +18,7 @@ export const links = {
   plantedAndroid: `${REPO}/blob/main/demo/basil-ember-android/PLANTED.md`,
   portfolio: 'https://allenzheng.com',
   /** The demo video's embed URL. Empty until it's published: Home shows a poster card instead. */
-  video: '',
+  video: 'https://www.youtube-nocookie.com/embed/CV27fWbfVdA',
 };
 
 /** Content switches (SPEC-site §5). */
