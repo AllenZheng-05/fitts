@@ -109,12 +109,13 @@ and every model call goes into a cost ledger with a cap you set.
 
 ## Benchmarks
 
-Apps with planted problems, each scored against its answer key, which is hidden from Fitts during
-the run. The comparison was pre-registered in `docs/bench/PLAN.md` before any run; every run,
-including the stopped one, is a row in `docs/bench/RESULTS.md`.
-Every bench run here used the scripted decider: the cheap crawl setting (`FITTS_CRAWL_BRAIN=explorer`) also turned the model decider off, so these runs measure Fitts’s checks and reviewers on a scripted crawl, not the app’s own model decider.
+Fitts is scored on apps with planted problems, against answer keys hidden from it during the run.
+The comparison was pre-registered in [docs/bench/PLAN.md](docs/bench/PLAN.md) before any run, and
+every run, including the stopped one, is recorded in [docs/bench/RESULTS.md](docs/bench/RESULTS.md).
+All bench runs use the cheap scripted crawl (`FITTS_CRAWL_BRAIN=explorer`), which also turns the
+model decider off. They measure Fitts's checks and reviewers, not its model-driven exploration.
 
-**`demo/chat`, 33 planted** (19 structural, S1; 14 that need judgment, S2):
+**`demo/chat`, 33 planted issues** (19 structural, S1; 14 that need judgment, S2):
 
 | Approach | Runs | Found | S1 | S2 | Precision, severity 2+ | Cost per run |
 |---|---|---|---|---|---|---|
@@ -125,45 +126,50 @@ Every bench run here used the scripted decider: the cheap crawl setting (`FITTS_
 | Fitts Quality (Spark, Wonder, the Wonder judge) | 2 | 28/33 both | 19/19 | 9/14 | 85–88% | $1.79–1.84 |
 | Fitts Open (Spark Open on Baseten) | 2 | 26–27/33 | 19/19 | 7–8/14 | 87% | $1.42–1.56 |
 
-Fitts's probes catch what can be measured: with no model at all they find 18 of the 19
-structural issues. Meta's models add the judgment issues, S2 from 7 to 9 of 14. On this app,
+Fitts finds 28 of 33 planted issues, seven times as many as axe alone, for about 15 cents a run.
+Its own probes catch 18 of the 19 structural issues with no model at all. Meta's models add the
+issues that need judgment, raising S2 from 7 to 9 of 14. The open-weights profile, with every
+reviewer on Muse Spark Open, comes within one or two issues of the hosted models. On this app,
 Quality and the Wonder judge added no recall over Economy. A third Quality run stalled when Meta's
 models stopped answering and is recorded as stopped.
 
-**A held-out app it never saw** (Loopline Bikes, a bike-rental site: 16 planted, 8 S1 and 8 S2,
-plus 3 traps that look wrong but are right). Both runs were blind, and their findings were
-committed before the key was revealed; the key matched the SHA-256 sealed in the app's README.
+**A held-out app it had never seen** (Loopline Bikes, a bike-rental site: 16 planted issues, 8 S1
+and 8 S2, plus 3 traps that look wrong but are right). Both runs were blind. Their findings were
+committed before the key was revealed, and the key matched the SHA-256 sealed in the app's README.
 
 | Approach | Found | S1 | S2 | Traps tripped | Precision | Cost |
 |---|---|---|---|---|---|---|
 | axe alone | 2/16 | 2/8 | 0/8 | 0/3 | 100% (2/2) | free |
 | Fitts Economy | 6/16 | 4/8 | 2/8 | 1/3 | 30% (6/20) | $1.55 |
 
-On an app it never saw, Fitts found 6 of 16 against axe's 2: the missing labels and names, the
-removed focus outline, the frame sizes a keyboard can't choose, the faint hint text, the silent
-Save and the promo banner that shifts the grid. What it missed, it mostly never reached: the crawl
-didn't complete a booking, so the checkout's later steps, the confirmation page and the shop's own
-rules (hourly prices with daily-only booking, "free cancellation" with a 50% fee, a kids' bike
-with an adult height minimum) went unchecked. Its date and time fields were typed into instead of
-picked, and the booking journey was skipped because it ends in a payment; both are fixed since.
+On an app it had never seen, Fitts found three times as many issues as axe:
 
-Precision was low, and the false alarms are Fitts's own. Each of the 14 findings that match
-nothing planted was checked against the running app: 9 are false, including all four at
-severity 4 (a Rent button "opening a different bike", focus "stuck" on Settings), 2 are real but
-unplanted (Back resets the bike filter; a focused button pushed off-screen by the promo banner),
-and 3 are measured right but are style calls. It also flagged the skip link, one of the traps.
+- icon buttons with no accessible name
+- a removed focus outline
+- frame sizes a keyboard can't choose
+- faint hint text
+- a silent Save
+- a promo banner that shifts the grid
 
-**Basil & Ember's Android app, 10 planted:** 9/10 on Economy (Nov 3, $2.49), with 3 unplanted
-findings at severity 2+. On an earlier run Fitts also fixed three findings and checked each fix;
-one was the brand drift, restored from the app's own brand cues to within the bench's color
-distance of the answer key, with the same fonts.
+It also found 2 real problems the key doesn't name: Back resets the bike filter, and the planted
+promo banner pushes a focused button off-screen. Most of what it missed
+was past where the crawl got. It didn't complete a booking, because date and time fields were typed
+into instead of picked, and the booking journey was skipped for ending in a payment. Both are fixed
+and validated on other apps; the held-out app wasn't rerun, so this blind result stands.
+[RESULTS.md](docs/bench/RESULTS.md) checks each of the 14 findings that matched nothing planted
+against the running app.
 
-**Basil & Ember's website, no answer key** (Nov 4, Economy, $3.33): 18 findings and 6
-suggestions in a 115-minute run. Fitts tried 12 fixes: 1 passed its check ("Too many text
-sizes") and 11 were rolled back when theirs failed. These findings haven't been checked by hand
-yet, so this run has no precision figure.
+**Basil & Ember's Android app, 10 planted issues:** Fitts found 9 of 10 on Economy ($2.49), plus 3
+unplanted findings at severity 2 or higher. In an earlier run it fixed three findings and checked
+each fix. One fix restored the app's brand from its own brand cues, matching the answer key's colors
+within the bench's tolerance and using the same fonts.
 
-**Two open-source apps nobody here wrote**, every finding checked by hand
+**Basil & Ember's website, no answer key** (Economy, $3.33): Fitts reported 18 findings and 6
+suggestions in one 115-minute run. It tried 12 fixes and kept only the one that passed its own
+re-check ("Too many text sizes"), rolling back the other 11 automatically. The fixer never grades
+its own work. These findings haven't been checked by hand yet.
+
+**Two open-source projects nobody here wrote,** every finding checked by hand
 ([TodoMVC](docs/evidence/oss-todomvc-react.md), [Bootstrap](docs/evidence/oss-bootstrap.md)):
 
 | App | Findings | Real | False | Unsure | Cost |
@@ -171,10 +177,11 @@ yet, so this run has no precision figure.
 | TodoMVC, React (`ff43b02`) | 10 | 3 | 7 | 0 | $3.48 |
 | Bootstrap 5.3.8, Examples page | 30 | 9 | 15 | 6 | $1.39 |
 
-Precision was low here too. On Bootstrap the crawl spent 991 of its 1,000 actions on one skip
-link, so it never opened an example; repeat taps are now capped. On TodoMVC the one correct fix
-couldn't be verified, because its webpack dev server ignores the port Fitts gives it. The
-placeholder contrast it confirmed is drafted as an issue for TodoMVC, not filed.
+Fitts confirmed real issues in both, including TodoMVC's 2.8:1 placeholder contrast. That rule lives
+in the stylesheet package TodoMVC's examples share, and an issue is drafted for TodoMVC, not filed.
+These runs also showed where the crawl needed work. On Bootstrap it spent 991 of its 1,000 actions
+on one skip link, so it never opened an example; repeat taps are now capped. On TodoMVC, the webpack
+dev server ignored the port Fitts assigned, so the one correct fix couldn't be verified.
 
 ## Check the results yourself (offline)
 
